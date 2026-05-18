@@ -1,0 +1,27 @@
+{
+  "configuration": {
+    "runtime_prefix": "__instrumentor_",
+    "runtime_prefix.description": "The runtime API prefix.",
+    "runtime_stubs_file": "",
+    "runtime_stubs_file.description": "The file into which runtime stubs should be written.",
+    "demangle_function_names": true,
+    "demangle_function_names.description": "Demangle functions names passed to the runtime."
+  },
+  "instruction_pre": {
+    "ptrtoint": {
+      "enabled": true,
+      "pointer": true,
+      "pointer.description": "The input pointer of the ptr to int."
+    }
+  },
+  "instruction_post": {
+    "ptrtoint": {
+      "enabled": true,
+      "pointer": true,
+      "pointer.description": "The input pointer of the ptr to int.",
+      "value": true,
+      "value.replace": true,
+      "value.description": "The result of the ptr to int."
+    }
+  }
+}

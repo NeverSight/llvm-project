@@ -520,6 +520,7 @@ void InstrumentationConfig::populate(InstrumentorIRBuilderTy &IIRB) {
   UnreachableIO::populate(*this, IIRB);
   LoadIO::populate(*this, IIRB);
   StoreIO::populate(*this, IIRB);
+  PtrToIntIO::populate(*this, IIRB);
 }
 
 void InstrumentationConfig::addChoice(InstrumentationOpportunity &IO,
@@ -1453,3 +1454,30 @@ Value *GlobalVarIO::isDefinition(Value &V, Type &Ty,
   GlobalVariable &GV = cast<GlobalVariable>(V);
   return getCI(&Ty, !GV.isDeclaration());
 }
+
+/// PtrToInt
+/// {
+void PtrToIntIO::init(InstrumentationConfig &IConf,
+                      InstrumentorIRBuilderTy &IIRB, ConfigTy *UserConfig) {
+  if (UserConfig)
+    Config = *UserConfig;
+  bool IsPRE = getLocationKind() == InstrumentationLocation::INSTRUCTION_PRE;
+  if (Config.has(PassPointer))
+    IRTArgs.push_back(IRTArg(IIRB.PtrTy, "pointer",
+                             "Input pointer of the ptr to int.",
+                             IRTArg::POTENTIALLY_INDIRECT, getPtr));
+  if (!IsPRE && Config.has(PassResult))
+    IRTArgs.push_back(
+        IRTArg(IIRB.Int64Ty, "value", "Result of the ptr to int.",
+               IRTArg::REPLACABLE | IRTArg::POTENTIALLY_INDIRECT, getValue,
+               Config.has(ReplaceResult) ? replaceValue : nullptr));
+
+  addCommonArgs(IConf, IIRB.Ctx, Config.has(PassId));
+  IConf.addChoice(*this, IIRB.Ctx);
+}
+Value *PtrToIntIO::getPtr(Value &V, Type &Ty, InstrumentationConfig &IConf,
+                          InstrumentorIRBuilderTy &IIRB) {
+  auto &PI = cast<PtrToIntInst>(V);
+  return PI.getPointerOperand();
+}
+///}

@@ -954,6 +954,35 @@ struct LoadIO : public InstructionIO<Instruction::Load> {
   }
 };
 
+struct PtrToIntIO final : public InstructionIO<Instruction::PtrToInt> {
+  PtrToIntIO(bool IsPRE) : InstructionIO<Instruction::PtrToInt>(IsPRE) {}
+
+  enum ConfigKind {
+    PassPointer,
+    PassResult,
+    ReplaceResult,
+    PassId,
+    NumConfig,
+  };
+
+  using ConfigTy = BaseConfigTy<ConfigKind>;
+  ConfigTy Config;
+
+  void init(InstrumentationConfig &IConf, InstrumentorIRBuilderTy &IIRB,
+            ConfigTy *UserConfig = nullptr);
+
+  static Value *getPtr(Value &V, Type &Ty, InstrumentationConfig &IConf,
+                       InstrumentorIRBuilderTy &IIRB);
+
+  static void populate(InstrumentationConfig &IConf,
+                       InstrumentorIRBuilderTy &IIRB) {
+    auto *PreIO = IConf.allocate<PtrToIntIO>(true);
+    PreIO->init(IConf, IIRB);
+    auto *PostIO = IConf.allocate<PtrToIntIO>(false);
+    PostIO->init(IConf, IIRB);
+  }
+};
+
 } // namespace instrumentor
 
 /// The Instrumentor pass.

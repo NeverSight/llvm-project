@@ -163,6 +163,15 @@
       "id": true,
       "id.description": "A unique ID associated with the given instrumentor call"
     },
+    "ptrtoint": {
+      "enabled": true,
+      "filter": "",
+      "filter.description": "Static property filter to exclude instrumentation.",
+      "pointer": true,
+      "pointer.description": "Input pointer of the ptr to int.",
+      "id": true,
+      "id.description": "A unique ID associated with the given instrumentor call"
+    },
     "alloca": {
       "enabled": true,
       "filter": "",
@@ -226,6 +235,18 @@
       "sync_scope_id.description": "The sync scope id of the load.",
       "is_volatile": true,
       "is_volatile.description": "Flag indicating a volatile load.",
+      "id": true,
+      "id.description": "A unique ID associated with the given instrumentor call"
+    },
+    "ptrtoint": {
+      "enabled": true,
+      "filter": "",
+      "filter.description": "Static property filter to exclude instrumentation.",
+      "pointer": true,
+      "pointer.description": "Input pointer of the ptr to int.",
+      "value": true,
+      "value.replace": true,
+      "value.description": "Result of the ptr to int.",
       "id": true,
       "id.description": "A unique ID associated with the given instrumentor call"
     },
