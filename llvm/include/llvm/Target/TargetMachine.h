@@ -38,6 +38,10 @@ using ModulePassManager = PassManager<Module>;
 
 class Function;
 class GlobalValue;
+namespace mc_rewrite {
+struct RewriteOptions;
+struct RewriteResult;
+} // namespace mc_rewrite
 class MachineInstr;
 class MachineModuleInfoWrapperPass;
 struct MachineSchedContext;
@@ -438,6 +442,16 @@ public:
   virtual bool addPassesToEmitMC(PassManagerBase &, MCContext *&,
                                  raw_pwrite_stream &,
                                  bool /*DisableVerify*/ = true) {
+    return true;
+  }
+
+  /// Add passes to emit a fully fixed-up binary image for the given address
+  /// model, instead of a relocatable object file.  Returns true if binary
+  /// rewrite is not supported.  \p Opts and \p Result must outlive the pass
+  /// manager run.
+  virtual bool addPassesToEmitBinaryRewrite(
+      PassManagerBase &, const mc_rewrite::RewriteOptions &,
+      mc_rewrite::RewriteResult &, bool /*DisableVerify*/ = true) {
     return true;
   }
 

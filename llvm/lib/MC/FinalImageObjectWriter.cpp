@@ -15,7 +15,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "FinalImageObjectWriter.h"
-#include "llvm/MC/MCValue.h" // complete MCValue for the by-value parameter
+#include "llvm/MC/MCAssembler.h"
+#include "llvm/MC/MCSection.h"
+#include "llvm/MC/MCSymbol.h"
+#include "llvm/MC/MCValue.h"
 
 using namespace llvm;
 
@@ -23,15 +26,67 @@ void FinalImageObjectWriter::recordRelocation(const MCFragment &F,
                                               const MCFixup &Fixup,
                                               MCValue Target,
                                               uint64_t &FixedValue) {
-  // TODO: the resolve seam should have made every fixup resolved, so reaching
-  //   here means a residual unresolved reference. Record it in Out.Unresolved
-  //   (with a symbol name) for the caller to surface.
+  if (const MCSymbol *Sym = Target.getAddSym())
+    Out.Unresolved.push_back(Sym->getName().str());
 }
 
 uint64_t FinalImageObjectWriter::writeObject() {
-  // TODO: for each section, copy the layout()-fixed getContents() bytes into
-  //   Out.Sections at getSectionVA(name); populate Out.SymbolAddrs from defined
-  //   symbols; finally run Opts.onImage(Out.Sections). Return the number of
-  //   bytes written.
-  return 0;
+  uint64_t TotalBytes = 0;
+
+  for (MCSection &Sec : *Asm) {
+    StringRef Name = Sec.getName();
+    uint64_t SecVA =
+        Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Name) : 0;
+
+    mc_rewrite::RewriteSection RS;
+    RS.Name = Name.str();
+    RS.VA = SecVA;
+
+    uint64_t Size = Asm->getSectionAddressSize(Sec);
+    RS.Bytes.reserve(Size);
+
+    for (const MCFragment &F : Sec) {
+      auto Content = F.getContents();
+      RS.Bytes.insert(RS.Bytes.end(),
+                      reinterpret_cast<const uint8_t *>(Content.data()),
+                      reinterpret_cast<const uint8_t *>(Content.data()) +
+                          Content.size());
+      auto Var = F.getVarContents();
+      if (!Var.empty())
+        RS.Bytes.insert(RS.Bytes.end(),
+                        reinterpret_cast<const uint8_t *>(Var.data()),
+                        reinterpret_cast<const uint8_t *>(Var.data()) +
+                            Var.size());
+    }
+
+    TotalBytes += RS.Bytes.size();
+    Out.Sections.push_back(std::move(RS));
+  }
+
+  for (const MCSymbol &Sym : Asm->symbols()) {
+    if (!Sym.isDefined() || Sym.isTemporary())
+      continue;
+    uint64_t VA = 0;
+    if (Sym.isInSection()) {
+      StringRef SecName = Sym.getSection().getName();
+      uint64_t SecVA =
+          Opts.Model.getSectionVA ? Opts.Model.getSectionVA(SecName) : 0;
+      VA = SecVA + Asm->getSymbolOffset(Sym);
+    } else if (Sym.isAbsolute()) {
+      VA = Asm->getSymbolOffset(Sym);
+    }
+    Out.SymbolAddrs[Sym.getName().str()] = VA;
+  }
+
+  if (Opts.onImage)
+    Opts.onImage(Out.Sections);
+
+  return TotalBytes;
+}
+
+std::unique_ptr<MCObjectWriter>
+llvm::mc_rewrite::createFinalImageObjectWriter(
+    const mc_rewrite::RewriteOptions &Opts,
+    mc_rewrite::RewriteResult &Result) {
+  return std::make_unique<FinalImageObjectWriter>(Opts, Result);
 }

@@ -19,6 +19,7 @@
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/MC/BinaryRewrite.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -305,4 +306,46 @@ bool CodeGenTargetMachineImpl::addPassesToEmitMC(PassManagerBase &PM,
   PM.add(createFreeMachineFunctionPass());
 
   return false; // success!
+}
+
+bool CodeGenTargetMachineImpl::addPassesToEmitBinaryRewrite(
+    PassManagerBase &PM, const mc_rewrite::RewriteOptions &Opts,
+    mc_rewrite::RewriteResult &Result, bool DisableVerify) {
+  MachineModuleInfoWrapperPass *MMIWP = new MachineModuleInfoWrapperPass(this);
+  TargetPassConfig *PassConfig =
+      addPassesToGenerateCode(*this, PM, DisableVerify, *MMIWP);
+  if (!PassConfig)
+    return true;
+  assert(TargetPassConfig::willCompleteCodeGenPipeline() &&
+         "Cannot emit binary rewrite with limited codegen pipeline");
+
+  MCContext &Ctx = MMIWP->getMMI().getContext();
+  const MCSubtargetInfo &STI = getMCSubtargetInfo();
+  const MCRegisterInfo &MRI = getMCRegisterInfo();
+
+  std::unique_ptr<MCCodeEmitter> MCE(
+      getTarget().createMCCodeEmitter(*getMCInstrInfo(), Ctx));
+  if (!MCE)
+    return true;
+
+  std::unique_ptr<MCAsmBackend> MAB(
+      getTarget().createMCAsmBackend(STI, MRI, Options.MCOptions));
+  if (!MAB)
+    return true;
+
+  auto WrappedMAB =
+      mc_rewrite::createAddressModelBackend(std::move(MAB), Opts);
+  auto Writer = mc_rewrite::createFinalImageObjectWriter(Opts, Result);
+
+  const Triple &T = getTargetTriple();
+  std::unique_ptr<MCStreamer> S(getTarget().createMCObjectStreamer(
+      T, Ctx, std::move(WrappedMAB), std::move(Writer), std::move(MCE), STI));
+
+  FunctionPass *Printer = getTarget().createAsmPrinter(*this, std::move(S));
+  if (!Printer)
+    return true;
+
+  PM.add(Printer);
+  PM.add(createFreeMachineFunctionPass());
+  return false;
 }

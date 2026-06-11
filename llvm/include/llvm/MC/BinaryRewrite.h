@@ -26,9 +26,15 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+
+namespace llvm {
+class MCAsmBackend;
+class MCObjectWriter;
+} // namespace llvm
 
 namespace llvm::mc_rewrite {
 
@@ -95,6 +101,19 @@ struct RewriteResult {
   /// External symbols that could not be resolved (should be empty on success).
   std::vector<std::string> Unresolved;
 };
+
+/// Wrap a target MCAsmBackend with address-model resolution for binary rewrite.
+/// The returned backend intercepts evaluateFixup/applyFixup; all other virtuals
+/// forward to \p TargetBackend.  \p Opts must outlive the returned backend.
+std::unique_ptr<MCAsmBackend>
+createAddressModelBackend(std::unique_ptr<MCAsmBackend> TargetBackend,
+                          const RewriteOptions &Opts);
+
+/// Create an MCObjectWriter that emits fully fixed-up section bytes into
+/// \p Result instead of a relocatable object file.  \p Opts and \p Result must
+/// outlive the returned writer.
+std::unique_ptr<MCObjectWriter>
+createFinalImageObjectWriter(const RewriteOptions &Opts, RewriteResult &Result);
 
 } // namespace llvm::mc_rewrite
 

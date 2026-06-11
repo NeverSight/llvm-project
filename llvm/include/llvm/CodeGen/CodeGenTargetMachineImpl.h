@@ -62,6 +62,11 @@ public:
                          raw_pwrite_stream &Out,
                          bool DisableVerify = true) override;
 
+  bool addPassesToEmitBinaryRewrite(
+      PassManagerBase &PM, const mc_rewrite::RewriteOptions &Opts,
+      mc_rewrite::RewriteResult &Result,
+      bool DisableVerify = true) override;
+
   /// Adds an AsmPrinter pass to the pipeline that prints assembly or
   /// machine code from the MI representation.
   bool addAsmPrinter(PassManagerBase &PM, raw_pwrite_stream &Out,
