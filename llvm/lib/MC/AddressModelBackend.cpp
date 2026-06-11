@@ -89,7 +89,15 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     auto VA = resolveSymVA(Add);
     if (!VA)
       return std::nullopt;
-    Value += *VA;
+    // For external symbols resolved via the address model callback, strip the
+    // ARM/Thumb interworking bit (bit 0). Resolve callbacks may return
+    // addresses with bit 0 set to indicate Thumb mode; this bit must not
+    // participate in offset calculations. In-section / absolute symbols use
+    // their exact computed addresses (no Thumb bit ambiguity).
+    if (!Add->isInSection() && !Add->isAbsolute())
+      Value += *VA & ~uint64_t(1);
+    else
+      Value += *VA;
   }
   if (const MCSymbol *Sub = Target.getSubSym()) {
     auto VA = resolveSymVA(Sub);
@@ -164,6 +172,56 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   }
 
   Wrapped->applyFixup(F, Fixup, Target, Data, Value, IsResolved);
+
+  // ARM/Thumb BL→BLX interworking: when Thumb code calls an ARM-mode target,
+  // the compiler emits BL (stays in Thumb) but we need BLX (switches to ARM).
+  // After the wrapped backend writes the BL encoding, re-encode as BLX.
+  unsigned FK = Fixup.getKind();
+  if (FK >= FirstTargetFixupKind && IsResolved) {
+    StringRef FKName =
+        Wrapped->getFixupKindInfo(static_cast<MCFixupKind>(FK)).Name;
+    if (FKName == "fixup_arm_thumb_bl") {
+      const MCSymbol *Sym = Target.getAddSym();
+      if (Sym && !Sym->isInSection() && !Sym->isAbsolute() &&
+          Opts.Model.resolve) {
+        auto TargetVA =
+            Opts.Model.resolve(Sym->getName(), Target.getSpecifier());
+        if (TargetVA && (*TargetVA & 1) == 0) {
+          // Target VA is even → ARM mode. Re-encode BL as BLX.
+          // BLX offset base = Align(PC+4, 4), not PC+4.
+          StringRef Sec = F.getParent()->getName();
+          uint64_t SecVA =
+              Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Sec) : 0;
+          uint64_t PC = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
+          uint64_t AlignedBase = (PC + 4) & ~uint64_t(3);
+          int32_t Delta = static_cast<int32_t>(
+              static_cast<int64_t>(*TargetVA) -
+              static_cast<int64_t>(AlignedBase));
+
+          uint32_t offset = static_cast<uint32_t>(Delta) >> 2;
+          uint32_t signBit = (offset >> 22) & 1;
+          uint32_t I1Bit = (offset >> 21) & 1;
+          uint32_t J1Bit = (I1Bit ^ 1) ^ signBit;
+          uint32_t I2Bit = (offset >> 20) & 1;
+          uint32_t J2Bit = (I2Bit ^ 1) ^ signBit;
+          uint32_t imm10H = (offset >> 10) & 0x3FF;
+          uint32_t imm10L = offset & 0x3FF;
+
+          // First halfword: 11110 S imm10H
+          uint16_t hw1 = 0xF000 | (signBit << 10) | imm10H;
+          // Second halfword: 11 J1 0 J2 imm10L 0
+          //                       ^ bit12=0 for BLX     ^ H=0
+          uint16_t hw2 = 0xC000 | (J1Bit << 13) |
+                         (J2Bit << 11) | (imm10L << 1);
+
+          Data[0] = hw1 & 0xFF;
+          Data[1] = (hw1 >> 8) & 0xFF;
+          Data[2] = hw2 & 0xFF;
+          Data[3] = (hw2 >> 8) & 0xFF;
+        }
+      }
+    }
+  }
 }
 
 std::unique_ptr<MCAsmBackend>
