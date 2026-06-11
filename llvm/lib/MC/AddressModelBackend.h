@@ -49,11 +49,13 @@ class AddressModelBackend final : public MCAsmBackend {
   const mc_rewrite::RewriteOptions &Opts;
 
   // The wrapped backend's own `Asm` member must point at the same MCAssembler
-  // as ours, because the (non-virtual) MCAsmBackend::maybeAddReloc it calls
-  // from applyFixup reads `Asm->getWriter()`. setAssembler() is non-virtual so
-  // we cannot intercept it; instead we sync the wrapped backend right before
-  // forwarding into it.
-  void syncWrappedAssembler() { Wrapped->setAssembler(Asm); }
+  // as ours: several target hooks read it (maybeAddReloc -> Asm->getWriter()
+  // from applyFixup; X86AsmBackend::finishLayout -> Asm->symbols(); etc.).
+  // setAssembler() is non-virtual so MCAssembler only ever sets it on *us*, not
+  // the wrapped backend; we cannot intercept that call. Instead we mirror it
+  // into the wrapped backend before forwarding into any hook that may read Asm.
+  // const because the layout-time relaxation hooks are const.
+  void syncWrappedAssembler() const { Wrapped->setAssembler(Asm); }
 
 public:
   AddressModelBackend(std::unique_ptr<MCAsmBackend> WrappedBackend,
@@ -87,32 +89,40 @@ public:
 
   bool mayNeedRelaxation(unsigned Opcode, ArrayRef<MCOperand> Operands,
                          const MCSubtargetInfo &STI) const override {
+    syncWrappedAssembler();
     return Wrapped->mayNeedRelaxation(Opcode, Operands, STI);
   }
   bool fixupNeedsRelaxationAdvanced(const MCFragment &F, const MCFixup &Fixup,
                                     const MCValue &Target, uint64_t Value,
                                     bool Resolved) const override {
+    syncWrappedAssembler();
     return Wrapped->fixupNeedsRelaxationAdvanced(F, Fixup, Target, Value,
                                                  Resolved);
   }
   void relaxInstruction(MCInst &Inst,
                         const MCSubtargetInfo &STI) const override {
+    syncWrappedAssembler();
     Wrapped->relaxInstruction(Inst, STI);
   }
   bool relaxAlign(MCFragment &F, unsigned &Size) override {
+    syncWrappedAssembler();
     return Wrapped->relaxAlign(F, Size);
   }
   bool relaxDwarfLineAddr(MCFragment &F) const override {
+    syncWrappedAssembler();
     return Wrapped->relaxDwarfLineAddr(F);
   }
   bool relaxDwarfCFA(MCFragment &F) const override {
+    syncWrappedAssembler();
     return Wrapped->relaxDwarfCFA(F);
   }
   bool relaxSFrameCFA(MCFragment &F) const override {
+    syncWrappedAssembler();
     return Wrapped->relaxSFrameCFA(F);
   }
   std::pair<bool, bool> relaxLEB128(MCFragment &F,
                                     int64_t &Value) const override {
+    syncWrappedAssembler();
     return Wrapped->relaxLEB128(F, Value);
   }
 
@@ -124,13 +134,21 @@ public:
   }
   bool writeNopData(raw_ostream &OS, uint64_t Count,
                     const MCSubtargetInfo *STI) const override {
+    syncWrappedAssembler();
     return Wrapped->writeNopData(OS, Count, STI);
   }
 
-  bool finishLayout() const override { return Wrapped->finishLayout(); }
+  // X86AsmBackend::finishLayout() walks Asm->symbols() / *Asm, so the wrapped
+  // backend must see our assembler first (this was an x86-only crash: AArch64
+  // finishLayout does not touch Asm).
+  bool finishLayout() const override {
+    syncWrappedAssembler();
+    return Wrapped->finishLayout();
+  }
 
   uint64_t generateCompactUnwindEncoding(const MCDwarfFrameInfo *FI,
                                          const MCContext *Ctxt) const override {
+    syncWrappedAssembler();
     return Wrapped->generateCompactUnwindEncoding(FI, Ctxt);
   }
 };

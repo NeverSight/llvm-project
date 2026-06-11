@@ -7,10 +7,11 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Skeleton implementation of the two rewrite hooks. Both currently forward to
-/// the wrapped backend so the decorator is behavior-neutral and links cleanly;
-/// the real address-model resolution and per-ISA fixup handling land in a
-/// later step.
+/// AddressModelBackend resolves external/cross-section symbols to final VAs
+/// using the caller-provided RewriteAddressModel and returns IsResolved=true,
+/// so the stock applyFixup back-fills the bytes and no relocation is recorded.
+/// Special handling for AArch64 ADRP (page-aligned delta) and @PAGEOFF (low
+/// 12-bit mask) ensures correct encoding at non-page-aligned fixup PCs.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -74,12 +75,37 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     Value -= *VA;
   }
 
+  // Specifier-based addressing mode detection (AArch64 PAGE / PAGEOFF).
+  //   AArch64 ELF bitfield: S_PAGE = 0x010, S_PAGEOFF = 0x020
+  //                         S_AddressFragBits mask = 0x0f0
+  //   AArch64 MachO enum:   S_MACHO_PAGE = 0x406, GOTPAGE = 0x404, TLVPPAGE = 0x409
+  //                         S_MACHO_PAGEOFF = 0x407, GOTPAGEOFF = 0x405, TLVPPAGEOFF = 0x40a
+  uint32_t Spec = Target.getSpecifier();
+  bool IsPage = false, IsPageOff = false;
+  if (Spec) {
+    IsPage = (Spec & 0x0f0) == 0x010;
+    IsPage |= (Spec == 0x406 || Spec == 0x404 || Spec == 0x409);
+    IsPageOff = (Spec & 0x0f0) == 0x020;
+    IsPageOff |= (Spec == 0x407 || Spec == 0x405 || Spec == 0x40a);
+  }
+
   if (Fixup.isPCRel()) {
     StringRef Sec = F.getParent()->getName();
     uint64_t SecVA =
         Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Sec) : 0;
-    Value -= SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
+    uint64_t FixupPC = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
+    if (IsPage) {
+      // ADRP: page-aligned delta = (TargetPage - PCPage).
+      // adjustFixupValue then extracts the 21-bit page count via
+      // (Value & 0x1FFFFF000) >> 12.
+      Value = (Value & ~uint64_t(0xFFF)) - (FixupPC & ~uint64_t(0xFFF));
+    } else {
+      Value -= FixupPC;
+    }
   }
+
+  if (IsPageOff)
+    Value &= 0xFFF;
 
   return true;
 }

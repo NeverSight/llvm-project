@@ -26,8 +26,21 @@ void FinalImageObjectWriter::recordRelocation(const MCFragment &F,
                                               const MCFixup &Fixup,
                                               MCValue Target,
                                               uint64_t &FixedValue) {
-  if (const MCSymbol *Sym = Target.getAddSym())
-    Out.Unresolved.push_back(Sym->getName().str());
+  // AddressModelBackend::evaluateFixup has already resolved the value and the
+  // bytes have been back-filled. shouldForceRelocation in the target backend
+  // (e.g. AArch64 forces ADRP) may still route through here — suppress those
+  // false positives: if the symbol is defined / in-section / absolute, or if
+  // the caller's resolve callback can handle it, it is not truly unresolved.
+  const MCSymbol *Sym = Target.getAddSym();
+  if (!Sym)
+    return;
+  if (Sym->isDefined() || Sym->isInSection() || Sym->isAbsolute())
+    return;
+  if (Opts.Model.resolve) {
+    if (Opts.Model.resolve(Sym->getName(), Target.getSpecifier()))
+      return;
+  }
+  Out.Unresolved.push_back(Sym->getName().str());
 }
 
 uint64_t FinalImageObjectWriter::writeObject() {
