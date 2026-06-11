@@ -1,0 +1,177 @@
+name: NeverD LLVM Release
+
+# Builds the NeverD-flavored LLVM (static libs only, X86;ARM;AArch64, Release)
+# and publishes per-arch macOS packages as GitHub Release assets. The packages
+# are consumed by the main NeverD repo via -DNEVERD_LLVM_PREBUILT=ON, giving a
+# "brew install"-like experience without compiling LLVM locally.
+#
+# This is a NeverD-specific workflow; it does not touch upstream LLVM CI.
+
+on:
+  push:
+    tags:
+      - 'neverd-llvm-v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Publish a GitHub Release at this tag (empty = only upload run artifacts)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: neverd-llvm-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14   # Apple Silicon (only arch we publish)
+            deploy: '11.0'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+    steps:
+      - name: Checkout llvm-project
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install build tools (ninja, ccache, xz)
+        run: brew install ninja ccache xz
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-neverd-llvm-${{ matrix.arch }}-${{ github.sha }}
+          restore-keys: |
+            ccache-neverd-llvm-${{ matrix.arch }}-
+
+      - name: Resolve version & package name
+        id: ver
+        run: |
+          set -euo pipefail
+          f=cmake/Modules/LLVMVersion.cmake
+          maj=$(sed -n 's/.*LLVM_VERSION_MAJOR[^0-9]*\([0-9][0-9]*\).*/\1/p' "$f" | head -n1)
+          min=$(sed -n 's/.*LLVM_VERSION_MINOR[^0-9]*\([0-9][0-9]*\).*/\1/p' "$f" | head -n1)
+          pat=$(sed -n 's/.*LLVM_VERSION_PATCH[^0-9]*\([0-9][0-9]*\).*/\1/p' "$f" | head -n1)
+          {
+            echo "version=${maj}.${min}.${pat}"
+            echo "sha=$(git rev-parse --short HEAD)"
+            echo "pkg=neverd-llvm-macos-${{ matrix.arch }}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          cmake -S llvm -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="${{ runner.temp }}/pkg/${{ steps.ver.outputs.pkg }}" \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.deploy }} \
+            -DLLVM_CCACHE_BUILD=ON \
+            -DLLVM_TARGETS_TO_BUILD="X86;ARM;AArch64" \
+            -DLLVM_ENABLE_PROJECTS="" \
+            -DLLVM_ENABLE_RUNTIMES="" \
+            -DLLVM_BUILD_TOOLS=OFF \
+            -DLLVM_BUILD_UTILS=OFF \
+            -DLLVM_BUILD_TESTS=OFF \
+            -DLLVM_BUILD_EXAMPLES=OFF \
+            -DLLVM_BUILD_DOCS=OFF \
+            -DLLVM_BUILD_BENCHMARKS=OFF \
+            -DLLVM_ENABLE_BINDINGS=OFF \
+            -DLLVM_INCLUDE_TESTS=OFF \
+            -DLLVM_INCLUDE_BENCHMARKS=OFF \
+            -DLLVM_INCLUDE_EXAMPLES=OFF \
+            -DLLVM_INCLUDE_DOCS=OFF \
+            -DLLVM_INCLUDE_TOOLS=OFF \
+            -DLLVM_INCLUDE_UTILS=OFF \
+            -DLLVM_BUILD_LLVM_DYLIB=OFF \
+            -DLLVM_LINK_LLVM_DYLIB=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLLVM_ENABLE_ASSERTIONS=OFF \
+            -DLLVM_ENABLE_ZLIB=OFF \
+            -DLLVM_ENABLE_ZSTD=OFF \
+            -DLLVM_ENABLE_LIBXML2=OFF \
+            -DLLVM_ENABLE_TERMINFO=OFF \
+            -DLLVM_ENABLE_LIBEDIT=OFF \
+            -DLLVM_ENABLE_CURL=OFF \
+            -DLLVM_ENABLE_HTTPLIB=OFF
+
+      - name: Build & install
+        run: |
+          set -euo pipefail
+          cmake --build build --target install
+          ccache --show-stats || true
+
+      - name: Write BUILDINFO.txt
+        run: |
+          set -euo pipefail
+          dest="${{ runner.temp }}/pkg/${{ steps.ver.outputs.pkg }}"
+          cat > "$dest/BUILDINFO.txt" <<EOF
+          name: ${{ steps.ver.outputs.pkg }}
+          llvm_version: ${{ steps.ver.outputs.version }}
+          llvm_commit: ${{ steps.ver.outputs.sha }}
+          host_arch: ${{ matrix.arch }}
+          macos_deployment_target: ${{ matrix.deploy }}
+          targets: X86;ARM;AArch64
+          build_type: Release
+          link: static (.a)
+          built_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          built_by: ${{ github.workflow }} run ${{ github.run_id }}
+          EOF
+          cat "$dest/BUILDINFO.txt"
+
+      - name: Package (tar.xz + sha256)
+        run: |
+          set -euo pipefail
+          pkg="${{ steps.ver.outputs.pkg }}"
+          ( cd "${{ runner.temp }}/pkg" && tar -cf - "$pkg" | xz -T0 -6 -c ) > "${pkg}.tar.xz"
+          shasum -a 256 "${pkg}.tar.xz" > "${pkg}.tar.xz.sha256"
+          ls -lh "${pkg}.tar.xz"
+          cat "${pkg}.tar.xz.sha256"
+
+      - name: Upload run artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ver.outputs.pkg }}
+          path: |
+            ${{ steps.ver.outputs.pkg }}.tar.xz
+            ${{ steps.ver.outputs.pkg }}.tar.xz.sha256
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lhR dist
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          files: |
+            dist/*.tar.xz
+            dist/*.tar.xz.sha256
+          fail_on_unmatched_files: true
+          generate_release_notes: true
