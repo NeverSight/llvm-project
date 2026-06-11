@@ -7,10 +7,11 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Skeleton implementation of the output seam. writeObject() is stubbed to
-/// return 0 for now; the real image assembly (walk MCAssembler sections, copy
-/// getContents() to each final VA, fill SymbolAddrs, run onImage) lands in a
-/// later step.
+/// FinalImageObjectWriter walks MCAssembler sections after all fixups have been
+/// resolved by AddressModelBackend, copies fragment contents at their final VAs,
+/// collects symbol addresses, and runs the ImagePostProcess hook.
+/// recordRelocation unconditionally suppresses — any fixup reaching it has
+/// already been back-filled by AddressModelBackend + stock applyFixup.
 ///
 //===----------------------------------------------------------------------===//
 
