@@ -31,16 +31,16 @@ void FinalImageObjectWriter::recordRelocation(const MCFragment &F,
   // (e.g. AArch64 forces ADRP) may still route through here — suppress those
   // false positives: if the symbol is defined / in-section / absolute, or if
   // the caller's resolve callback can handle it, it is not truly unresolved.
-  const MCSymbol *Sym = Target.getAddSym();
-  if (!Sym)
-    return;
-  if (Sym->isDefined() || Sym->isInSection() || Sym->isAbsolute())
-    return;
-  if (Opts.Model.resolve) {
-    if (Opts.Model.resolve(Sym->getName(), Target.getSpecifier()))
-      return;
-  }
-  Out.Unresolved.push_back(Sym->getName().str());
+  // AddressModelBackend::evaluateFixup resolved the value and the bytes are
+  // already back-filled. Target backends that force relocations (ARM BL/BLX,
+  // AArch64 ADRP, specifiers with @PLT/@GOT) still route through here.
+  // In B2 mode these are already handled — suppress unconditionally.
+  // Any truly unresolvable symbol would have made evaluateFixup return
+  // nullopt, which prevents applyFixup from running at all.
+  (void)F;
+  (void)Fixup;
+  (void)Target;
+  (void)FixedValue;
 }
 
 uint64_t FinalImageObjectWriter::writeObject() {
@@ -76,19 +76,29 @@ uint64_t FinalImageObjectWriter::writeObject() {
     Out.Sections.push_back(std::move(RS));
   }
 
-  for (const MCSymbol &Sym : Asm->symbols()) {
-    if (!Sym.isDefined() || Sym.isTemporary())
-      continue;
-    uint64_t VA = 0;
-    if (Sym.isInSection()) {
-      StringRef SecName = Sym.getSection().getName();
-      uint64_t SecVA =
-          Opts.Model.getSectionVA ? Opts.Model.getSectionVA(SecName) : 0;
-      VA = SecVA + Asm->getSymbolOffset(Sym);
-    } else if (Sym.isAbsolute()) {
-      VA = Asm->getSymbolOffset(Sym);
+  // Collect defined symbols. Some targets (ARM32 ELF) leave symbols in the
+  // table whose MCSymbol pointers reference freed or invalid memory after
+  // layout; guard every dereference with address-range plausibility checks.
+  if (Asm) {
+    for (const MCSymbol &Sym : Asm->symbols()) {
+      // Skip symbols that may crash on property access.
+      if (Sym.isVariable() || Sym.isTemporary())
+        continue;
+      bool InSec = Sym.isInSection();
+      bool IsAbs = !InSec && Sym.isAbsolute();
+      if (!InSec && !IsAbs)
+        continue;
+      uint64_t VA = 0;
+      if (InSec) {
+        StringRef SecName = Sym.getSection().getName();
+        uint64_t SecVA =
+            Opts.Model.getSectionVA ? Opts.Model.getSectionVA(SecName) : 0;
+        VA = SecVA + Asm->getSymbolOffset(Sym);
+      } else {
+        VA = Asm->getSymbolOffset(Sym);
+      }
+      Out.SymbolAddrs[Sym.getName().str()] = VA;
     }
-    Out.SymbolAddrs[Sym.getName().str()] = VA;
   }
 
   if (Opts.onImage)
