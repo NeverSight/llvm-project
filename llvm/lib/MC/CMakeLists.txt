@@ -1,9 +1,11 @@
 add_llvm_component_library(LLVMMC
+  AddressModelBackend.cpp
   ConstantPools.cpp
   DXContainerInfo.cpp
   DXContainerPSVInfo.cpp
   DXContainerRootSignature.cpp
   ELFObjectWriter.cpp
+  FinalImageObjectWriter.cpp
   GOFFObjectWriter.cpp
   MCAsmBackend.cpp
   MCAsmInfo.cpp
