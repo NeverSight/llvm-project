@@ -49,6 +49,21 @@ void FinalImageObjectWriter::recordRelocation(const MCFragment &F,
 uint64_t FinalImageObjectWriter::writeObject() {
   uint64_t TotalBytes = 0;
 
+  // Helper: append ISA-correct NOP padding for text sections via the backend's
+  // writeNopData(). Falls back to zero-fill if writeNopData() fails.
+  auto appendNopPad = [&](std::vector<uint8_t> &Buf, uint64_t PadSize,
+                          const MCSubtargetInfo *STI) {
+    SmallVector<char, 64> NopBuf;
+    raw_svector_ostream NopOS(NopBuf);
+    if (Asm->getBackend().writeNopData(NopOS, PadSize, STI)) {
+      Buf.insert(Buf.end(), reinterpret_cast<const uint8_t *>(NopBuf.data()),
+                 reinterpret_cast<const uint8_t *>(NopBuf.data()) +
+                     NopBuf.size());
+    } else {
+      Buf.resize(Buf.size() + PadSize, 0x00);
+    }
+  };
+
   for (MCSection &Sec : *Asm) {
     StringRef Name = Sec.getName();
     uint64_t SecVA =
@@ -60,16 +75,29 @@ uint64_t FinalImageObjectWriter::writeObject() {
 
     uint64_t Size = Asm->getSectionAddressSize(Sec);
     bool IsText = Name.contains("text") || Name.contains("TEXT");
-    uint8_t PadByte = IsText ? 0x90 : 0x00;
     RS.Bytes.reserve(Size);
+
+    // Grab a subtarget pointer from the first fragment (for writeNopData).
+    const MCSubtargetInfo *SecSTI = nullptr;
+    for (const MCFragment &F : Sec) {
+      if (F.getSubtargetInfo()) {
+        SecSTI = F.getSubtargetInfo();
+        break;
+      }
+    }
 
     for (const MCFragment &F : Sec) {
       uint64_t FOffset = Asm->getFragmentOffset(F);
 
       // Fill gap between the current output position and the fragment's offset
-      // with NOP (text) or zero (data) padding.
-      if (RS.Bytes.size() < FOffset)
-        RS.Bytes.resize(FOffset, PadByte);
+      // with ISA-correct NOPs (text) or zeros (data).
+      if (RS.Bytes.size() < FOffset) {
+        uint64_t Gap = FOffset - RS.Bytes.size();
+        if (IsText)
+          appendNopPad(RS.Bytes, Gap, SecSTI);
+        else
+          RS.Bytes.resize(FOffset, 0x00);
+      }
 
       auto Content = F.getContents();
       RS.Bytes.insert(RS.Bytes.end(),
@@ -92,26 +120,24 @@ uint64_t FinalImageObjectWriter::writeObject() {
         uint64_t PadSize = FragSize - Written;
         if (IsText && (F.getKind() == MCFragment::FT_Align ||
                        F.getKind() == MCFragment::FT_PrefAlign)) {
-          SmallVector<char, 64> NopBuf;
-          raw_svector_ostream NopOS(NopBuf);
-          if (Asm->getBackend().writeNopData(NopOS, PadSize,
-                                             F.getSubtargetInfo())) {
-            RS.Bytes.insert(RS.Bytes.end(),
-                            reinterpret_cast<const uint8_t *>(NopBuf.data()),
-                            reinterpret_cast<const uint8_t *>(NopBuf.data()) +
-                                NopBuf.size());
-          } else {
-            RS.Bytes.resize(RS.Bytes.size() + PadSize, 0x90);
-          }
+          appendNopPad(RS.Bytes, PadSize,
+                       F.getSubtargetInfo() ? F.getSubtargetInfo() : SecSTI);
+        } else if (IsText) {
+          appendNopPad(RS.Bytes, PadSize, SecSTI);
         } else {
-          RS.Bytes.resize(RS.Bytes.size() + PadSize, PadByte);
+          RS.Bytes.resize(RS.Bytes.size() + PadSize, 0x00);
         }
       }
     }
 
     // Pad to the section's full address size.
-    if (RS.Bytes.size() < Size)
-      RS.Bytes.resize(Size, PadByte);
+    if (RS.Bytes.size() < Size) {
+      uint64_t Remaining = Size - RS.Bytes.size();
+      if (IsText)
+        appendNopPad(RS.Bytes, Remaining, SecSTI);
+      else
+        RS.Bytes.resize(Size, 0x00);
+    }
 
     TotalBytes += RS.Bytes.size();
     Out.Sections.push_back(std::move(RS));
