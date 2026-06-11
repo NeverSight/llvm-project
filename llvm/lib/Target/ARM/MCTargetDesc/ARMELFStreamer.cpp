@@ -1173,7 +1173,8 @@ void ARMELFStreamer::reset() {
   // MCELFStreamer clear's the assembler's e_flags. However, for
   // arm we manually set the ABI version on streamer creation, so
   // do the same here
-  getWriter().setELFHeaderEFlags(ELF::EF_ARM_EABI_VER5);
+  if (auto *W = getELFWriterOrNull())
+    W->setELFHeaderEFlags(ELF::EF_ARM_EABI_VER5);
 }
 
 inline void ARMELFStreamer::SwitchToEHSection(StringRef Prefix,
@@ -1513,7 +1514,8 @@ MCELFStreamer *createARMELFStreamer(MCContext &Context,
   // FIXME: This should eventually end up somewhere else where more
   // intelligent flag decisions can be made. For now we are just maintaining
   // the status quo for ARM and setting EF_ARM_EABI_VER5 as the default.
-  S->getWriter().setELFHeaderEFlags(ELF::EF_ARM_EABI_VER5);
+  if (auto *W = S->getELFWriterOrNull())
+    W->setELFHeaderEFlags(ELF::EF_ARM_EABI_VER5);
 
   return S;
 }

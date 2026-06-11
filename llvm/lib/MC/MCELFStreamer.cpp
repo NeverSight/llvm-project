@@ -46,8 +46,14 @@ MCELFStreamer::MCELFStreamer(MCContext &Context,
     : MCObjectStreamer(Context, std::move(TAB), std::move(OW),
                        std::move(Emitter)) {}
 
+ELFObjectWriter *MCELFStreamer::getELFWriterOrNull() {
+  return dynamic_cast<ELFObjectWriter *>(&getAssembler().getWriter());
+}
+
 ELFObjectWriter &MCELFStreamer::getWriter() {
-  return static_cast<ELFObjectWriter &>(getAssembler().getWriter());
+  auto *W = getELFWriterOrNull();
+  assert(W && "MCELFStreamer requires ELFObjectWriter");
+  return *W;
 }
 
 void MCELFStreamer::initSections(const MCSubtargetInfo &STI) {
@@ -85,7 +91,8 @@ void MCELFStreamer::changeSection(MCSection *Section, uint32_t Subsection) {
   if (Grp)
     Asm.registerSymbol(*Grp);
   if (SectionELF->getFlags() & ELF::SHF_GNU_RETAIN)
-    getWriter().markGnuAbi();
+    if (auto *W = getELFWriterOrNull())
+      W->markGnuAbi();
 
   MCObjectStreamer::changeSection(Section, Subsection);
   auto *Sym = static_cast<MCSymbolELF *>(Section->getBeginSymbol());
@@ -102,7 +109,8 @@ void MCELFStreamer::emitWeakReference(MCSymbol *Alias, const MCSymbol *Target) {
   }
   A->setVariableValue(MCSymbolRefExpr::create(Target, getContext()));
   A->setIsWeakref();
-  getWriter().Weakrefs.push_back(A);
+  if (auto *W = getELFWriterOrNull())
+    W->Weakrefs.push_back(A);
 }
 
 // When GNU as encounters more than one .type declaration for an object it seems
@@ -162,7 +170,8 @@ bool MCELFStreamer::emitSymbolAttribute(MCSymbol *S, MCSymbolAttr Attribute) {
   case MCSA_ELF_TypeGnuUniqueObject:
     Symbol->setType(CombineSymbolTypes(Symbol->getType(), ELF::STT_OBJECT));
     Symbol->setBinding(ELF::STB_GNU_UNIQUE);
-    getWriter().markGnuAbi();
+    if (auto *W = getELFWriterOrNull())
+      W->markGnuAbi();
     break;
 
   case MCSA_Global:
@@ -200,7 +209,8 @@ bool MCELFStreamer::emitSymbolAttribute(MCSymbol *S, MCSymbolAttr Attribute) {
 
   case MCSA_ELF_TypeIndFunction:
     Symbol->setType(CombineSymbolTypes(Symbol->getType(), ELF::STT_GNU_IFUNC));
-    getWriter().markGnuAbi();
+    if (auto *W = getELFWriterOrNull())
+      W->markGnuAbi();
     break;
 
   case MCSA_ELF_TypeObject:
@@ -283,8 +293,9 @@ void MCELFStreamer::emitELFSize(MCSymbol *Symbol, const MCExpr *Value) {
 void MCELFStreamer::emitELFSymverDirective(const MCSymbol *OriginalSym,
                                            StringRef Name,
                                            bool KeepOriginalSym) {
-  getWriter().Symvers.push_back(ELFObjectWriter::Symver{
-      getStartTokLoc(), OriginalSym, Name, KeepOriginalSym});
+  if (auto *W = getELFWriterOrNull())
+    W->Symvers.push_back(ELFObjectWriter::Symver{
+        getStartTokLoc(), OriginalSym, Name, KeepOriginalSym});
 }
 
 void MCELFStreamer::emitLocalCommonSymbol(MCSymbol *S, uint64_t Size,
@@ -299,7 +310,8 @@ void MCELFStreamer::emitLocalCommonSymbol(MCSymbol *S, uint64_t Size,
 void MCELFStreamer::emitCGProfileEntry(const MCSymbolRefExpr *From,
                                        const MCSymbolRefExpr *To,
                                        uint64_t Count) {
-  getWriter().getCGProfile().push_back({From, To, Count});
+  if (auto *W = getELFWriterOrNull())
+    W->getCGProfile().push_back({From, To, Count});
 }
 
 void MCELFStreamer::emitIdent(StringRef IdentString) {
@@ -337,9 +349,10 @@ void MCELFStreamer::finalizeCGProfileEntry(const MCSymbolRefExpr *Sym,
 }
 
 void MCELFStreamer::finalizeCGProfile() {
-  ELFObjectWriter &W = getWriter();
-  if (W.getCGProfile().empty())
+  auto *WP = getELFWriterOrNull();
+  if (!WP || WP->getCGProfile().empty())
     return;
+  ELFObjectWriter &W = *WP;
   MCSection *CGProfile = getAssembler().getContext().getELFSection(
       ".llvm.call-graph-profile", ELF::SHT_LLVM_CALL_GRAPH_PROFILE,
       ELF::SHF_EXCLUDE, /*sizeof(Elf_CGProfile_Impl<>)=*/8);

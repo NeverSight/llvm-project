@@ -42,6 +42,7 @@ public:
     MCObjectStreamer::reset();
   }
 
+  ELFObjectWriter *getELFWriterOrNull();
   ELFObjectWriter &getWriter();
 
   /// \name MCStreamer Interface

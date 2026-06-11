@@ -511,8 +511,9 @@ void AArch64TargetELFStreamer::finish() {
       Syms = std::move(NewSyms);
       // F.second holds the number of symbols added before the FILE symbol.
       // Take into account the inserted mapping symbols.
-      for (auto &F : S.getWriter().getFileNames())
-        F.second += llvm::lower_bound(Idx, F.second) - Idx.begin();
+      if (auto *EW = S.getELFWriterOrNull())
+        for (auto &F : EW->getFileNames())
+          F.second += llvm::lower_bound(Idx, F.second) - Idx.begin();
     }
   }
 
