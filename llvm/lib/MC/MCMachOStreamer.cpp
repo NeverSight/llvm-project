@@ -74,8 +74,14 @@ public:
     MCObjectStreamer::reset();
   }
 
+  MachObjectWriter *getMachWriterOrNull() {
+    return dynamic_cast<MachObjectWriter *>(&getAssembler().getWriter());
+  }
+
   MachObjectWriter &getWriter() {
-    return static_cast<MachObjectWriter &>(getAssembler().getWriter());
+    auto *W = getMachWriterOrNull();
+    assert(W && "MCMachOStreamer requires MachObjectWriter");
+    return *W;
   }
 
   /// @name MCStreamer Interface
@@ -113,12 +119,14 @@ public:
   }
 
   void emitLOHDirective(MCLOHType Kind, const MCLOHArgs &Args) override {
-    getWriter().getLOHContainer().addDirective(Kind, Args);
+    if (auto *W = getMachWriterOrNull())
+      W->getLOHContainer().addDirective(Kind, Args);
   }
   void emitCGProfileEntry(const MCSymbolRefExpr *From,
                           const MCSymbolRefExpr *To, uint64_t Count) override {
     if (!From->getSymbol().isTemporary() && !To->getSymbol().isTemporary())
-      getWriter().getCGProfile().push_back({From, To, Count});
+      if (auto *W = getMachWriterOrNull())
+        W->getCGProfile().push_back({From, To, Count});
   }
 
   void finishImpl() override;
@@ -193,11 +201,14 @@ void MCMachOStreamer::emitDataRegion(MachO::DataRegionType Kind) {
   MCSymbol *Start = getContext().createTempSymbol();
   emitLabel(Start);
   // Record the region for the object writer to use.
-  getWriter().getDataRegions().push_back({Kind, Start, nullptr});
+  if (auto *W = getMachWriterOrNull())
+    W->getDataRegions().push_back({Kind, Start, nullptr});
 }
 
 void MCMachOStreamer::emitDataRegionEnd() {
-  auto &Regions = getWriter().getDataRegions();
+  auto *MW = getMachWriterOrNull();
+  if (!MW) return;
+  auto &Regions = MW->getDataRegions();
   assert(!Regions.empty() && "Mismatched .end_data_region!");
   auto &Data = Regions.back();
   assert(!Data.End && "Mismatched .end_data_region!");
@@ -207,11 +218,13 @@ void MCMachOStreamer::emitDataRegionEnd() {
 }
 
 void MCMachOStreamer::emitSubsectionsViaSymbols() {
-  getWriter().setSubsectionsViaSymbols(true);
+  if (auto *W = getMachWriterOrNull())
+    W->setSubsectionsViaSymbols(true);
 }
 
 void MCMachOStreamer::emitLinkerOptions(ArrayRef<std::string> Options) {
-  getWriter().getLinkerOptions().push_back(Options);
+  if (auto *W = getMachWriterOrNull())
+    W->getLinkerOptions().push_back(Options);
 }
 
 void MCMachOStreamer::emitDataRegion(MCDataRegionType Kind) {
@@ -237,21 +250,24 @@ void MCMachOStreamer::emitDataRegion(MCDataRegionType Kind) {
 void MCMachOStreamer::emitVersionMin(MCVersionMinType Kind, unsigned Major,
                                      unsigned Minor, unsigned Update,
                                      VersionTuple SDKVersion) {
-  getWriter().setVersionMin(Kind, Major, Minor, Update, SDKVersion);
+  if (auto *W = getMachWriterOrNull())
+    W->setVersionMin(Kind, Major, Minor, Update, SDKVersion);
 }
 
 void MCMachOStreamer::emitBuildVersion(unsigned Platform, unsigned Major,
                                        unsigned Minor, unsigned Update,
                                        VersionTuple SDKVersion) {
-  getWriter().setBuildVersion((MachO::PlatformType)Platform, Major, Minor,
-                              Update, SDKVersion);
+  if (auto *W = getMachWriterOrNull())
+    W->setBuildVersion((MachO::PlatformType)Platform, Major, Minor,
+                       Update, SDKVersion);
 }
 
 void MCMachOStreamer::emitDarwinTargetVariantBuildVersion(
     unsigned Platform, unsigned Major, unsigned Minor, unsigned Update,
     VersionTuple SDKVersion) {
-  getWriter().setTargetVariantBuildVersion((MachO::PlatformType)Platform, Major,
-                                           Minor, Update, SDKVersion);
+  if (auto *W = getMachWriterOrNull())
+    W->setTargetVariantBuildVersion((MachO::PlatformType)Platform, Major,
+                                    Minor, Update, SDKVersion);
 }
 
 bool MCMachOStreamer::emitSymbolAttribute(MCSymbol *Sym,
@@ -263,8 +279,9 @@ bool MCMachOStreamer::emitSymbolAttribute(MCSymbol *Sym,
   if (Attribute == MCSA_IndirectSymbol) {
     // Note that we intentionally cannot use the symbol data here; this is
     // important for matching the string table that 'as' generates.
-    getWriter().getIndirectSymbols().push_back(
-        {Symbol, getCurrentSectionOnly()});
+    if (auto *W = getMachWriterOrNull())
+      W->getIndirectSymbols().push_back(
+          {Symbol, getCurrentSectionOnly()});
     return true;
   }
 
@@ -471,7 +488,7 @@ void MCMachOStreamer::finalizeCGProfileEntry(const MCSymbolRefExpr *&SRE) {
 
 void MCMachOStreamer::finalizeCGProfile() {
   MCAssembler &Asm = getAssembler();
-  MCObjectWriter &W = getWriter();
+  MCObjectWriter &W = Asm.getWriter();
   if (W.getCGProfile().empty())
     return;
   for (auto &E : W.getCGProfile()) {
