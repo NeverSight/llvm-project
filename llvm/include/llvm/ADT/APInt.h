@@ -131,8 +131,7 @@ public:
     }
     if (isSingleWord()) {
       U.VAL = val;
-      if (implicitTrunc || isSigned)
-        clearUnusedBits();
+      clearUnusedBits();
     } else {
       initSlowCase(val, isSigned);
     }
