@@ -3082,58 +3082,6 @@ static Value *simplifyICmpWithZero(CmpPredicate Pred, Value *LHS, Value *RHS,
   return nullptr;
 }
 
-/// True when \p Ptr (or its base) is produced by inttoptr of an integer.
-static bool hasIntToPtrInPointerChain(const Value *V, unsigned Depth = 8) {
-  if (!V || !Depth)
-    return false;
-  if (isa<IntToPtrInst>(V))
-    return true;
-  if (const auto *CE = dyn_cast<ConstantExpr>(V))
-    if (CE->getOpcode() == Instruction::IntToPtr)
-      return true;
-  if (const auto *GEP = dyn_cast<GEPOperator>(V))
-    return hasIntToPtrInPointerChain(GEP->getPointerOperand(), Depth - 1);
-  if (const auto *Cast = dyn_cast<Operator>(V)) {
-    if (Cast->getOpcode() == Instruction::BitCast)
-      return hasIntToPtrInPointerChain(Cast->getOperand(0), Depth - 1);
-  }
-  return false;
-}
-
-/// True when \p V is (or derives from) a load through inttoptr of an integer
-/// address.  Binary lifters model stack slots this way; ValueTracking cannot
-/// soundly infer value ranges for such loads.
-static bool isOpaqueIntToPtrLoad(const Value *V, unsigned Depth = 6) {
-  if (!V || !Depth)
-    return false;
-
-  if (const auto *LI = dyn_cast<LoadInst>(V)) {
-    if (hasIntToPtrInPointerChain(LI->getPointerOperand()))
-      return true;
-    return false;
-  }
-
-  if (const auto *Cast = dyn_cast<CastInst>(V))
-    return isOpaqueIntToPtrLoad(Cast->getOperand(0), Depth - 1);
-
-  if (const auto *BO = dyn_cast<BinaryOperator>(V)) {
-    switch (BO->getOpcode()) {
-    case Instruction::Trunc:
-    case Instruction::ZExt:
-    case Instruction::SExt:
-    case Instruction::And:
-    case Instruction::Or:
-    case Instruction::Xor:
-      return isOpaqueIntToPtrLoad(BO->getOperand(0), Depth - 1) ||
-             isOpaqueIntToPtrLoad(BO->getOperand(1), Depth - 1);
-    default:
-      break;
-    }
-  }
-
-  return false;
-}
-
 static Value *simplifyICmpWithConstant(CmpPredicate Pred, Value *LHS,
                                        Value *RHS, const SimplifyQuery &Q) {
   Type *ITy = getCompareTy(RHS); // The return type.
@@ -3160,15 +3108,12 @@ static Value *simplifyICmpWithConstant(CmpPredicate Pred, Value *LHS,
   if (RHS_CR.isFullSet())
     return ConstantInt::getTrue(ITy);
 
-  if (!isOpaqueIntToPtrLoad(LHS)) {
-    ConstantRange LHS_CR =
-        computeConstantRange(LHS, CmpInst::isSigned(Pred), Q);
-    if (!LHS_CR.isFullSet()) {
-      if (RHS_CR.contains(LHS_CR))
-        return ConstantInt::getTrue(ITy);
-      if (RHS_CR.inverse().contains(LHS_CR))
-        return ConstantInt::getFalse(ITy);
-    }
+  ConstantRange LHS_CR = computeConstantRange(LHS, CmpInst::isSigned(Pred), Q);
+  if (!LHS_CR.isFullSet()) {
+    if (RHS_CR.contains(LHS_CR))
+      return ConstantInt::getTrue(ITy);
+    if (RHS_CR.inverse().contains(LHS_CR))
+      return ConstantInt::getFalse(ITy);
   }
 
   // (mul nuw/nsw X, MulC) != C --> true  (if C is not a multiple of MulC)
@@ -3942,13 +3887,11 @@ static Value *simplifyICmpInst(CmpPredicate Pred, Value *LHS, Value *RHS,
   // to simplify the comparison.
   if (std::optional<ConstantRange> RhsCr = getRange(RHS, Q.IIQ))
     if (std::optional<ConstantRange> LhsCr = getRange(LHS, Q.IIQ)) {
-      if (!isOpaqueIntToPtrLoad(LHS)) {
-        if (LhsCr->icmp(Pred, *RhsCr))
-          return ConstantInt::getTrue(ITy);
+      if (LhsCr->icmp(Pred, *RhsCr))
+        return ConstantInt::getTrue(ITy);
 
-        if (LhsCr->icmp(CmpInst::getInversePredicate(Pred), *RhsCr))
-          return ConstantInt::getFalse(ITy);
-      }
+      if (LhsCr->icmp(CmpInst::getInversePredicate(Pred), *RhsCr))
+        return ConstantInt::getFalse(ITy);
     }
 
   // Compare of cast, for example (zext X) != 0 -> X != 0
@@ -4097,15 +4040,14 @@ static Value *simplifyICmpInst(CmpPredicate Pred, Value *LHS, Value *RHS,
 
         // If the re-extended constant didn't change then this is effectively
         // also a case of comparing two sign-extended values.
-        if (AnyEq->isAllOnesValue() && MaxRecurse &&
-            !isOpaqueIntToPtrLoad(SrcOp))
+        if (AnyEq->isAllOnesValue() && MaxRecurse)
           if (Value *V =
                   simplifyICmpInst(Pred, SrcOp, Trunc, Q, MaxRecurse - 1))
             return V;
 
         // Otherwise the upper bits of LHS are all equal, while RHS has varying
         // bits there.  Use this to work out the result of the comparison.
-        if (AnyEq->isNullValue() && !isOpaqueIntToPtrLoad(SrcOp)) {
+        if (AnyEq->isNullValue()) {
           switch (Pred) {
           default:
             llvm_unreachable("Unknown ICmp predicate!");
