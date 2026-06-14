@@ -83,7 +83,18 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     return std::nullopt;
   };
 
-  Value = Target.getConstant();
+  // Preserve any pre-seed the wrapped backend wrote into Value. MCAssembler
+  // zero-initialises Value before calling this hook, then the stock fallback
+  // does `Value += Target.getConstant()` (MCAssembler::evaluateFixup) so any
+  // pre-seed survives. We must mirror that with `+=`, not `=`: the ARM backend
+  // pre-seeds Value with (fragOffset + fixupOffset) % 4 for Thumb PC-relative
+  // ldr fixups (fixup_t2_ldst_pcrel_12 etc.) so the later `Value -= FixupPC`
+  // effectively subtracts AlignDown(PC, 4) — the Thumb literal-pool anchor.
+  // Overwriting with `=` dropped that low-bit pre-seed, mis-anchoring 32-bit
+  // ldr.w literal loads by up to 2 bytes whenever the fixup PC was not already
+  // 4-aligned (x86/AArch64 fold their adjustment into Target's constant, so
+  // their pre-seed is 0 and `+=` is identical to `=`).
+  Value += Target.getConstant();
 
   if (const MCSymbol *Add = Target.getAddSym()) {
     auto VA = resolveSymVA(Add);
