@@ -100,15 +100,17 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     auto VA = resolveSymVA(Add);
     if (!VA)
       return std::nullopt;
-    // For external symbols resolved via the address model callback, strip the
-    // ARM/Thumb interworking bit (bit 0). Resolve callbacks may return
-    // addresses with bit 0 set to indicate Thumb mode; this bit must not
-    // participate in offset calculations. In-section / absolute symbols use
-    // their exact computed addresses (no Thumb bit ambiguity).
-    if (!Add->isInSection() && !Add->isAbsolute())
-      Value += *VA & ~uint64_t(1);
-    else
-      Value += *VA;
+    // The ARM/Thumb interworking bit (bit 0) is an AArch32-only concept: a
+    // function-pointer VA encodes Thumb mode in bit 0, which must not enter the
+    // offset math for ARM/Thumb branch fixups, so a resolve callback may return
+    // it set. On AArch64/x86 there is no such bit, so stripping it would corrupt
+    // a genuine odd in-image address — e.g. a string literal at an odd VA
+    // referenced via ADRP+ADD, whose @PAGEOFF would lose its low bit. Gate the
+    // strip to AArch32 external symbols; everywhere else use the exact VA.
+    const Triple &TT = Asm->getContext().getTargetTriple();
+    bool StripThumbBit = !Add->isInSection() && !Add->isAbsolute() &&
+                         (TT.isARM() || TT.isThumb());
+    Value += StripThumbBit ? (*VA & ~uint64_t(1)) : *VA;
   }
   if (const MCSymbol *Sub = Target.getSubSym()) {
     auto VA = resolveSymVA(Sub);
