@@ -122,6 +122,27 @@ uint64_t FinalImageObjectWriter::writeObject() {
           Bytes.resize(FOffset, 0x00);
       }
 
+      // FT_Fill fragments carry no bytes in getContents()/getVarContents():
+      // their payload is a (value, value-size, count) triple.  The backend
+      // routes any repeated-byte constant through emitFill (see
+      // isRepeatedByteSequence in AsmPrinter) — e.g. an all-ones <N x i32>
+      // vector that lands in the constant pool emits emitFill(bytes, 0xFF).
+      // Falling through to the generic path below would treat the whole run as
+      // padding and zero-fill it, silently turning a non-zero fill into zeros
+      // (all-ones -> 0x00) and miscompiling any code that reads the constant
+      // (e.g. `pxor xmm, [pool]` for `~x` becomes a no-op).  A zero fill
+      // (emitZeros) still materializes correctly here.
+      if (F.getKind() == MCFragment::FT_Fill) {
+        const auto &FF = cast<MCFillFragment>(F);
+        uint64_t Total = Asm->computeFragmentSize(F);
+        unsigned VSize = FF.getValueSize();
+        uint64_t Val = FF.getValue();
+        for (uint64_t I = 0; I < Total; ++I)
+          Bytes.push_back(VSize ? uint8_t((Val >> (8 * (I % VSize))) & 0xFF)
+                                : uint8_t(0));
+        continue;
+      }
+
       auto Content = F.getContents();
       Bytes.insert(Bytes.end(),
                    reinterpret_cast<const uint8_t *>(Content.data()),
