@@ -9587,11 +9587,28 @@ SDValue TargetLowering::expandFMINIMUM_FMAXIMUM(SDNode *N,
                                   DAG.getConstantFP(0.0, DL, VT), ISD::SETOEQ);
     SDValue TestZero =
         DAG.getTargetConstant(IsMax ? fcPosZero : fcNegZero, DL, MVT::i32);
+    // The IS_FPCLASS signed-zero test lowers to a bitcast-to-integer + sign-bit
+    // compare.  When the integer type is illegal (e.g. f64 on a 32-bit target)
+    // and IS_FPCLASS is not legal/custom, that integer compare would be created
+    // here during operation legalization -- too late for type legalization to
+    // split it -- and ISel cannot select the illegal-typed setcc.  Round to f32
+    // first for the class test: FP_ROUND preserves the sign of a zero, and f32's
+    // integer type (i32) is legal everywhere.  Mirrors the guard already present
+    // in expandFMINIMUMNUM_FMAXIMUMNUM.
+    EVT IntVT = VT.changeTypeToInteger();
+    SDValue LHSClass = LHS, RHSClass = RHS;
+    if (!isTypeLegal(IntVT) && !isOperationLegalOrCustom(ISD::IS_FPCLASS, VT)) {
+      EVT FloatVT = VT.changeElementType(*DAG.getContext(), MVT::f32);
+      LHSClass = DAG.getNode(ISD::FP_ROUND, DL, FloatVT, LHS,
+                             DAG.getIntPtrConstant(0, DL, /*isTarget=*/true));
+      RHSClass = DAG.getNode(ISD::FP_ROUND, DL, FloatVT, RHS,
+                             DAG.getIntPtrConstant(0, DL, /*isTarget=*/true));
+    }
     SDValue LCmp = DAG.getSelect(
-        DL, VT, DAG.getNode(ISD::IS_FPCLASS, DL, CCVT, LHS, TestZero), LHS,
+        DL, VT, DAG.getNode(ISD::IS_FPCLASS, DL, CCVT, LHSClass, TestZero), LHS,
         MinMax, Flags);
     SDValue RCmp = DAG.getSelect(
-        DL, VT, DAG.getNode(ISD::IS_FPCLASS, DL, CCVT, RHS, TestZero), RHS,
+        DL, VT, DAG.getNode(ISD::IS_FPCLASS, DL, CCVT, RHSClass, TestZero), RHS,
         LCmp, Flags);
     MinMax = DAG.getSelect(DL, VT, IsZero, RCmp, MinMax, Flags);
   }
