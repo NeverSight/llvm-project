@@ -70,9 +70,10 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     if (!Sym)
       return std::nullopt;
     if (Sym->isInSection()) {
-      StringRef Sec = Sym->getSection().getName();
-      uint64_t Base =
-          Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Sec) : 0;
+      // sectionImageVA (not getSectionVA(name)) so that same-named sections —
+      // e.g. COFF's per-constant COMDAT ".rdata" — resolve to their packed VA
+      // instead of all overlapping at getSectionVA(name).
+      uint64_t Base = mc_rewrite::sectionImageVA(*Asm, Opts, Sym->getSection());
       return Base + Asm->getSymbolOffset(*Sym);
     }
     if (Sym->isAbsolute())
@@ -156,9 +157,7 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     IsPageOff = true;
 
   if (Fixup.isPCRel()) {
-    StringRef Sec = F.getParent()->getName();
-    uint64_t SecVA =
-        Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Sec) : 0;
+    uint64_t SecVA = mc_rewrite::sectionImageVA(*Asm, Opts, *F.getParent());
     uint64_t FixupPC = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
     if (IsPage) {
       uint64_t PageDelta =
@@ -189,9 +188,7 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   if (Opts.onFixup) {
     mc_rewrite::FixupCtx Ctx;
     Ctx.Kind = Fixup.getKind();
-    StringRef Sec = F.getParent()->getName();
-    uint64_t SecVA =
-        Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Sec) : 0;
+    uint64_t SecVA = mc_rewrite::sectionImageVA(*Asm, Opts, *F.getParent());
     Ctx.FixupVA = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
     if (Target.getAddSym())
       Ctx.Sym = Target.getAddSym()->getName();
@@ -220,9 +217,8 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
         if (TargetVA && (*TargetVA & 1) == 0) {
           // Target VA is even → ARM mode. Re-encode BL as BLX.
           // BLX offset base = Align(PC+4, 4), not PC+4.
-          StringRef Sec = F.getParent()->getName();
           uint64_t SecVA =
-              Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Sec) : 0;
+              mc_rewrite::sectionImageVA(*Asm, Opts, *F.getParent());
           uint64_t PC = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
           uint64_t AlignedBase = (PC + 4) & ~uint64_t(3);
           int32_t Delta = static_cast<int32_t>(

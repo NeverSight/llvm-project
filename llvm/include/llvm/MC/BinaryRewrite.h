@@ -34,6 +34,8 @@
 namespace llvm {
 class MCAsmBackend;
 class MCObjectWriter;
+class MCAssembler;
+class MCSection;
 } // namespace llvm
 
 namespace llvm::mc_rewrite {
@@ -114,6 +116,21 @@ createAddressModelBackend(std::unique_ptr<MCAsmBackend> TargetBackend,
 /// outlive the returned writer.
 std::unique_ptr<MCObjectWriter>
 createFinalImageObjectWriter(const RewriteOptions &Opts, RewriteResult &Result);
+
+/// Compute the VA at which \p Sec's bytes begin under \p Opts's address model.
+/// The caller-provided getSectionVA is keyed by section *name*, but some object
+/// formats emit several MCSections that share a name — notably COFF, which
+/// places each mergeable constant (e.g. a vector literal introduced by an
+/// obfuscation pass) in its own COMDAT ".rdata". Anchoring them all at
+/// getSectionVA(name) would overlap them, so same-named sections are packed
+/// contiguously in MC emission order: the first lands exactly at
+/// getSectionVA(name); each subsequent one is aligned to its own alignment and
+/// placed after the previous. AddressModelBackend (fixup/symbol VAs) and
+/// FinalImageObjectWriter (byte placement + symbol collection) both use this so
+/// their address views stay identical, and the writer merges the same-named
+/// MCSections into one RewriteSection so name-keyed callers see no duplicate.
+uint64_t sectionImageVA(MCAssembler &Asm, const RewriteOptions &Opts,
+                        const MCSection &Sec);
 
 } // namespace llvm::mc_rewrite
 
