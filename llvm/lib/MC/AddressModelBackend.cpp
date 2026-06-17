@@ -108,9 +108,27 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     // referenced via ADRP+ADD, whose @PAGEOFF would lose its low bit. Gate the
     // strip to AArch32 external symbols; everywhere else use the exact VA.
     const Triple &TT = Asm->getContext().getTargetTriple();
-    bool StripThumbBit = !Add->isInSection() && !Add->isAbsolute() &&
-                         (TT.isARM() || TT.isThumb());
-    Value += StripThumbBit ? (*VA & ~uint64_t(1)) : *VA;
+    bool IsArm32 = TT.isARM() || TT.isThumb();
+    // Absolute data relocations (FK_Data_*, non-PC-relative) that point at a
+    // Thumb function — function-pointer tables, vtables, GCC computed-goto label
+    // tables — must carry the interworking bit so an indirect transfer
+    // (blx/bx/ldr pc) through the slot lands in Thumb mode. The stock ELF/COFF
+    // writers encode this in the symbol's table value (R_ARM_ABS32 against a
+    // Thumb-func symbol keeps bit 0); B2 computes the VA itself — resolveSymVA
+    // returns the even byte offset — so it must OR the bit in here. Without it,
+    // the loaded pointer is even, blx switches to ARM mode at a Thumb-encoded
+    // address, and the fetch faults (UC_ERR_FETCH_UNMAPPED).
+    unsigned KindForData = Fixup.getKind();
+    bool IsAbsData = !Fixup.isPCRel() &&
+                     (KindForData == FK_Data_1 || KindForData == FK_Data_2 ||
+                      KindForData == FK_Data_4 || KindForData == FK_Data_8);
+    if (IsArm32 && IsAbsData && Asm->isThumbFunc(Add)) {
+      Value += *VA | uint64_t(1);
+    } else {
+      bool StripThumbBit =
+          !Add->isInSection() && !Add->isAbsolute() && IsArm32;
+      Value += StripThumbBit ? (*VA & ~uint64_t(1)) : *VA;
+    }
   }
   if (const MCSymbol *Sub = Target.getSubSym()) {
     auto VA = resolveSymVA(Sub);
