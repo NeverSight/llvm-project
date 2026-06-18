@@ -123,7 +123,23 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     bool IsAbsData = !Fixup.isPCRel() &&
                      (KindForData == FK_Data_1 || KindForData == FK_Data_2 ||
                       KindForData == FK_Data_4 || KindForData == FK_Data_8);
-    if (IsArm32 && IsAbsData && Asm->isThumbFunc(Add)) {
+    // MOVW/MOVT immediate pairs materialise a 32-bit symbol address directly in
+    // code (e.g. Thumb `movw rX,:lower16:f; movt rX,:upper16:f` for a function
+    // pointer later called via blx rX). Like an absolute data relocation these
+    // must carry the interworking bit on the low half so the indirect transfer
+    // lands in Thumb mode; the stock ELF/COFF writers fold it into the symbol
+    // value (R_ARM_THM_MOVW_ABS_NC uses S|T, COFF MOV32T sets it), but B2
+    // computes the VA itself. These are target-specific fixup kinds, so match by
+    // name. OR-ing bit 0 into the full VA is safe for the movt (hi16) half too —
+    // it only extracts bits 16..31, which bit 0 never touches.
+    bool IsMovwMovt = false;
+    if (IsArm32 && !Fixup.isPCRel() && KindForData >= FirstTargetFixupKind) {
+      StringRef FKName = Wrapped->getFixupKindInfo(
+                                    static_cast<MCFixupKind>(KindForData))
+                             .Name;
+      IsMovwMovt = FKName.contains("movw") || FKName.contains("movt");
+    }
+    if (IsArm32 && (IsAbsData || IsMovwMovt) && Asm->isThumbFunc(Add)) {
       Value += *VA | uint64_t(1);
     } else {
       bool StripThumbBit =
