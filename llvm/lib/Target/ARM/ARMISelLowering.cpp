@@ -881,6 +881,19 @@ ARMTargetLowering::ARMTargetLowering(const TargetMachine &TM_,
   setOperationAction(ISD::STRICT_FP_TO_SINT, MVT::i32, Custom);
   setOperationAction(ISD::STRICT_FP_TO_UINT, MVT::i32, Custom);
 
+  // ARM has no generic ISD::LRINT selection pattern, so it otherwise defaults to
+  // an lrint/lrintf libcall.  When VFP is present the hardware VCVTR instruction
+  // (convert to integer using the current FPSCR rounding mode — exactly lrint
+  // semantics, exposed via the llvm.arm.vcvtr intrinsic) implements it directly;
+  // custom-lower a scalar f32/f64 -> i32 LRINT to VCVTR followed by a VMOV of
+  // the result S-register into a GPR (matching x86 cvtss2si / AArch64), keeping
+  // lrint off the libcall path a recompiled/rewritten image cannot resolve.
+  if (Subtarget->hasVFP2Base()) {
+    setOperationAction(ISD::LRINT, MVT::f32, Custom);
+    if (Subtarget->hasFP64())
+      setOperationAction(ISD::LRINT, MVT::f64, Custom);
+  }
+
   if (!Subtarget->hasFP64() || !Subtarget->hasFPARMv8Base()) {
     setOperationAction(ISD::FP_EXTEND,  MVT::f64, Custom);
     setOperationAction(ISD::STRICT_FP_EXTEND, MVT::f64, Custom);
@@ -10609,6 +10622,24 @@ SDValue ARMTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
                               {Op.getOperand(0), Op.getOperand(1)});
     return DAG.getNode(Op.getOpcode(), DL, {Op.getValueType(), MVT::Other},
                        {Ext.getValue(1), Ext.getValue(0)});
+  }
+  case ISD::LRINT: {
+    // Lower a scalar f32/f64 -> i32 LRINT (round to integer in the current
+    // FPSCR mode) to the hardware VCVTR instruction (via the llvm.arm.vcvtr
+    // intrinsic, which produces the integer result in an S-register) followed by
+    // a VMOV (bitcast) of that S-register into a GPR — matching x86 cvtss2si /
+    // AArch64 lrint and keeping lrint off the lrint/lrintf libcall path.  Any
+    // unhandled type (i64 result, f16 operand) falls back to the default action.
+    SDLoc DL(Op);
+    SDValue FP = Op.getOperand(0);
+    EVT FPVT = FP.getValueType();
+    if (Op.getValueType() != MVT::i32 ||
+        (FPVT != MVT::f32 && FPVT != MVT::f64))
+      return SDValue();
+    SDValue Cvt =
+        DAG.getNode(ISD::INTRINSIC_WO_CHAIN, DL, MVT::f32,
+                    DAG.getConstant(Intrinsic::arm_vcvtr, DL, MVT::i32), FP);
+    return DAG.getNode(ISD::BITCAST, DL, MVT::i32, Cvt);
   }
   }
 }
