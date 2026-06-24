@@ -138,6 +138,18 @@ static cl::opt<unsigned> StoreMergeDependenceLimit(
     cl::desc("Limit the number of times for the same StoreNode and RootNode "
              "to bail out in store merging dependence check"));
 
+static cl::opt<unsigned> PostIndexMaxBaseUsers(
+    "combiner-post-index-max-base-users", cl::Hidden, cl::init(256),
+    cl::desc("Limit how many users of an address / base pointer DAGCombiner "
+             "scans when forming post-indexed addressing.  Forming a post-inc "
+             "is never profitable for a heavily shared base, and rescanning a "
+             "huge user list for every memory node is a quadratic compile-time "
+             "sink on pathological inputs (e.g. heavily obfuscated functions "
+             "with hundreds of stack-slot / constant-pool accesses).  Bailing "
+             "past this bound only forgoes a few combines; it never affects "
+             "correctness.  has-predecessor-max-steps already bounds the graph "
+             "walk, but not this outer user-list iteration."));
+
 static cl::opt<bool> EnableReduceLoadOpStoreWidth(
     "combiner-reduce-load-op-store-width", cl::Hidden, cl::init(true),
     cl::desc("DAG combiner enable reducing the width of load/op/store "
@@ -21071,7 +21083,14 @@ static bool shouldCombineToPostInc(SDNode *N, SDValue Ptr, SDNode *PtrUse,
 
   SmallPtrSet<const SDNode *, 32> Visited;
   unsigned MaxSteps = SelectionDAG::getHasPredecessorMaxSteps();
+  unsigned NumUsersSeen = 0;
   for (SDNode *User : BasePtr->users()) {
+    // Compile-time guard: a base pointer with a very large user list is not a
+    // profitable post-inc candidate, and rescanning it for every memory node
+    // is quadratic.  Bail rather than scan an unbounded list (correctness is
+    // unaffected — post-indexing is purely an addressing-mode optimization).
+    if (++NumUsersSeen > PostIndexMaxBaseUsers)
+      return false;
     if (User == Ptr.getNode())
       continue;
 
@@ -21118,7 +21137,13 @@ static SDNode *getPostIndexedLoadStoreOp(SDNode *N, bool &IsLoad,
   //    nor a successor of N. Otherwise, if Op is folded that would
   //    create a cycle.
   unsigned MaxSteps = SelectionDAG::getHasPredecessorMaxSteps();
+  unsigned NumUsesSeen = 0;
   for (SDUse &U : Ptr->uses()) {
+    // Compile-time guard (see combiner-post-index-max-base-users): give up on
+    // an address whose use list is enormous rather than scanning it (and, via
+    // shouldCombineToPostInc, the base's user list) for every memory node.
+    if (++NumUsesSeen > PostIndexMaxBaseUsers)
+      return nullptr;
     if (U.getResNo() != Ptr.getResNo())
       continue;
 

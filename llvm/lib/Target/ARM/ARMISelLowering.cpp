@@ -16297,8 +16297,20 @@ static SDValue CombineBaseUpdate(SDNode *N,
 
   SmallVector<BaseUpdateUser, 8> BaseUpdates;
 
+  // Cap how many users we *scan* (not just how many candidates we collect):
+  // when qualifying increments are sparse in a very large use list (e.g. a base
+  // pointer shared by hundreds of strided NEON accesses in heavily obfuscated
+  // code), scanning the whole list for every memory node is quadratic.
+  // MaxBaseUpdates already bounds the collected candidates; this bounds the
+  // walk.  Scanning a few times the candidate budget always finds the nearby
+  // base updates real code has, and bailing past it only forgoes a combine.
+  const unsigned MaxBaseUpdateScan = MaxBaseUpdates * 4;
+
   // Search for a use of the address operand that is an increment.
+  unsigned NumAddrUsesSeen = 0;
   for (SDUse &Use : Addr->uses()) {
+    if (++NumAddrUsesSeen > MaxBaseUpdateScan)
+      break;
     SDNode *User = Use.getUser();
     if (Use.getResNo() != Addr.getResNo() || User->getNumOperands() != 2)
       continue;
@@ -16322,7 +16334,10 @@ static SDValue CombineBaseUpdate(SDNode *N,
     unsigned Offset =
         getPointerConstIncrement(Addr->getOpcode(), Base, CInc, DCI.DAG);
     if (Offset) {
+      unsigned NumBaseUsesSeen = 0;
       for (SDUse &Use : Base->uses()) {
+        if (++NumBaseUsesSeen > MaxBaseUpdateScan)
+          break;
 
         SDNode *User = Use.getUser();
         if (Use.getResNo() != Base.getResNo() || User == Addr.getNode() ||
