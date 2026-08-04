@@ -139,12 +139,15 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
                              .Name;
       IsMovwMovt = FKName.contains("movw") || FKName.contains("movt");
     }
-    if (IsArm32 && (IsAbsData || IsMovwMovt) && Asm->isThumbFunc(Add)) {
+    bool CallbackSaysThumb = !Add->isInSection() && !Add->isAbsolute() &&
+                             ((*VA & uint64_t(1)) != 0);
+    bool TargetIsThumb = Asm->isThumbFunc(Add) || CallbackSaysThumb;
+    if (IsArm32 && (IsAbsData || IsMovwMovt) && TargetIsThumb) {
       Value += *VA | uint64_t(1);
     } else {
-      bool StripThumbBit =
-          !Add->isInSection() && !Add->isAbsolute() && IsArm32;
-      Value += StripThumbBit ? (*VA & ~uint64_t(1)) : *VA;
+      Value += IsArm32 && !Add->isInSection() && !Add->isAbsolute()
+                   ? (*VA & ~uint64_t(1))
+                   : *VA;
     }
   }
   if (const MCSymbol *Sub = Target.getSubSym()) {
