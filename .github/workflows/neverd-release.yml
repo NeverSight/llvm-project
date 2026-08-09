@@ -1,9 +1,8 @@
 name: NeverD LLVM Release
 
 # Builds the NeverD-flavored LLVM (static libs only, X86;ARM;AArch64, Release)
-# and publishes per-arch macOS packages as GitHub Release assets. The packages
-# are consumed by the main NeverD repo via -DNEVERD_LLVM_PREBUILT=ON, giving a
-# "brew install"-like experience without compiling LLVM locally.
+# and publishes host packages for macOS arm64, Linux x86_64, and Windows x64.
+# The packages are consumed by NeverD via -DNEVERD_LLVM_PREBUILT=ON.
 #
 # This is a NeverD-specific workflow; it does not touch upstream LLVM CI.
 
@@ -14,27 +13,146 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Publish a GitHub Release at this tag (empty = only upload run artifacts)'
+        description: 'Release tag (empty = only upload run artifacts)'
         required: false
         default: ''
+      overwrite_existing_assets:
+        description: 'Replace all assets if release_tag already exists (cached consumers must clear their cache)'
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 concurrency:
-  group: neverd-llvm-release-${{ github.ref }}
+  group: neverd-llvm-release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  prepare:
+    name: prepare release
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      publish: ${{ steps.release.outputs.publish }}
+      overwrite: ${{ steps.release.outputs.overwrite }}
+      release_exists: ${{ steps.release.outputs.release_exists }}
+    steps:
+      - name: Checkout llvm-project
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Resolve and validate release
+        id: release
+        shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.release_tag }}
+          DISPATCH_OVERWRITE: ${{ inputs.overwrite_existing_assets }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          version_file=cmake/Modules/LLVMVersion.cmake
+          major=$(sed -n 's/.*LLVM_VERSION_MAJOR[^0-9]*\([0-9][0-9]*\).*/\1/p' "$version_file" | head -n1)
+          minor=$(sed -n 's/.*LLVM_VERSION_MINOR[^0-9]*\([0-9][0-9]*\).*/\1/p' "$version_file" | head -n1)
+          patch=$(sed -n 's/.*LLVM_VERSION_PATCH[^0-9]*\([0-9][0-9]*\).*/\1/p' "$version_file" | head -n1)
+          if [[ -z "$major" || -z "$minor" || -z "$patch" ]]; then
+            echo "Unable to resolve the LLVM version from $version_file" >&2
+            exit 1
+          fi
+          version="${major}.${minor}.${patch}"
+
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+            requested_tag="$DISPATCH_TAG"
+            overwrite="$DISPATCH_OVERWRITE"
+          else
+            requested_tag="$REF_NAME"
+            overwrite=true
+          fi
+
+          publish=false
+          release_exists=false
+          if [[ -n "$requested_tag" ]]; then
+            publish=true
+            version_pattern="${version//./\.}"
+            if [[ ! "$requested_tag" =~ ^neverd-llvm-v${version_pattern}(-r[1-9][0-9]*)?$ ]]; then
+              echo "Release tag '$requested_tag' does not match LLVM $version." >&2
+              echo "Use neverd-llvm-v${version} or neverd-llvm-v${version}-rN." >&2
+              exit 1
+            fi
+
+            release_json="${RUNNER_TEMP}/neverd-release.json"
+            status=$(curl --silent --show-error --location \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              --output "$release_json" \
+              --write-out '%{http_code}' \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/releases/tags/${requested_tag}")
+
+            case "$status" in
+              200)
+                release_exists=true
+                immutable=$(jq -r '.immutable // false' "$release_json")
+                if [[ "$immutable" == 'true' ]]; then
+                  echo "Release '$requested_tag' is immutable; publish a new -rN tag." >&2
+                  exit 1
+                fi
+                if [[ "$EVENT_NAME" == 'workflow_dispatch' && "$overwrite" != 'true' ]]; then
+                  echo "Release '$requested_tag' already exists." >&2
+                  echo "Re-run with overwrite_existing_assets enabled, or use a new -rN tag." >&2
+                  exit 1
+                fi
+                ;;
+              404)
+                ;;
+              *)
+                echo "GitHub release lookup failed with HTTP $status:" >&2
+                cat "$release_json" >&2
+                exit 1
+                ;;
+            esac
+          fi
+
+          {
+            echo "version=$version"
+            echo "tag=$requested_tag"
+            echo "publish=$publish"
+            echo "overwrite=$overwrite"
+            echo "release_exists=$release_exists"
+          } >> "$GITHUB_OUTPUT"
+
   build:
-    name: build ${{ matrix.arch }}
+    name: build ${{ matrix.name }}
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: arm64
-            runner: macos-14   # Apple Silicon (only arch we publish)
+          - name: macOS arm64
+            platform: macos
+            arch: arm64
+            runner: macos-14
+            pkg: neverd-llvm-macos-arm64
+            archive: tar.xz
             deploy: '11.0'
+          - name: Linux x86_64
+            platform: linux
+            arch: x86_64
+            runner: ubuntu-24.04
+            pkg: neverd-llvm-linux-x86_64
+            archive: tar.xz
+          - name: Windows x64
+            platform: windows
+            arch: x64
+            runner: windows-latest
+            pkg: neverd-llvm-windows-x64
+            archive: zip
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 240
     env:
@@ -47,115 +165,292 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Install build tools (ninja, ccache, xz)
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        shell: bash
         run: brew install ninja ccache xz
 
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ninja-build ccache clang lld xz-utils
+
+      - name: Enable the MSVC x64 environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        with:
+          arch: x64
+
+      # windows-latest includes clang-cl, Ninja, and 7-Zip. sccache uses the
+      # GitHub Actions cache backend and is the Windows compiler-cache strategy.
+      - name: Enable Windows sccache
+        if: runner.os == 'Windows'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: 'v0.16.0'
+
       - name: Cache ccache
+        if: runner.os != 'Windows'
         uses: actions/cache@v4
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-neverd-llvm-${{ matrix.arch }}-${{ github.sha }}
+          key: ccache-neverd-llvm-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.sha }}
           restore-keys: |
-            ccache-neverd-llvm-${{ matrix.arch }}-
+            ccache-neverd-llvm-${{ matrix.platform }}-${{ matrix.arch }}-
 
-      - name: Resolve version & package name
-        id: ver
+      - name: Verify Unix build tools
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cmake --version
+          ninja --version
+          clang --version
+          ccache --version
+
+      - name: Verify Windows build tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake --version
+          ninja --version
+          clang-cl --version
+          sccache --version
+          where.exe 7z
+
+      - name: Record source commit
+        id: source
+        shell: bash
         run: |
           set -euo pipefail
-          f=cmake/Modules/LLVMVersion.cmake
-          maj=$(sed -n 's/.*LLVM_VERSION_MAJOR[^0-9]*\([0-9][0-9]*\).*/\1/p' "$f" | head -n1)
-          min=$(sed -n 's/.*LLVM_VERSION_MINOR[^0-9]*\([0-9][0-9]*\).*/\1/p' "$f" | head -n1)
-          pat=$(sed -n 's/.*LLVM_VERSION_PATCH[^0-9]*\([0-9][0-9]*\).*/\1/p' "$f" | head -n1)
-          {
-            echo "version=${maj}.${min}.${pat}"
-            echo "sha=$(git rev-parse --short HEAD)"
-            echo "pkg=neverd-llvm-macos-${{ matrix.arch }}"
-          } >> "$GITHUB_OUTPUT"
+          actual_sha=$(git rev-parse HEAD)
+          if [[ "$actual_sha" != "$GITHUB_SHA" ]]; then
+            echo "Checkout mismatch: expected $GITHUB_SHA, found $actual_sha" >&2
+            exit 1
+          fi
+          echo "sha=$actual_sha" >> "$GITHUB_OUTPUT"
 
-      - name: Configure
+      - name: Configure Unix build
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           set -euo pipefail
-          cmake -S llvm -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="${{ runner.temp }}/pkg/${{ steps.ver.outputs.pkg }}" \
-            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.deploy }} \
-            -DLLVM_CCACHE_BUILD=ON \
-            -DLLVM_TARGETS_TO_BUILD="X86;ARM;AArch64" \
-            -DLLVM_ENABLE_PROJECTS="" \
-            -DLLVM_ENABLE_RUNTIMES="" \
-            -DLLVM_BUILD_TOOLS=OFF \
-            -DLLVM_BUILD_UTILS=OFF \
-            -DLLVM_BUILD_TESTS=OFF \
-            -DLLVM_BUILD_EXAMPLES=OFF \
-            -DLLVM_BUILD_DOCS=OFF \
-            -DLLVM_BUILD_BENCHMARKS=OFF \
-            -DLLVM_ENABLE_BINDINGS=OFF \
-            -DLLVM_INCLUDE_TESTS=OFF \
-            -DLLVM_INCLUDE_BENCHMARKS=OFF \
-            -DLLVM_INCLUDE_EXAMPLES=OFF \
-            -DLLVM_INCLUDE_DOCS=OFF \
-            -DLLVM_INCLUDE_TOOLS=OFF \
-            -DLLVM_INCLUDE_UTILS=OFF \
-            -DLLVM_BUILD_LLVM_DYLIB=OFF \
-            -DLLVM_LINK_LLVM_DYLIB=OFF \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DLLVM_ENABLE_ASSERTIONS=OFF \
-            -DLLVM_ENABLE_ZLIB=OFF \
-            -DLLVM_ENABLE_ZSTD=OFF \
-            -DLLVM_ENABLE_LIBXML2=OFF \
-            -DLLVM_ENABLE_TERMINFO=OFF \
-            -DLLVM_ENABLE_LIBEDIT=OFF \
-            -DLLVM_ENABLE_CURL=OFF \
+          cmake_args=(
+            -DCMAKE_BUILD_TYPE=Release
+            "-DCMAKE_INSTALL_PREFIX=${RUNNER_TEMP}/pkg/${{ matrix.pkg }}"
+            -DCMAKE_C_COMPILER=clang
+            -DCMAKE_CXX_COMPILER=clang++
+            -DLLVM_CCACHE_BUILD=ON
+            "-DLLVM_TARGETS_TO_BUILD=X86;ARM;AArch64"
+            "-DLLVM_ENABLE_PROJECTS="
+            "-DLLVM_ENABLE_RUNTIMES="
+            -DLLVM_BUILD_TOOLS=OFF
+            -DLLVM_BUILD_UTILS=OFF
+            -DLLVM_BUILD_TESTS=OFF
+            -DLLVM_BUILD_EXAMPLES=OFF
+            -DLLVM_BUILD_DOCS=OFF
+            -DLLVM_BUILD_BENCHMARKS=OFF
+            -DLLVM_ENABLE_BINDINGS=OFF
+            -DLLVM_INCLUDE_TESTS=OFF
+            -DLLVM_INCLUDE_BENCHMARKS=OFF
+            -DLLVM_INCLUDE_EXAMPLES=OFF
+            -DLLVM_INCLUDE_DOCS=OFF
+            -DLLVM_INCLUDE_TOOLS=OFF
+            -DLLVM_INCLUDE_UTILS=OFF
+            -DLLVM_BUILD_LLVM_DYLIB=OFF
+            -DLLVM_LINK_LLVM_DYLIB=OFF
+            -DBUILD_SHARED_LIBS=OFF
+            -DLLVM_ENABLE_PIC=ON
+            -DLLVM_ENABLE_RTTI=ON
+            -DLLVM_ENABLE_ASSERTIONS=OFF
+            -DLLVM_ENABLE_ZLIB=OFF
+            -DLLVM_ENABLE_ZSTD=OFF
+            -DLLVM_ENABLE_LIBXML2=OFF
+            -DLLVM_ENABLE_TERMINFO=OFF
+            -DLLVM_ENABLE_LIBEDIT=OFF
+            -DLLVM_ENABLE_CURL=OFF
             -DLLVM_ENABLE_HTTPLIB=OFF
+          )
+          if [[ "${{ matrix.platform }}" == 'macos' ]]; then
+            cmake_args+=(
+              -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.deploy }}
+            )
+          else
+            cmake_args+=(-DLLVM_USE_LINKER=lld)
+          fi
+          cmake -S llvm -B build -G Ninja "${cmake_args[@]}"
 
-      - name: Build & install
+      - name: Configure Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          SCCACHE_GHA_ENABLED: 'true'
+        run: |
+          $installPrefix = Join-Path $env:RUNNER_TEMP 'pkg/${{ matrix.pkg }}'
+          cmake -S llvm -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            "-DCMAKE_INSTALL_PREFIX=$installPrefix" `
+            -DCMAKE_C_COMPILER=clang-cl `
+            -DCMAKE_CXX_COMPILER=clang-cl `
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
+            "-DLLVM_TARGETS_TO_BUILD=X86;ARM;AArch64" `
+            "-DLLVM_ENABLE_PROJECTS=" `
+            "-DLLVM_ENABLE_RUNTIMES=" `
+            -DLLVM_BUILD_TOOLS=OFF `
+            -DLLVM_BUILD_UTILS=OFF `
+            -DLLVM_BUILD_TESTS=OFF `
+            -DLLVM_BUILD_EXAMPLES=OFF `
+            -DLLVM_BUILD_DOCS=OFF `
+            -DLLVM_BUILD_BENCHMARKS=OFF `
+            -DLLVM_ENABLE_BINDINGS=OFF `
+            -DLLVM_INCLUDE_TESTS=OFF `
+            -DLLVM_INCLUDE_BENCHMARKS=OFF `
+            -DLLVM_INCLUDE_EXAMPLES=OFF `
+            -DLLVM_INCLUDE_DOCS=OFF `
+            -DLLVM_INCLUDE_TOOLS=OFF `
+            -DLLVM_INCLUDE_UTILS=OFF `
+            -DLLVM_BUILD_LLVM_DYLIB=OFF `
+            -DLLVM_LINK_LLVM_DYLIB=OFF `
+            -DBUILD_SHARED_LIBS=OFF `
+            -DLLVM_ENABLE_PIC=ON `
+            -DLLVM_ENABLE_RTTI=ON `
+            -DLLVM_ENABLE_ASSERTIONS=OFF `
+            -DLLVM_ENABLE_ZLIB=OFF `
+            -DLLVM_ENABLE_ZSTD=OFF `
+            -DLLVM_ENABLE_LIBXML2=OFF `
+            -DLLVM_ENABLE_TERMINFO=OFF `
+            -DLLVM_ENABLE_LIBEDIT=OFF `
+            -DLLVM_ENABLE_CURL=OFF `
+            -DLLVM_ENABLE_HTTPLIB=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build and install on Unix
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           set -euo pipefail
-          cmake --build build --target install
+          cmake --build build --target install --parallel
           ccache --show-stats || true
 
-      - name: Write BUILDINFO.txt
+      - name: Build and install on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          SCCACHE_GHA_ENABLED: 'true'
+        run: |
+          cmake --build build --target install --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          sccache --show-stats
+
+      - name: Verify Unix package and write BUILDINFO.txt
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           set -euo pipefail
-          dest="${{ runner.temp }}/pkg/${{ steps.ver.outputs.pkg }}"
+          dest="${RUNNER_TEMP}/pkg/${{ matrix.pkg }}"
+          test -f "$dest/lib/cmake/llvm/LLVMConfig.cmake"
+          test -f "$dest/lib/libLLVMCore.a"
+          test -f "$dest/include/llvm/MC/BinaryRewrite.h"
           cat > "$dest/BUILDINFO.txt" <<EOF
-          name: ${{ steps.ver.outputs.pkg }}
-          llvm_version: ${{ steps.ver.outputs.version }}
-          llvm_commit: ${{ steps.ver.outputs.sha }}
+          name: ${{ matrix.pkg }}
+          llvm_version: ${{ needs.prepare.outputs.version }}
+          llvm_commit: ${{ steps.source.outputs.sha }}
+          platform: ${{ matrix.platform }}
           host_arch: ${{ matrix.arch }}
-          macos_deployment_target: ${{ matrix.deploy }}
+          runner: ${{ matrix.runner }}
+          compiler: $(clang --version | head -n1)
           targets: X86;ARM;AArch64
           build_type: Release
           link: static (.a)
           built_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-          built_by: ${{ github.workflow }} run ${{ github.run_id }}
+          built_by: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           EOF
           cat "$dest/BUILDINFO.txt"
 
-      - name: Package (tar.xz + sha256)
+      - name: Verify Windows package and write BUILDINFO.txt
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:RUNNER_TEMP 'pkg/${{ matrix.pkg }}'
+          $llvmConfig = Join-Path $dest 'lib/cmake/llvm/LLVMConfig.cmake'
+          $llvmCore = Join-Path $dest 'lib/LLVMCore.lib'
+          $binaryRewrite = Join-Path $dest 'include/llvm/MC/BinaryRewrite.h'
+          if (!(Test-Path $llvmConfig)) { throw "Missing $llvmConfig" }
+          if (!(Test-Path $llvmCore)) { throw "Missing $llvmCore" }
+          if (!(Test-Path $binaryRewrite)) { throw "Missing $binaryRewrite" }
+          $compiler = (clang-cl --version | Select-Object -First 1)
+          @"
+          name: ${{ matrix.pkg }}
+          llvm_version: ${{ needs.prepare.outputs.version }}
+          llvm_commit: ${{ steps.source.outputs.sha }}
+          platform: ${{ matrix.platform }}
+          host_arch: ${{ matrix.arch }}
+          runner: ${{ matrix.runner }}
+          compiler: $compiler
+          targets: X86;ARM;AArch64
+          build_type: Release
+          link: static (.lib)
+          built_at: $([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'))
+          built_by: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          "@ | Set-Content -Path (Join-Path $dest 'BUILDINFO.txt') -Encoding utf8NoBOM
+          Get-Content (Join-Path $dest 'BUILDINFO.txt')
+
+      - name: Package Unix archive and checksum
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           set -euo pipefail
-          pkg="${{ steps.ver.outputs.pkg }}"
-          ( cd "${{ runner.temp }}/pkg" && tar -cf - "$pkg" | xz -T0 -6 -c ) > "${pkg}.tar.xz"
-          shasum -a 256 "${pkg}.tar.xz" > "${pkg}.tar.xz.sha256"
-          ls -lh "${pkg}.tar.xz"
-          cat "${pkg}.tar.xz.sha256"
+          pkg="${{ matrix.pkg }}"
+          archive="${GITHUB_WORKSPACE}/${pkg}.${{ matrix.archive }}"
+          ( cd "${RUNNER_TEMP}/pkg" && tar -cf - "$pkg" | xz -T0 -6 -c ) > "$archive"
+          ( cd "$GITHUB_WORKSPACE" &&
+            cmake -E sha256sum "${pkg}.${{ matrix.archive }}" ) > "${archive}.sha256"
+          ls -lh "$archive" "${archive}.sha256"
+          cat "${archive}.sha256"
+
+      - name: Package Windows archive and checksum
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $pkg = '${{ matrix.pkg }}'
+          $packageRoot = Join-Path $env:RUNNER_TEMP 'pkg'
+          $archive = Join-Path $env:GITHUB_WORKSPACE "$pkg.${{ matrix.archive }}"
+          Push-Location $packageRoot
+          try {
+            7z a -tzip -mx=7 $archive $pkg
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Pop-Location
+          }
+          Push-Location $env:GITHUB_WORKSPACE
+          try {
+            $checksum = cmake -E sha256sum "$pkg.${{ matrix.archive }}"
+            $checksumExitCode = $LASTEXITCODE
+          } finally {
+            Pop-Location
+          }
+          if ($checksumExitCode -ne 0) { exit $checksumExitCode }
+          Set-Content -Path "$archive.sha256" -Value $checksum -Encoding ascii
+          Get-Item $archive, "$archive.sha256" | Format-Table Name, Length
+          Get-Content "$archive.sha256"
 
       - name: Upload run artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.ver.outputs.pkg }}
+          name: ${{ matrix.pkg }}
           path: |
-            ${{ steps.ver.outputs.pkg }}.tar.xz
-            ${{ steps.ver.outputs.pkg }}.tar.xz.sha256
+            ${{ matrix.pkg }}.${{ matrix.archive }}
+            ${{ matrix.pkg }}.${{ matrix.archive }}.sha256
           if-no-files-found: error
 
   release:
     name: publish release
-    needs: build
-    runs-on: ubuntu-latest
-    if: ${{ startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    if: ${{ needs.prepare.outputs.publish == 'true' }}
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -164,14 +459,19 @@ jobs:
           merge-multiple: true
 
       - name: List artifacts
+        shell: bash
         run: ls -lhR dist
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: |
             dist/*.tar.xz
             dist/*.tar.xz.sha256
+            dist/*.zip
+            dist/*.zip.sha256
+          overwrite_files: ${{ needs.prepare.outputs.overwrite }}
           fail_on_unmatched_files: true
-          generate_release_notes: true
+          generate_release_notes: ${{ needs.prepare.outputs.release_exists != 'true' }}
