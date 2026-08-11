@@ -16,9 +16,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "FinalImageObjectWriter.h"
+#include "llvm/BinaryFormat/COFF.h"
+#include "llvm/BinaryFormat/ELF.h"
+#include "llvm/BinaryFormat/MachO.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
+#include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCSection.h"
+#include "llvm/MC/MCSectionCOFF.h"
+#include "llvm/MC/MCSectionELF.h"
+#include "llvm/MC/MCSectionMachO.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/Support/Casting.h"
@@ -26,6 +33,122 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
+
+namespace {
+
+struct RewriteSectionTraits {
+  llvm::mc_rewrite::RewriteSectionKind Kind =
+      llvm::mc_rewrite::RewriteSectionKind::Other;
+  bool IsAllocated = true;
+};
+
+RewriteSectionTraits classifySection(const MCAssembler &Asm,
+                                     const MCSection &Sec) {
+  using Kind = llvm::mc_rewrite::RewriteSectionKind;
+  RewriteSectionTraits Traits;
+  const MCContext &Ctx = Asm.getContext();
+
+  switch (Ctx.getObjectFileType()) {
+  case MCContext::IsCOFF: {
+    const auto &C = static_cast<const MCSectionCOFF &>(Sec);
+    unsigned Flags = C.getCharacteristics();
+    StringRef Name = C.getName();
+    // These sections contain object symbol-table indices consumed by the COFF
+    // linker.  Their ordinary "dr" characteristics do not describe final-
+    // image allocation, and retaining their raw indices as mapped data would
+    // be meaningless.  The rewrite result exposes the semantic references to
+    // the image post-processor instead.
+    bool IsSymbolIndexMetadata =
+        Name.starts_with(".gfids") || Name.starts_with(".gehcont") ||
+        Name.starts_with(".giats") || Name.starts_with(".gljmp");
+    Traits.IsAllocated =
+        !IsSymbolIndexMetadata &&
+        !(Flags & (COFF::IMAGE_SCN_LNK_REMOVE | COFF::IMAGE_SCN_LNK_INFO));
+    if (Flags & (COFF::IMAGE_SCN_CNT_CODE | COFF::IMAGE_SCN_MEM_EXECUTE))
+      Traits.Kind = Kind::Code;
+    else if (Flags & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA)
+      Traits.Kind = Kind::UninitializedData;
+    else if (!Traits.IsAllocated || Name.starts_with(".debug") ||
+             Name == ".drectve")
+      Traits.Kind = Kind::Metadata;
+    else if (Flags & COFF::IMAGE_SCN_MEM_WRITE)
+      Traits.Kind = Kind::WritableData;
+    else if (Flags &
+             (COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_READ))
+      Traits.Kind = Kind::ReadOnlyData;
+    break;
+  }
+  case MCContext::IsELF: {
+    const auto &E = static_cast<const MCSectionELF &>(Sec);
+    unsigned Flags = E.getFlags();
+    Traits.IsAllocated = (Flags & ELF::SHF_ALLOC) != 0;
+    if (Flags & ELF::SHF_EXECINSTR)
+      Traits.Kind = Kind::Code;
+    else if (E.getType() == ELF::SHT_NOBITS)
+      Traits.Kind = Kind::UninitializedData;
+    else if (!Traits.IsAllocated)
+      Traits.Kind = Kind::Metadata;
+    else if (Flags & ELF::SHF_WRITE)
+      Traits.Kind = Kind::WritableData;
+    else
+      Traits.Kind = Kind::ReadOnlyData;
+    break;
+  }
+  case MCContext::IsMachO: {
+    const auto &M = static_cast<const MCSectionMachO &>(Sec);
+    unsigned Flags = M.getTypeAndAttributes();
+    Traits.IsAllocated = (Flags & MachO::S_ATTR_DEBUG) == 0;
+    if (Flags &
+        (MachO::S_ATTR_PURE_INSTRUCTIONS | MachO::S_ATTR_SOME_INSTRUCTIONS))
+      Traits.Kind = Kind::Code;
+    else if (M.getType() == MachO::S_ZEROFILL ||
+             M.getType() == MachO::S_GB_ZEROFILL ||
+             M.getType() == MachO::S_THREAD_LOCAL_ZEROFILL)
+      Traits.Kind = Kind::UninitializedData;
+    else if (!Traits.IsAllocated)
+      Traits.Kind = Kind::Metadata;
+    else if (M.getSegmentName() == "__TEXT" ||
+             M.getSegmentName() == "__DATA_CONST")
+      Traits.Kind = Kind::ReadOnlyData;
+    else
+      Traits.Kind = Kind::WritableData;
+    break;
+  }
+  default:
+    if (Sec.isText() || Sec.hasInstructions())
+      Traits.Kind = Kind::Code;
+    else if (Sec.isBssSection())
+      Traits.Kind = Kind::UninitializedData;
+    else if (Sec.getName().starts_with(".debug")) {
+      Traits.Kind = Kind::Metadata;
+      Traits.IsAllocated = false;
+    } else
+      Traits.Kind = Kind::ReadOnlyData;
+    break;
+  }
+
+  return Traits;
+}
+
+llvm::mc_rewrite::RewriteSectionKind
+mergeSectionKind(llvm::mc_rewrite::RewriteSectionKind A,
+                 llvm::mc_rewrite::RewriteSectionKind B) {
+  using Kind = llvm::mc_rewrite::RewriteSectionKind;
+  if (A == B)
+    return A;
+  if (A == Kind::Other)
+    return B;
+  if (B == Kind::Other)
+    return A;
+  // Same-named MC sections normally agree.  If a producer emits conflicting
+  // traits, report the least restrictive data class rather than accidentally
+  // mapping writable bytes read-only or data executable.
+  if (A == Kind::WritableData || B == Kind::WritableData)
+    return Kind::WritableData;
+  return Kind::Other;
+}
+
+} // namespace
 
 uint64_t llvm::mc_rewrite::sectionImageVA(MCAssembler &Asm,
                                           const RewriteOptions &Opts,
@@ -96,8 +219,10 @@ uint64_t FinalImageObjectWriter::writeObject() {
 
   // Build the final bytes for one MCSection (fragment contents + alignment
   // padding) — exactly getSectionAddressSize(Sec) bytes.
-  auto buildSectionBytes = [&](MCSection &Sec,
-                               bool IsText) -> std::vector<uint8_t> {
+  auto buildSectionBytes =
+      [&](MCSection &Sec, bool IsText,
+          std::vector<mc_rewrite::RewriteSymbolIndexReference> &SymbolRefs)
+      -> std::vector<uint8_t> {
     std::vector<uint8_t> Bytes;
     uint64_t Size = Asm->getSectionAddressSize(Sec);
     Bytes.reserve(Size);
@@ -141,6 +266,29 @@ uint64_t FinalImageObjectWriter::writeObject() {
         for (uint64_t I = 0; I < Total; ++I)
           Bytes.push_back(VSize ? uint8_t((Val >> (8 * (I % VSize))) & 0xFF)
                                 : uint8_t(0));
+        continue;
+      }
+
+      if (F.getKind() == MCFragment::FT_SymbolId) {
+        const auto &SF = cast<MCSymbolIdFragment>(F);
+        const MCSymbol *Sym = SF.getSymbol();
+        mc_rewrite::RewriteSymbolIndexReference Ref;
+        Ref.Offset = FOffset;
+        if (Sym) {
+          Ref.Symbol = Sym->getName().str();
+          if (Sym->isInSection())
+            Ref.TargetVA =
+                mc_rewrite::sectionImageVA(*Asm, Opts, Sym->getSection()) +
+                Asm->getSymbolOffset(*Sym);
+          else if (Sym->isAbsolute())
+            Ref.TargetVA = Asm->getSymbolOffset(*Sym);
+          else if (Opts.Model.resolve)
+            Ref.TargetVA = Opts.Model.resolve(Sym->getName(), 0).value_or(0);
+        }
+        SymbolRefs.push_back(std::move(Ref));
+        // Preserve the native four-byte fragment extent.  The value was an
+        // object symbol-table index and has no meaning in a final image.
+        Bytes.resize(Bytes.size() + Asm->computeFragmentSize(F), 0x00);
         continue;
       }
 
@@ -195,8 +343,10 @@ uint64_t FinalImageObjectWriter::writeObject() {
   std::map<std::string, size_t> NameToIdx;
   for (MCSection &Sec : *Asm) {
     StringRef Name = Sec.getName();
-    bool IsText = Name.contains("text") || Name.contains("TEXT");
-    std::vector<uint8_t> SecBytes = buildSectionBytes(Sec, IsText);
+    RewriteSectionTraits Traits = classifySection(*Asm, Sec);
+    bool IsText = Traits.Kind == mc_rewrite::RewriteSectionKind::Code;
+    std::vector<mc_rewrite::RewriteSymbolIndexReference> SymbolRefs;
+    std::vector<uint8_t> SecBytes = buildSectionBytes(Sec, IsText, SymbolRefs);
     uint64_t Base =
         Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Name) : 0;
     uint64_t VA = mc_rewrite::sectionImageVA(*Asm, Opts, Sec);
@@ -206,19 +356,33 @@ uint64_t FinalImageObjectWriter::writeObject() {
       mc_rewrite::RewriteSection RS;
       RS.Name = Name.str();
       RS.VA = Base;
+      RS.Alignment = std::max<uint64_t>(Sec.getAlign().value(), 1);
+      RS.Kind = Traits.Kind;
+      RS.IsAllocated = Traits.IsAllocated;
       uint64_t Off = VA - Base; // 0 for the first same-named section
       RS.Bytes.resize(Off, 0x00);
       RS.Bytes.insert(RS.Bytes.end(), SecBytes.begin(), SecBytes.end());
+      for (auto &Ref : SymbolRefs) {
+        Ref.Offset += Off;
+        RS.SymbolIndexReferences.push_back(std::move(Ref));
+      }
       NameToIdx[RS.Name] = Out.Sections.size();
       Out.Sections.push_back(std::move(RS));
     } else {
       auto &RS = Out.Sections[It->second];
+      RS.Alignment = std::max<uint64_t>(RS.Alignment, Sec.getAlign().value());
+      RS.Kind = mergeSectionKind(RS.Kind, Traits.Kind);
+      RS.IsAllocated |= Traits.IsAllocated;
       uint64_t Off = VA - RS.VA;
       // Off >= current size (same-named sections are packed in MC order), so
       // resize fills the small inter-constant alignment gap with zeros.
       if (RS.Bytes.size() < Off)
         RS.Bytes.resize(Off, 0x00);
       RS.Bytes.insert(RS.Bytes.end(), SecBytes.begin(), SecBytes.end());
+      for (auto &Ref : SymbolRefs) {
+        Ref.Offset += Off;
+        RS.SymbolIndexReferences.push_back(std::move(Ref));
+      }
     }
   }
 

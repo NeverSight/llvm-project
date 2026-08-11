@@ -18,6 +18,7 @@
 #include "AddressModelBackend.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSection.h"
@@ -155,6 +156,24 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     if (!VA)
       return std::nullopt;
     Value -= *VA;
+  }
+
+  // COFF unwind and language tables encode image-relative 32-bit addresses.
+  // A normal COFF writer applies IMAGE_REL_*_ADDR32NB at link time; the final
+  // image writer bypasses that relocation stage, so honor the expression's
+  // IMGREL modifier here.  Keep this in the generic address model rather than
+  // teaching callers about .pdata/.xdata wire layouts.
+  if (Target.getSpecifier() == MCSymbolRefExpr::VK_COFF_IMGREL32)
+    Value -= Opts.Model.ImageBaseVA;
+
+  // Section-relative debug/directive records likewise normally rely on the
+  // object writer.  Resolve their value against the referenced MCSection when
+  // the add symbol is known.
+  if ((Fixup.getKind() == FK_SecRel_1 || Fixup.getKind() == FK_SecRel_2 ||
+       Fixup.getKind() == FK_SecRel_4 || Fixup.getKind() == FK_SecRel_8) &&
+      Target.getAddSym() && Target.getAddSym()->isInSection()) {
+    Value -= mc_rewrite::sectionImageVA(*Asm, Opts,
+                                        Target.getAddSym()->getSection());
   }
 
   // Detect PAGE / PAGEOFF addressing mode via specifier OR fixup kind.

@@ -46,6 +46,10 @@ namespace llvm::mc_rewrite {
 struct RewriteAddressModel {
   /// Final VA of the primary text section.
   uint64_t TextVA = 0;
+  /// Load address subtracted for object-format image-relative references
+  /// (COFF IMGREL32 / RVA fields).  Zero preserves absolute-address behavior
+  /// for formats without an image base.
+  uint64_t ImageBaseVA = 0;
   /// Final base VA of an arbitrary section by name.
   std::function<uint64_t(StringRef Section)> getSectionVA;
   /// External symbol -> absolute VA. \p Specifier distinguishes @PLT/@GOT/@TLS
@@ -75,11 +79,39 @@ struct FixupCtx {
 /// transformed value. Defaults to identity when unset.
 using FixupTransform = std::function<uint64_t(const FixupCtx &, uint64_t Value)>;
 
-/// One emitted section with its final VA and (post fixup) bytes.
+/// Format-independent classification of an emitted section.  Object-format
+/// flags stay an MC implementation detail; binary rewriters only need enough
+/// information to place the section with compatible memory permissions.
+enum class RewriteSectionKind : uint8_t {
+  Code,
+  ReadOnlyData,
+  WritableData,
+  UninitializedData,
+  Metadata,
+  Other,
+};
+
+/// One linker symbol-index record carried by a metadata section such as
+/// COFF's `.gfids$y`/`.gehcont$y`.  A final-image writer has no object symbol
+/// table to index, so it preserves the semantic target directly for the binary
+/// rewriter that owns the final load-config table.
+struct RewriteSymbolIndexReference {
+  uint64_t Offset = 0;
+  std::string Symbol;
+  uint64_t TargetVA = 0;
+};
+
+/// One emitted section with its final placement and (post fixup) bytes.
 struct RewriteSection {
   std::string Name;
   uint64_t VA = 0;
+  uint64_t Alignment = 1;
+  RewriteSectionKind Kind = RewriteSectionKind::Other;
+  /// Whether the native object format marks this section as part of the loaded
+  /// image.  Debug and linker-directive sections are normally not allocated.
+  bool IsAllocated = true;
   std::vector<uint8_t> Bytes;
+  std::vector<RewriteSymbolIndexReference> SymbolIndexReferences;
 };
 
 /// Per-image hook: called after every fixup is applied, to mutate the final
