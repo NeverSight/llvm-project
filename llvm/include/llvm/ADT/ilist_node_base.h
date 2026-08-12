@@ -67,8 +67,28 @@ class ilist_node_base : public ilist_detail::node_base_prevnext<
                             EnableSentinelTracking>,
                         public ilist_detail::node_base_parent<ParentTy> {};
 
-// Specialization implemented in the core LLVM library.
-template class LLVM_ABI ilist_node_base<true, void>;
+// Local patch.  Upstream has an explicit instantiation *definition* here:
+//
+//     template class LLVM_ABI ilist_node_base<true, void>;
+//
+// In a header that emits the instantiation with external linkage in every
+// translation unit that includes it.  The class is empty and has no
+// out-of-line member, so the only thing there is to emit is its type
+// information — which upstream never runs into because LLVM defaults to
+// -fno-rtti, and which breaks the moment it does not.  NeverD forces
+// LLVM_ENABLE_RTTI on, and then any two objects that reach this header carry a
+// strong definition of the same typeinfo and the link fails on a duplicate
+// symbol.
+//
+// Leaving it out restores the ordinary handling of a header-only template:
+// each translation unit instantiates what it uses, the symbols are weak, and
+// the linker coalesces them.  Nothing is lost here, because the annotation
+// only ever mattered for exporting the instantiation across a DLL boundary and
+// NeverD links LLVM statically, where LLVM_ABI expands to nothing.
+//
+// Revisit if LLVM is ever built as a shared library, or if RTTI is turned back
+// off, or if upstream changes this to `extern template` with a definition in
+// one translation unit — which is what the comment it carried was describing.
 
 } // end namespace llvm
 
