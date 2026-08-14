@@ -8,10 +8,10 @@
 ///
 /// \file
 /// FinalImageObjectWriter walks MCAssembler sections after all fixups have been
-/// resolved by AddressModelBackend, copies fragment contents at their final VAs,
-/// collects symbol addresses, and runs the ImagePostProcess hook.
-/// recordRelocation unconditionally suppresses — any fixup reaching it has
-/// already been back-filled by AddressModelBackend + stock applyFixup.
+/// resolved by AddressModelBackend, copies fragment contents at their final
+/// VAs, collects symbol addresses, and runs the ImagePostProcess hook.
+/// recordRelocation distinguishes target-forced relocations from external
+/// symbols that the address model could not resolve.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -20,8 +20,10 @@
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/MC/MCAsmBackend.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSectionCOFF.h"
 #include "llvm/MC/MCSectionELF.h"
@@ -31,6 +33,9 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Triple.h"
+#include <algorithm>
+#include <optional>
 
 using namespace llvm;
 
@@ -182,20 +187,48 @@ void FinalImageObjectWriter::recordRelocation(const MCFragment &F,
                                               const MCFixup &Fixup,
                                               MCValue Target,
                                               uint64_t &FixedValue) {
-  // AddressModelBackend::evaluateFixup has already resolved the value and the
-  // bytes have been back-filled. shouldForceRelocation in the target backend
-  // (e.g. AArch64 forces ADRP) may still route through here — suppress those
-  // false positives: if the symbol is defined / in-section / absolute, or if
-  // the caller's resolve callback can handle it, it is not truly unresolved.
-  // AddressModelBackend::evaluateFixup resolved the value and the bytes are
-  // already back-filled. Target backends that force relocations (ARM BL/BLX,
-  // AArch64 ADRP, specifiers with @PLT/@GOT) still route through here.
-  // In B2 mode these are already handled — suppress unconditionally.
-  // Any truly unresolvable symbol would have made evaluateFixup return
-  // nullopt, which prevents applyFixup from running at all.
+  // A target backend may force an otherwise resolved fixup through this hook
+  // (for example, an AArch64 page relocation). Recheck each component against
+  // the same address-model seam so those relocations are not reported as
+  // unresolved. The generic assembler fallback also reaches this hook after
+  // an address-model lookup fails, so undefined externals must be retained for
+  // the caller instead of being mistaken for successfully written zeroes.
+  const MCContext &Context = Asm->getContext();
+  const std::optional<uint32_t> ArmNoneSpecifier =
+      Context.getAsmInfo().getSpecifierForName("none");
+  const Triple &TT = Context.getTargetTriple();
+  const bool IsArmNone = Context.getObjectFileType() == MCContext::IsELF &&
+                         (TT.isARM() || TT.isThumb()) &&
+                         Fixup.getKind() == FK_Data_4 && ArmNoneSpecifier &&
+                         Target.getSpecifier() == *ArmNoneSpecifier;
+
+  auto recordUnresolved = [&](const MCSymbol *Sym) {
+    // Regular defined symbols are either section-backed or absolute. Symbols
+    // left at this seam are undefined externals or variable aliases; the
+    // address-model resolver owns the latter just as it does in evaluation.
+    if (!Sym || Sym->isInSection() || Sym->isAbsolute())
+      return;
+    if (Opts.Model.resolve &&
+        Opts.Model.resolve(Sym->getName(), Target.getSpecifier()))
+      return;
+
+    std::string Name = Sym->getName().str();
+    if (std::find(Out.Unresolved.begin(), Out.Unresolved.end(), Name) ==
+        Out.Unresolved.end())
+      Out.Unresolved.push_back(std::move(Name));
+  };
+
+  // R_ARM_NONE is an explicit no-op dependency used by ARM EHABI compact
+  // records. It neither contributes a value nor requires runtime resolution;
+  // reporting its personality symbol here would reject otherwise complete
+  // unwind output after AddressModelBackend had correctly consumed the fixup.
+  if (!IsArmNone) {
+    recordUnresolved(Target.getAddSym());
+    recordUnresolved(Target.getSubSym());
+  }
+
   (void)F;
   (void)Fixup;
-  (void)Target;
   (void)FixedValue;
 }
 
@@ -293,14 +326,12 @@ uint64_t FinalImageObjectWriter::writeObject() {
       }
 
       auto Content = F.getContents();
-      Bytes.insert(Bytes.end(),
-                   reinterpret_cast<const uint8_t *>(Content.data()),
-                   reinterpret_cast<const uint8_t *>(Content.data()) +
-                       Content.size());
+      Bytes.insert(
+          Bytes.end(), reinterpret_cast<const uint8_t *>(Content.data()),
+          reinterpret_cast<const uint8_t *>(Content.data()) + Content.size());
       auto Var = F.getVarContents();
       if (!Var.empty())
-        Bytes.insert(Bytes.end(),
-                     reinterpret_cast<const uint8_t *>(Var.data()),
+        Bytes.insert(Bytes.end(), reinterpret_cast<const uint8_t *>(Var.data()),
                      reinterpret_cast<const uint8_t *>(Var.data()) +
                          Var.size());
 
@@ -347,8 +378,7 @@ uint64_t FinalImageObjectWriter::writeObject() {
     bool IsText = Traits.Kind == mc_rewrite::RewriteSectionKind::Code;
     std::vector<mc_rewrite::RewriteSymbolIndexReference> SymbolRefs;
     std::vector<uint8_t> SecBytes = buildSectionBytes(Sec, IsText, SymbolRefs);
-    uint64_t Base =
-        Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Name) : 0;
+    uint64_t Base = Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Name) : 0;
     uint64_t VA = mc_rewrite::sectionImageVA(*Asm, Opts, Sec);
 
     auto It = NameToIdx.find(Name.str());
@@ -417,9 +447,7 @@ uint64_t FinalImageObjectWriter::writeObject() {
   return TotalBytes;
 }
 
-std::unique_ptr<MCObjectWriter>
-llvm::mc_rewrite::createFinalImageObjectWriter(
-    const mc_rewrite::RewriteOptions &Opts,
-    mc_rewrite::RewriteResult &Result) {
+std::unique_ptr<MCObjectWriter> llvm::mc_rewrite::createFinalImageObjectWriter(
+    const mc_rewrite::RewriteOptions &Opts, mc_rewrite::RewriteResult &Result) {
   return std::make_unique<FinalImageObjectWriter>(Opts, Result);
 }

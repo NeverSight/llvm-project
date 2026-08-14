@@ -9,14 +9,13 @@
 /// \file
 /// FinalImageObjectWriter is the "output seam" of the binary-rewrite emit path.
 /// Unlike the format-specific object writers (ELF/MachO/COFF), it does not emit
-/// a relocatable container: by the time writeObject() runs, every fixup has
-/// already been resolved and back-filled by AddressModelBackend, so this writer
-/// simply assembles each section's final bytes (at their final VA) into the
-/// RewriteResult, then runs the per-image hook (RewriteOptions::onImage).
+/// a relocatable container: AddressModelBackend back-fills every fixup it can
+/// resolve, and this writer assembles the resulting section bytes at their
+/// final VAs before running the per-image hook (RewriteOptions::onImage).
 ///
-/// recordRelocation() is a backstop: after the resolve seam there should be no
-/// unresolved fixups, so anything reaching here is collected into
-/// RewriteResult::Unresolved for the caller to inspect.
+/// recordRelocation() separates target-forced relocations from undefined
+/// externals that the address model could not resolve. Each such external is
+/// collected once in RewriteResult::Unresolved for the caller to inspect.
 ///
 /// This header is internal to lib/MC.
 ///
@@ -42,13 +41,13 @@ public:
                          mc_rewrite::RewriteResult &Result)
       : Opts(Options), Out(Result) {}
 
-  // After the resolve seam there should be nothing to record; collect any
-  // residual into Out.Unresolved as a backstop.
+  // Collect genuinely unresolved external components once; ignore relocations
+  // forced for symbols whose final address is already known.
   void recordRelocation(const MCFragment &F, const MCFixup &Fixup,
                         MCValue Target, uint64_t &FixedValue) override;
 
-  // Assemble each section's final (already fixed-up) bytes at its final VA into
-  // Out.Sections, populate Out.SymbolAddrs, then run Opts.onImage.
+  // Assemble each section's resulting bytes at its final VA into Out.Sections,
+  // populate Out.SymbolAddrs, then run Opts.onImage.
   uint64_t writeObject() override;
 };
 
