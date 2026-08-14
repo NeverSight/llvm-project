@@ -16,6 +16,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "AddressModelBackend.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
@@ -194,7 +195,36 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
   if (!IsPageOff && isAArch64PageOffFixup(*Wrapped, FK))
     IsPageOff = true;
 
-  if (Fixup.isPCRel()) {
+  // ARM EHABI spells R_ARM_PREL31 as an FK_Data_4 carrying the `prel31`
+  // specifier.  The generic fixup therefore does not advertise itself as
+  // PC-relative even though the relocation is measured from the word being
+  // written.  Object writers normally apply that relocation after assembly;
+  // the rewrite backend resolves final VAs directly, so it must perform the
+  // subtraction here before the wrapped ARM backend stores the word.
+  const Triple &TT = Asm->getContext().getTargetTriple();
+  const std::optional<uint32_t> Prel31Specifier =
+      Asm->getContext().getAsmInfo().getSpecifierForName("prel31");
+  const bool IsArmPrel31 =
+      (TT.isARM() || TT.isThumb()) && Fixup.getKind() == FK_Data_4 &&
+      Prel31Specifier && Target.getSpecifier() == *Prel31Specifier;
+  if (IsArmPrel31) {
+    const uint64_t SecVA =
+        mc_rewrite::sectionImageVA(*Asm, Opts, *F.getParent());
+    const uint64_t FixupPC =
+        SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
+    // AArch32 address arithmetic wraps modulo 2^32.  PREL31 can encode the
+    // result exactly when bit 31 is the sign extension of bit 30.
+    const uint32_t Delta = static_cast<uint32_t>(Value) -
+                           static_cast<uint32_t>(FixupPC);
+    if (static_cast<bool>(Delta & uint32_t(1) << 31) !=
+        static_cast<bool>(Delta & uint32_t(1) << 30)) {
+      Asm->getContext().reportError(Fixup.getLoc(),
+                                    "R_ARM_PREL31 target out of range");
+      Value = 0;
+      return true;
+    }
+    Value = Delta & 0x7fffffffu;
+  } else if (Fixup.isPCRel()) {
     uint64_t SecVA = mc_rewrite::sectionImageVA(*Asm, Opts, *F.getParent());
     uint64_t FixupPC = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
     if (IsPage) {
