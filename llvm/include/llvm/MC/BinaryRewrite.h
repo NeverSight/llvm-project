@@ -64,12 +64,23 @@ struct RewriteAddressModel {
 struct FixupCtx {
   /// Target fixup kind.
   unsigned Kind = 0;
+  /// Owning output section and byte offset within the merged RewriteSection.
+  /// StringRef values are valid only for the duration of the callback.
+  StringRef SectionName;
+  uint64_t SectionOffset = 0;
   /// VA of this fixup within the final image.
   uint64_t FixupVA = 0;
-  /// Referenced symbol and its specifier (@PLT/@GOT/...), if any.
+  /// Direct add and subtract symbols from the evaluated MCValue, if any.
+  /// Variable-symbol aliases are not recursively expanded here.
   StringRef Sym;
+  StringRef SubSym;
+  /// Signed constant term from the direct MCValue expression.
+  int64_t Addend = 0;
+  /// Expression specifier (@PLT/@GOT/...), if any.
   uint32_t Specifier = 0;
   bool IsPCRel = false;
+  /// Whether the assembler resolved the fixup before applying it.
+  bool IsResolved = false;
   /// Width in bits of the value field this fixup writes.
   unsigned BitWidth = 0;
 };
@@ -77,7 +88,8 @@ struct FixupCtx {
 /// Per-fixup hook: called once \p Value is the final absolute value but before
 /// it is bit-packed into the instruction by the ISA encoder. Returns the
 /// transformed value. Defaults to identity when unset.
-using FixupTransform = std::function<uint64_t(const FixupCtx &, uint64_t Value)>;
+using FixupTransform =
+    std::function<uint64_t(const FixupCtx &, uint64_t Value)>;
 
 /// Format-independent classification of an emitted section.  Object-format
 /// flags stay an MC implementation detail; binary rewriters only need enough

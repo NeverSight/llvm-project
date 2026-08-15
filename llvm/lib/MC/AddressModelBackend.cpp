@@ -333,12 +333,22 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   if (Opts.onFixup) {
     mc_rewrite::FixupCtx Ctx;
     Ctx.Kind = Fixup.getKind();
-    uint64_t SecVA = mc_rewrite::sectionImageVA(*Asm, Opts, *F.getParent());
+    const MCSection &Section = *F.getParent();
+    Ctx.SectionName = Section.getName();
+    const uint64_t SecVA = mc_rewrite::sectionImageVA(*Asm, Opts, Section);
+    const uint64_t SectionBaseVA =
+        Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Section.getName())
+                                : 0;
     Ctx.FixupVA = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
+    Ctx.SectionOffset = Ctx.FixupVA - SectionBaseVA;
     if (Target.getAddSym())
       Ctx.Sym = Target.getAddSym()->getName();
+    if (Target.getSubSym())
+      Ctx.SubSym = Target.getSubSym()->getName();
+    Ctx.Addend = Target.getConstant();
     Ctx.Specifier = Target.getSpecifier();
     Ctx.IsPCRel = Fixup.isPCRel();
+    Ctx.IsResolved = IsResolved;
     Ctx.BitWidth =
         Wrapped->getFixupKindInfo(static_cast<MCFixupKind>(Fixup.getKind()))
             .TargetSize;
