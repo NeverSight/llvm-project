@@ -21,6 +21,7 @@
 #include "llvm/MC/MCSFrame.h"
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSymbol.h"
+#include "llvm/MC/MCValue.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SourceMgr.h"
 using namespace llvm;
@@ -212,6 +213,28 @@ void MCObjectStreamer::emitCFISections(bool EH, bool Debug, bool SFrame) {
   EmitSFrame = SFrame;
 }
 
+static bool hasDirectSymbolicIdentity(const MCExpr *Value) {
+  MCValue Relocatable;
+  if (!Value || !Value->evaluateAsRelocatable(Relocatable, nullptr) ||
+      Relocatable.getSubSym())
+    return false;
+
+  const MCSymbol *Symbol = Relocatable.getAddSym();
+  // Peel direct variable aliases, but never turn a symbolic difference into
+  // pointer provenance. The depth limit makes a malformed assignment cycle a
+  // conservative eager fold; normal cycles are diagnosed elsewhere by MC.
+  for (unsigned Depth = 0; Symbol && Symbol->isVariable(); ++Depth) {
+    if (Depth == 15)
+      return false;
+    MCValue Alias;
+    if (!Symbol->getVariableValue()->evaluateAsRelocatable(Alias, nullptr) ||
+        Alias.getSubSym())
+      return false;
+    Symbol = Alias.getAddSym();
+  }
+  return Symbol != nullptr;
+}
+
 void MCObjectStreamer::emitValueImpl(const MCExpr *Value, unsigned Size,
                                      SMLoc Loc) {
   MCStreamer::emitValueImpl(Value, Size, Loc);
@@ -221,13 +244,14 @@ void MCObjectStreamer::emitValueImpl(const MCExpr *Value, unsigned Size,
   // Avoid fixups when possible.
   int64_t AbsValue;
   const bool PreserveSymbolicFixup =
-      getAssembler().getBackend().shouldPreserveSymbolicFixupExpressions() &&
-      Value->getKind() != MCExpr::Constant;
+      getAssembler().getBackend().shouldPreserveSymbolicFixupExpressions(
+          getCurrentSectionOnly()->getName()) &&
+      Value->getKind() != MCExpr::Constant && hasDirectSymbolicIdentity(Value);
   if (!PreserveSymbolicFixup &&
       Value->evaluateAsAbsolute(AbsValue, getAssemblerPtr())) {
     if (!isUIntN(8 * Size, AbsValue) && !isIntN(8 * Size, AbsValue)) {
-      getContext().reportError(
-          Loc, "value evaluated as " + Twine(AbsValue) + " is out of range.");
+      getContext().reportError(Loc, "value evaluated as " + Twine(AbsValue) +
+                                        " is out of range.");
       return;
     }
     emitIntValue(AbsValue, Size);

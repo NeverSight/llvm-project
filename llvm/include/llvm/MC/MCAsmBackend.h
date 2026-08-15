@@ -10,6 +10,7 @@
 #define LLVM_MC_MCASMBACKEND_H
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCDirectives.h"
 #include "llvm/MC/MCFixup.h"
 #include "llvm/Support/Compiler.h"
@@ -194,11 +195,14 @@ public:
   // iteration is needed.
   virtual bool finishLayout() const { return false; }
 
-  /// Return true when symbolic data expressions must remain fixups even after
-  /// they can be evaluated as absolute values.  Binary-rewrite clients use
-  /// this to retain the symbol provenance needed by final-image metadata
-  /// writers; ordinary object emission keeps the canonical eager fold.
-  virtual bool shouldPreserveSymbolicFixupExpressions() const { return false; }
+  /// Return true when symbolic data expressions in \p SectionName must remain
+  /// fixups even after they can be evaluated as absolute values.  Binary-
+  /// rewrite clients use this to retain symbol provenance for selected final-
+  /// image metadata; ordinary object emission keeps the canonical eager fold.
+  virtual bool
+  shouldPreserveSymbolicFixupExpressions(StringRef SectionName) const {
+    return false;
+  }
 
   /// Generate the compact unwind encoding for the CFI instructions.
   virtual uint64_t generateCompactUnwindEncoding(const MCDwarfFrameInfo *FI,

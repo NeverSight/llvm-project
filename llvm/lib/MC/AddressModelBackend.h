@@ -65,8 +65,12 @@ public:
 
   MCAsmBackend &getWrapped() const { return *Wrapped; }
 
-  bool shouldPreserveSymbolicFixupExpressions() const override {
-    return true;
+  bool
+  shouldPreserveSymbolicFixupExpressions(StringRef SectionName) const override {
+    // Darwin's linker-input rows are discarded after final-image assembly, so
+    // their function/personality/LSDA identities must reach onFixup before the
+    // MCContext disappears. Other sections retain the canonical eager fold.
+    return Opts.onFixup && SectionName == "__compact_unwind";
   }
 
   // —— The two rewrite hooks (implemented in AddressModelBackend.cpp) ——

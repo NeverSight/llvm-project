@@ -50,9 +50,72 @@ bool isAArch64PageOffFixup(const llvm::MCAsmBackend &MAB, unsigned FK) {
       MAB.getFixupKindInfo(static_cast<llvm::MCFixupKind>(FK)).Name;
   return Name.contains("add_imm12") || Name.contains("ldst_imm12");
 }
+
+bool isX86GOTPCRelSpecifier(const llvm::MCAsmInfo &MAI, const llvm::Triple &TT,
+                            uint32_t Specifier) {
+  if (!TT.isX86() || !Specifier)
+    return false;
+  const llvm::StringRef Name = MAI.getSpecifierName(Specifier);
+  return Name == "GOTPCREL" || Name == "GOTPCREL_NORELAX";
+}
 } // namespace
 
 using namespace llvm;
+
+namespace {
+
+/// Recover a stable named identity for an anonymous layout label.  Some
+/// metadata emitters deliberately anchor a field to an unnamed symbol at the
+/// same address as the user-visible function or table label.  The address
+/// model can resolve that label numerically, but rewrite clients also need a
+/// name that survives after MCContext teardown.  Prefer one unique
+/// non-temporary symbol at the exact section offset, then one unique named
+/// temporary.  Ambiguity remains unnamed so callers fail closed.
+const MCSymbol *findNamedIdentity(const MCAssembler *Asm,
+                                  const MCSymbol *Symbol) {
+  if (!Asm || !Symbol || !Symbol->getName().empty() || !Symbol->isInSection())
+    return Symbol;
+
+  uint64_t SymbolOffset = 0;
+  if (!Asm->getSymbolOffset(*Symbol, SymbolOffset))
+    return Symbol;
+
+  const MCSymbol *Named = nullptr;
+  const MCSymbol *NonTemporary = nullptr;
+  bool NamedAmbiguous = false;
+  bool NonTemporaryAmbiguous = false;
+  for (const MCSymbol &Candidate : Asm->symbols()) {
+    if (&Candidate == Symbol || Candidate.getName().empty() ||
+        !Candidate.isInSection() ||
+        Candidate.getSection().getBeginSymbol() == &Candidate ||
+        &Candidate.getSection() != &Symbol->getSection())
+      continue;
+    uint64_t CandidateOffset = 0;
+    if (!Asm->getSymbolOffset(Candidate, CandidateOffset) ||
+        CandidateOffset != SymbolOffset)
+      continue;
+
+    if (Named && Named->getName() != Candidate.getName())
+      NamedAmbiguous = true;
+    else if (!Named)
+      Named = &Candidate;
+
+    if (Candidate.isTemporary())
+      continue;
+    if (NonTemporary && NonTemporary->getName() != Candidate.getName())
+      NonTemporaryAmbiguous = true;
+    else if (!NonTemporary)
+      NonTemporary = &Candidate;
+  }
+
+  if (NonTemporary && !NonTemporaryAmbiguous)
+    return NonTemporary;
+  if (Named && !NamedAmbiguous)
+    return Named;
+  return Symbol;
+}
+
+} // namespace
 
 std::unique_ptr<MCObjectTargetWriter>
 AddressModelBackend::createObjectTargetWriter() const {
@@ -167,6 +230,8 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
   // it as ordinary FK_Data_4 data ORs the personality address into the index
   // word before the PREL31 fixup is applied.
   const Triple &TT = Asm->getContext().getTargetTriple();
+  const bool IsX86GOTPCRel = isX86GOTPCRelSpecifier(
+      Asm->getContext().getAsmInfo(), TT, Target.getSpecifier());
   const std::optional<uint32_t> ArmNoneSpecifier =
       Asm->getContext().getAsmInfo().getSpecifierForName("none");
   const bool IsArmNone = (TT.isARM() || TT.isThumb()) &&
@@ -301,7 +366,7 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
       return true;
     }
     Value = Delta & 0x7fffffffu;
-  } else if (Fixup.isPCRel()) {
+  } else if (Fixup.isPCRel() || IsX86GOTPCRel) {
     uint64_t SecVA = mc_rewrite::sectionImageVA(*Asm, Opts, *F.getParent());
     uint64_t FixupPC = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
     if (IsPage) {
@@ -347,10 +412,10 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
         Fixup.getValue()->evaluateAsRelocatable(SymbolicTarget, nullptr) &&
         (SymbolicTarget.getAddSym() || SymbolicTarget.getSubSym());
     const MCValue &Identity = HasSymbolicTarget ? SymbolicTarget : Target;
-    if (Identity.getAddSym())
-      Ctx.Sym = Identity.getAddSym()->getName();
-    if (Identity.getSubSym())
-      Ctx.SubSym = Identity.getSubSym()->getName();
+    if (const MCSymbol *Add = findNamedIdentity(Asm, Identity.getAddSym()))
+      Ctx.Sym = Add->getName();
+    if (const MCSymbol *Sub = findNamedIdentity(Asm, Identity.getSubSym()))
+      Ctx.SubSym = Sub->getName();
     Ctx.Addend = Identity.getConstant();
     Ctx.Specifier = Identity.getSpecifier();
     Ctx.IsPCRel = Fixup.isPCRel();
@@ -361,7 +426,16 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
     Value = Opts.onFixup(Ctx, Value);
   }
 
-  Wrapped->applyFixup(F, Fixup, Target, Data, Value, IsResolved);
+  // X86's ordinary object backend forces any specifier-bearing fixup back to
+  // unresolved so an object writer can emit a relocation.  The final-address
+  // model has already resolved GOTPCREL and applied its PC-relative semantics;
+  // clear only that consumed specifier before delegating the byte write.
+  MCValue AppliedTarget = Target;
+  if (IsResolved && isX86GOTPCRelSpecifier(Asm->getContext().getAsmInfo(),
+                                           Asm->getContext().getTargetTriple(),
+                                           AppliedTarget.getSpecifier()))
+    AppliedTarget.setSpecifier(0);
+  Wrapped->applyFixup(F, Fixup, AppliedTarget, Data, Value, IsResolved);
 
   // ARM/Thumb BL→BLX interworking: when Thumb code calls an ARM-mode target,
   // the compiler emits BL (stays in Thumb) but we need BLX (switches to ARM).
