@@ -43,6 +43,28 @@ let Attributes = [NoThrow], Features = "fullfp16" in {
       "unsigned long long int (unsigned short, _Constant unsigned int, _Constant unsigned int)">;
 }
 
+// FEAT_THE + FEAT_D128 read-check-write pair compare-and-swap.  Expose each
+// architectural ordering/check variant directly so generated C can preserve
+// the original instruction without an out-of-tree helper declaration.
+let Attributes = [NoThrow], Features = "the,d128" in {
+  def rcwcasp   : AArch64TargetBuiltin<
+      "unsigned __int128_t (unsigned __int128_t, unsigned __int128_t, void *)">;
+  def rcwcaspa  : AArch64TargetBuiltin<
+      "unsigned __int128_t (unsigned __int128_t, unsigned __int128_t, void *)">;
+  def rcwcaspal : AArch64TargetBuiltin<
+      "unsigned __int128_t (unsigned __int128_t, unsigned __int128_t, void *)">;
+  def rcwcaspl  : AArch64TargetBuiltin<
+      "unsigned __int128_t (unsigned __int128_t, unsigned __int128_t, void *)">;
+  def rcwscasp   : AArch64TargetBuiltin<
+      "unsigned __int128_t (unsigned __int128_t, unsigned __int128_t, void *)">;
+  def rcwscaspa  : AArch64TargetBuiltin<
+      "unsigned __int128_t (unsigned __int128_t, unsigned __int128_t, void *)">;
+  def rcwscaspal : AArch64TargetBuiltin<
+      "unsigned __int128_t (unsigned __int128_t, unsigned __int128_t, void *)">;
+  def rcwscaspl  : AArch64TargetBuiltin<
+      "unsigned __int128_t (unsigned __int128_t, unsigned __int128_t, void *)">;
+}
+
 // Bit manipulation
 let Attributes = [NoThrow, Const] in {
 	def rbit   : AArch64Builtin<"unsigned int (unsigned int)">;

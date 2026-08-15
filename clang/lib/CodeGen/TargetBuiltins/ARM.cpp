@@ -4546,6 +4546,79 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
     return Is64 ? Result : Builder.CreateZExt(Result, Int64Ty);
   }
 
+  const char *RCWCASPMnemonic = nullptr;
+  switch (BuiltinID) {
+  case clang::AArch64::BI__builtin_arm_rcwcasp:
+    RCWCASPMnemonic = "rcwcasp";
+    break;
+  case clang::AArch64::BI__builtin_arm_rcwcaspa:
+    RCWCASPMnemonic = "rcwcaspa";
+    break;
+  case clang::AArch64::BI__builtin_arm_rcwcaspal:
+    RCWCASPMnemonic = "rcwcaspal";
+    break;
+  case clang::AArch64::BI__builtin_arm_rcwcaspl:
+    RCWCASPMnemonic = "rcwcaspl";
+    break;
+  case clang::AArch64::BI__builtin_arm_rcwscasp:
+    RCWCASPMnemonic = "rcwscasp";
+    break;
+  case clang::AArch64::BI__builtin_arm_rcwscaspa:
+    RCWCASPMnemonic = "rcwscaspa";
+    break;
+  case clang::AArch64::BI__builtin_arm_rcwscaspal:
+    RCWCASPMnemonic = "rcwscaspal";
+    break;
+  case clang::AArch64::BI__builtin_arm_rcwscaspl:
+    RCWCASPMnemonic = "rcwscaspl";
+    break;
+  default:
+    break;
+  }
+  if (RCWCASPMnemonic) {
+    auto *I128Ty = llvm::IntegerType::get(getLLVMContext(), 128);
+    auto CoerceI128 = [&](llvm::Value *V) -> llvm::Value * {
+      if (V->getType() == I128Ty)
+        return V;
+      if (V->getType()->isPointerTy())
+        V = Builder.CreatePtrToInt(V, Int64Ty);
+      return Builder.CreateZExtOrTrunc(V, I128Ty);
+    };
+    auto LowHalf = [&](llvm::Value *V) {
+      return Builder.CreateTrunc(V, Int64Ty);
+    };
+    auto HighHalf = [&](llvm::Value *V) {
+      return Builder.CreateTrunc(Builder.CreateLShr(V, 64), Int64Ty);
+    };
+
+    llvm::Value *Expected = CoerceI128(EmitScalarExpr(E->getArg(0)));
+    llvm::Value *Desired = CoerceI128(EmitScalarExpr(E->getArg(1)));
+    llvm::Value *Address = EmitScalarExpr(E->getArg(2));
+    if (!Address->getType()->isPointerTy())
+      Address = Builder.CreateIntToPtr(Address, Int8PtrTy);
+
+    auto *ResultTy = llvm::StructType::get(Int64Ty, Int64Ty);
+    auto *AsmTy = llvm::FunctionType::get(
+        ResultTy,
+        {Int64Ty, Int64Ty, Address->getType(), Int64Ty, Int64Ty}, false);
+    std::string Asm = std::string(RCWCASPMnemonic) +
+                      " x0, x1, x2, x3, [x4]";
+    auto *IA = llvm::InlineAsm::get(
+        AsmTy, Asm,
+        "={x0},={x1},{x2},{x3},{x4},0,1,~{memory},~{cc}",
+        /*hasSideEffects=*/true);
+    llvm::Value *Pair = Builder.CreateCall(
+        IA, {LowHalf(Desired), HighHalf(Desired), Address,
+             LowHalf(Expected), HighHalf(Expected)},
+        "rcwcasp");
+    llvm::Value *OldLo = Builder.CreateExtractValue(Pair, 0, "rcwcasp.lo");
+    llvm::Value *OldHi = Builder.CreateExtractValue(Pair, 1, "rcwcasp.hi");
+    return Builder.CreateOr(
+        Builder.CreateZExt(OldLo, I128Ty),
+        Builder.CreateShl(Builder.CreateZExt(OldHi, I128Ty), 64),
+        "rcwcasp.old");
+  }
+
   unsigned HintID = static_cast<unsigned>(-1);
   switch (BuiltinID) {
   default: break;
