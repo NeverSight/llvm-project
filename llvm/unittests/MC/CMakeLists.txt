@@ -15,6 +15,7 @@ set(LLVM_LINK_COMPONENTS
   )
 
 add_llvm_unittest(MCTests
+  BinaryRewriteTest.cpp
   Disassembler.cpp
   DwarfDebugFrameCIE.cpp
   DwarfLineTables.cpp
@@ -24,4 +25,3 @@ add_llvm_unittest(MCTests
   TargetRegistry.cpp
   MCDisassemblerTest.cpp
   )
-

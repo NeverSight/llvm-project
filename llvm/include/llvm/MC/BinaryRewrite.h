@@ -41,6 +41,42 @@ class MCSection;
 
 namespace llvm::mc_rewrite {
 
+/// Complete context for resolving one external symbol referenced by a native
+/// fixup or final-image symbol-index record.  Raw numeric identities are
+/// preserved alongside stable callback-lifetime names, so address-model owners
+/// can distinguish calls, ordinary data, GOT/TLV references, authenticated
+/// pointers, and other relocation families without including target-private
+/// enum headers or relying on a lossy generic classification.
+struct RewriteSymbolResolveRequest {
+  /// External symbol spelling selected by the target object convention.
+  /// Valid only for the duration of the resolver callback.
+  StringRef Symbol;
+  /// Raw MC expression specifier (@PLT/@GOT/@TLV/auth/...), if any.
+  uint32_t Specifier = 0;
+  /// Stable target spelling of `Specifier`; empty when the target exposes no
+  /// registered spelling. Valid only for the duration of the callback.
+  StringRef SpecifierName;
+  /// Raw target fixup kind from MCFixup.
+  unsigned FixupKind = 0;
+  /// Stable target spelling of `FixupKind`. Final-image symbol-index records
+  /// use the generic `FK_NONE` name because they have no native fixup.
+  /// Valid only for the duration of the resolver callback.
+  StringRef FixupKindName;
+  /// Owning output section. Valid only for the duration of the callback.
+  StringRef SectionName;
+  /// Byte offset of the reference within the merged output section.
+  uint64_t SectionOffset = 0;
+  /// Final image VA of the fixup or symbol-index field.
+  uint64_t FixupVA = 0;
+  /// True when the native fixup itself is PC-relative.
+  bool IsPCRel = false;
+  /// True when this symbol contributes with a negative sign.  Alias expansion
+  /// composes nested add/subtract signs before invoking the resolver.
+  bool IsSubtrahend = false;
+  /// Width in bits of the native value field written by the fixup.
+  unsigned BitWidth = 0;
+};
+
 /// Caller-provided "final address model": where the new code/sections live and
 /// where external symbols resolve to in the target binary. Changing the
 /// resolution strategy never touches the emitter-side code.
@@ -54,10 +90,30 @@ struct RewriteAddressModel {
   /// Final base VA of an arbitrary section by name.
   std::function<uint64_t(StringRef Section)> getSectionVA;
   /// External symbol -> absolute VA. \p Specifier distinguishes @PLT/@GOT/@TLS
-  /// variants; for those the result is the VA of an existing stub in the target
-  /// binary (resolved by the caller), not a freshly synthesized GOT/PLT entry.
+  /// variants; the caller supplies the address required by that exact contract
+  /// (for example, an existing callable stub or storage slot), not a freshly
+  /// synthesized GOT/PLT entry.
   std::function<std::optional<uint64_t>(StringRef Sym, uint32_t Specifier)>
       resolve;
+  /// Context-aware external-symbol resolver.  When installed, this is the
+  /// authoritative resolver even when it returns std::nullopt; the legacy
+  /// callback above is consulted only when this callback is absent.  This
+  /// preserves old clients while allowing new clients to fail closed based on
+  /// the exact native fixup contract.
+  std::function<std::optional<uint64_t>(
+      const RewriteSymbolResolveRequest &Request)>
+      resolveWithContext;
+
+  /// Resolve through the richest installed callback, falling back to the
+  /// legacy symbol/specifier callback for source compatibility.
+  std::optional<uint64_t>
+  resolveSymbol(const RewriteSymbolResolveRequest &Request) const {
+    if (resolveWithContext)
+      return resolveWithContext(Request);
+    if (resolve)
+      return resolve(Request.Symbol, Request.Specifier);
+    return std::nullopt;
+  }
 };
 
 /// Context handed to the per-fixup hook: enough to do immediate-level

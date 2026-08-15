@@ -130,6 +130,33 @@ AddressModelBackend::getSectionImageVA(const MCSection &Section) const {
   return VA;
 }
 
+std::optional<uint64_t> AddressModelBackend::resolveExternalSymbol(
+    StringRef Symbol, uint32_t Specifier, const MCFragment &F,
+    const MCFixup &Fixup, bool IsSubtrahend) const {
+  mc_rewrite::RewriteSymbolResolveRequest Request;
+  Request.Symbol = Symbol;
+  Request.Specifier = Specifier;
+  if (Specifier)
+    Request.SpecifierName =
+        Asm->getContext().getAsmInfo().getSpecifierNameOrEmpty(Specifier);
+  Request.FixupKind = Fixup.getKind();
+  const MCFixupKindInfo KindInfo =
+      Wrapped->getFixupKindInfo(static_cast<MCFixupKind>(Fixup.getKind()));
+  Request.FixupKindName = KindInfo.Name;
+  const MCSection &Section = *F.getParent();
+  Request.SectionName = Section.getName();
+  const uint64_t SectionVA = getSectionImageVA(Section);
+  Request.FixupVA = SectionVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
+  const uint64_t SectionBaseVA =
+      Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Section.getName())
+                              : SectionVA;
+  Request.SectionOffset = Request.FixupVA - SectionBaseVA;
+  Request.IsPCRel = Fixup.isPCRel();
+  Request.IsSubtrahend = IsSubtrahend;
+  Request.BitWidth = KindInfo.TargetSize;
+  return Opts.Model.resolveSymbol(Request);
+}
+
 void AddressModelBackend::reset() {
   if (Asm && Asm->getContext().hadError())
     Result.ImageValid = false;
@@ -151,7 +178,8 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
   // Resolve via the caller's address model.
   SmallPtrSet<const MCSymbol *, 8> ActiveVariables;
   auto resolveSymVA = [&](auto &&Resolve, const MCSymbol *Sym,
-                          uint32_t Specifier) -> std::optional<APInt> {
+                          uint32_t Specifier,
+                          bool IsSubtrahend) -> std::optional<APInt> {
     if (!Sym)
       return std::nullopt;
     if (Sym->isVariable()) {
@@ -175,7 +203,7 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
 
       APInt Address(128, static_cast<uint64_t>(Aliased.getConstant()), true);
       if (const MCSymbol *Add = Aliased.getAddSym()) {
-        auto AddVA = Resolve(Resolve, Add, EffectiveSpecifier);
+        auto AddVA = Resolve(Resolve, Add, EffectiveSpecifier, IsSubtrahend);
         if (!AddVA)
           return std::nullopt;
         bool Overflow = false;
@@ -184,7 +212,7 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
           return std::nullopt;
       }
       if (const MCSymbol *Sub = Aliased.getSubSym()) {
-        auto SubVA = Resolve(Resolve, Sub, EffectiveSpecifier);
+        auto SubVA = Resolve(Resolve, Sub, EffectiveSpecifier, !IsSubtrahend);
         if (!SubVA)
           return std::nullopt;
         bool Overflow = false;
@@ -207,11 +235,9 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     if (Sym->isAbsolute())
       return APInt(128, static_cast<uint64_t>(Asm->getSymbolOffset(*Sym)));
     // External — ask the address model.
-    if (Opts.Model.resolve) {
-      auto Address = Opts.Model.resolve(Sym->getName(), Specifier);
-      if (Address)
-        return APInt(128, *Address);
-    }
+    if (auto Address = resolveExternalSymbol(Sym->getName(), Specifier, F,
+                                             Fixup, IsSubtrahend))
+      return APInt(128, *Address);
     return std::nullopt;
   };
 
@@ -257,7 +283,8 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
   }
 
   if (const MCSymbol *Add = Target.getAddSym()) {
-    auto Address = resolveSymVA(resolveSymVA, Add, Target.getSpecifier());
+    auto Address =
+        resolveSymVA(resolveSymVA, Add, Target.getSpecifier(), false);
     auto VA = Address ? encode64(*Address) : std::nullopt;
     if (!VA)
       return std::nullopt;
@@ -309,7 +336,7 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     }
   }
   if (const MCSymbol *Sub = Target.getSubSym()) {
-    auto Address = resolveSymVA(resolveSymVA, Sub, Target.getSpecifier());
+    auto Address = resolveSymVA(resolveSymVA, Sub, Target.getSpecifier(), true);
     auto VA = Address ? encode64(*Address) : std::nullopt;
     if (!VA)
       return std::nullopt;
@@ -458,10 +485,9 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
         Wrapped->getFixupKindInfo(static_cast<MCFixupKind>(FK)).Name;
     if (FKName == "fixup_arm_thumb_bl") {
       const MCSymbol *Sym = Target.getAddSym();
-      if (Sym && !Sym->isInSection() && !Sym->isAbsolute() &&
-          Opts.Model.resolve) {
-        auto TargetVA =
-            Opts.Model.resolve(Sym->getName(), Target.getSpecifier());
+      if (Sym && !Sym->isInSection() && !Sym->isAbsolute()) {
+        auto TargetVA = resolveExternalSymbol(
+            Sym->getName(), Target.getSpecifier(), F, Fixup, false);
         if (TargetVA && (*TargetVA & 1) == 0) {
           // Target VA is even → ARM mode. Re-encode BL as BLX.
           // BLX offset base = Align(PC+4, 4), not PC+4.

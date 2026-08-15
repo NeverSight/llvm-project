@@ -17,6 +17,8 @@
 
 #include "FinalImageObjectWriter.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/BinaryFormat/COFF.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/BinaryFormat/MachO.h"
@@ -278,20 +280,69 @@ void FinalImageObjectWriter::recordRelocation(const MCFragment &F,
                          Fixup.getKind() == FK_Data_4 && ArmNoneSpecifier &&
                          Target.getSpecifier() == *ArmNoneSpecifier;
 
-  auto recordUnresolved = [&](const MCSymbol *Sym) {
-    // Regular defined symbols are either section-backed or absolute. Symbols
-    // left at this seam are undefined externals or variable aliases; the
-    // address-model resolver owns the latter just as it does in evaluation.
-    if (!Sym || Sym->isInSection() || Sym->isAbsolute())
+  const MCFixupKindInfo KindInfo = Asm->getBackend().getFixupKindInfo(
+      static_cast<MCFixupKind>(Fixup.getKind()));
+  const MCSection &Section = *F.getParent();
+  const uint64_t SectionVA = mc_rewrite::sectionImageVA(*Asm, Opts, Section);
+  const uint64_t FixupVA =
+      SectionVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
+  const uint64_t SectionBaseVA =
+      Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Section.getName())
+                              : SectionVA;
+  auto appendUnresolved = [&](const MCSymbol *Sym) {
+    if (!Sym)
       return;
-    if (Opts.Model.resolve &&
-        Opts.Model.resolve(Sym->getName(), Target.getSpecifier()))
-      return;
-
     std::string Name = Sym->getName().str();
     if (std::find(Out.Unresolved.begin(), Out.Unresolved.end(), Name) ==
         Out.Unresolved.end())
       Out.Unresolved.push_back(std::move(Name));
+  };
+  SmallPtrSet<const MCSymbol *, 8> ActiveVariables;
+  auto recordUnresolved = [&](auto &&Record, const MCSymbol *Sym,
+                              uint32_t Specifier, bool IsSubtrahend) -> void {
+    if (!Sym || Sym->isInSection() || Sym->isAbsolute())
+      return;
+    if (Sym->isVariable()) {
+      if (!ActiveVariables.insert(Sym).second) {
+        appendUnresolved(Sym);
+        return;
+      }
+      scope_exit RemoveActive([&] { ActiveVariables.erase(Sym); });
+
+      MCValue Aliased;
+      if (!Sym->getVariableValue()->evaluateAsRelocatable(Aliased, Asm)) {
+        appendUnresolved(Sym);
+        return;
+      }
+      const uint32_t InnerSpecifier = Aliased.getSpecifier();
+      if (Specifier && InnerSpecifier && Specifier != InnerSpecifier) {
+        appendUnresolved(Sym);
+        return;
+      }
+      const uint32_t EffectiveSpecifier =
+          InnerSpecifier ? InnerSpecifier : Specifier;
+      Record(Record, Aliased.getAddSym(), EffectiveSpecifier, IsSubtrahend);
+      Record(Record, Aliased.getSubSym(), EffectiveSpecifier, !IsSubtrahend);
+      return;
+    }
+
+    mc_rewrite::RewriteSymbolResolveRequest Request;
+    Request.Symbol = Sym->getName();
+    Request.Specifier = Specifier;
+    if (Specifier)
+      Request.SpecifierName =
+          Context.getAsmInfo().getSpecifierNameOrEmpty(Specifier);
+    Request.FixupKind = Fixup.getKind();
+    Request.FixupKindName = KindInfo.Name;
+    Request.SectionName = Section.getName();
+    Request.SectionOffset = FixupVA - SectionBaseVA;
+    Request.FixupVA = FixupVA;
+    Request.IsPCRel = Fixup.isPCRel();
+    Request.IsSubtrahend = IsSubtrahend;
+    Request.BitWidth = KindInfo.TargetSize;
+    if (Opts.Model.resolveSymbol(Request))
+      return;
+    appendUnresolved(Sym);
   };
 
   // R_ARM_NONE is an explicit no-op dependency used by ARM EHABI compact
@@ -299,12 +350,12 @@ void FinalImageObjectWriter::recordRelocation(const MCFragment &F,
   // reporting its personality symbol here would reject otherwise complete
   // unwind output after AddressModelBackend had correctly consumed the fixup.
   if (!IsArmNone) {
-    recordUnresolved(Target.getAddSym());
-    recordUnresolved(Target.getSubSym());
+    recordUnresolved(recordUnresolved, Target.getAddSym(),
+                     Target.getSpecifier(), false);
+    recordUnresolved(recordUnresolved, Target.getSubSym(),
+                     Target.getSpecifier(), true);
   }
 
-  (void)F;
-  (void)Fixup;
   (void)FixedValue;
 }
 
@@ -453,8 +504,23 @@ uint64_t FinalImageObjectWriter::writeObject() {
             }
           } else if (Sym->isAbsolute())
             Ref.TargetVA = Asm->getSymbolOffset(*Sym);
-          else if (Opts.Model.resolve)
-            Ref.TargetVA = Opts.Model.resolve(Sym->getName(), 0).value_or(0);
+          else {
+            mc_rewrite::RewriteSymbolResolveRequest Request;
+            Request.Symbol = Sym->getName();
+            Request.FixupKind = FK_NONE;
+            Request.FixupKindName =
+                Asm->getBackend().getFixupKindInfo(FK_NONE).Name;
+            Request.SectionName = Sec.getName();
+            const uint64_t SectionVA =
+                mc_rewrite::sectionImageVA(*Asm, Opts, Sec);
+            const uint64_t SectionBaseVA =
+                Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Sec.getName())
+                                        : SectionVA;
+            Request.FixupVA = SectionVA + FOffset;
+            Request.SectionOffset = Request.FixupVA - SectionBaseVA;
+            Request.BitWidth = 32;
+            Ref.TargetVA = Opts.Model.resolveSymbol(Request).value_or(0);
+          }
         }
         SymbolRefs.push_back(std::move(Ref));
         // Preserve the native four-byte fragment extent.  The value was an

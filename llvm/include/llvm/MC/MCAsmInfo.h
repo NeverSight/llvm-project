@@ -745,6 +745,9 @@ public:
   bool shouldUseMotorolaIntegers() const { return UseMotorolaIntegers; }
 
   StringRef getSpecifierName(uint32_t S) const;
+  /// Return the registered target spelling for \p S, or an empty StringRef
+  /// when the target uses an internal-only specifier with no assembly spelling.
+  StringRef getSpecifierNameOrEmpty(uint32_t S) const;
   std::optional<uint32_t> getSpecifierForName(StringRef Name) const;
 
   void printExpr(raw_ostream &, const MCExpr &) const;

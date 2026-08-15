@@ -117,10 +117,15 @@ void MCAsmInfo::initializeAtSpecifiers(ArrayRef<AtSpecifier> Descs) {
 }
 
 StringRef MCAsmInfo::getSpecifierName(uint32_t S) const {
+  StringRef Name = getSpecifierNameOrEmpty(S);
+  assert(!Name.empty() &&
+         "ensure the specifier is set in initializeAtSpecifiers");
+  return Name;
+}
+
+StringRef MCAsmInfo::getSpecifierNameOrEmpty(uint32_t S) const {
   auto It = AtSpecifierToName.find(S);
-  assert(It != AtSpecifierToName.end() &&
-         "ensure the specifier is set in initializeVariantKinds");
-  return It->second;
+  return It == AtSpecifierToName.end() ? StringRef() : It->second;
 }
 
 std::optional<uint32_t> MCAsmInfo::getSpecifierForName(StringRef Name) const {

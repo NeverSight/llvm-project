@@ -50,6 +50,11 @@ class AddressModelBackend final : public MCAsmBackend {
   mc_rewrite::RewriteResult &Result;
 
   uint64_t getSectionImageVA(const MCSection &Section) const;
+  std::optional<uint64_t> resolveExternalSymbol(StringRef Symbol,
+                                                uint32_t Specifier,
+                                                const MCFragment &F,
+                                                const MCFixup &Fixup,
+                                                bool IsSubtrahend) const;
 
   // The wrapped backend's own `Asm` member must point at the same MCAssembler
   // as ours: several target hooks read it (maybeAddReloc -> Asm->getWriter()
