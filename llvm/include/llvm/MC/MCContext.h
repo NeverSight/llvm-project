@@ -240,6 +240,7 @@ private:
   /// Darwin).
   bool SaveTempLabels = false;
   bool UseNamesOnTempLabels = false;
+  bool RequireRewriteFunctionProvenance = false;
 
   /// The Compile Unit ID that we are currently processing.
   unsigned DwarfCompileUnitID = 0;
@@ -419,6 +420,13 @@ public:
   LLVM_ABI CodeViewContext &getCVContext();
 
   void setUseNamesOnTempLabels(bool Value) { UseNamesOnTempLabels = Value; }
+
+  void setRequireRewriteFunctionProvenance(bool Value) {
+    RequireRewriteFunctionProvenance = Value;
+  }
+  bool requiresRewriteFunctionProvenance() const {
+    return RequireRewriteFunctionProvenance;
+  }
 
   /// \name Module Lifetime Management
   /// @{

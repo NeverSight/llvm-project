@@ -118,6 +118,7 @@ void DwarfCFIException::beginBasicBlockSection(const MachineBasicBlock &MBB) {
   }
 
   Asm->OutStreamer->emitCFIStartProc(/*IsSimple=*/false);
+  Asm->OutStreamer->emitCFIFunctionOwner(Asm->CurrentFnSym);
 
   // Indicate personality routine, if any.
   if (!shouldEmitPersonality)

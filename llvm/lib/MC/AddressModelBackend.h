@@ -47,6 +47,9 @@ class AddressModelBackend final : public MCAsmBackend {
   // Owned by the caller; must outlive this backend (guaranteed by the wiring
   // that constructs both for the duration of one emit).
   const mc_rewrite::RewriteOptions &Opts;
+  mc_rewrite::RewriteResult &Result;
+
+  uint64_t getSectionImageVA(const MCSection &Section) const;
 
   // The wrapped backend's own `Asm` member must point at the same MCAssembler
   // as ours: several target hooks read it (maybeAddReloc -> Asm->getWriter()
@@ -59,9 +62,11 @@ class AddressModelBackend final : public MCAsmBackend {
 
 public:
   AddressModelBackend(std::unique_ptr<MCAsmBackend> WrappedBackend,
-                      const mc_rewrite::RewriteOptions &Options)
+                      const mc_rewrite::RewriteOptions &Options,
+                      mc_rewrite::RewriteResult &RewriteResult)
       : MCAsmBackend(WrappedBackend->Endian),
-        Wrapped(std::move(WrappedBackend)), Opts(Options) {}
+        Wrapped(std::move(WrappedBackend)), Opts(Options),
+        Result(RewriteResult) {}
 
   MCAsmBackend &getWrapped() const { return *Wrapped; }
 
@@ -81,7 +86,7 @@ public:
                   bool IsResolved) override;
 
   // —— Everything else is forwarded verbatim to the wrapped backend ——
-  void reset() override { Wrapped->reset(); }
+  void reset() override;
 
   // Out-of-line: returning unique_ptr<MCObjectTargetWriter> needs the complete
   // type, which is only forward-declared here.

@@ -35,6 +35,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <cstdint>
+#include <limits>
 #include <tuple>
 #include <utility>
 
@@ -94,6 +95,8 @@ void MCAssembler::reset() {
   RelaxAll = false;
   Sections.clear();
   Symbols.clear();
+  RewriteSourceFunctionOwners.clear();
+  RewriteFunctionRanges.clear();
   ThumbFuncs.clear();
 
   // reset objects owned by us
@@ -103,6 +106,39 @@ void MCAssembler::reset() {
     getEmitterPtr()->reset();
   if (Writer)
     Writer->reset();
+}
+
+void MCAssembler::registerRewriteSourceFunctionOwner(StringRef SourceFunction,
+                                                     const MCSymbol *Owner,
+                                                     bool IsPrivate) {
+  RewriteSourceFunctionOwners.push_back(
+      {SourceFunction.str(), Owner, IsPrivate});
+}
+
+void MCAssembler::registerRewriteFunctionRange(const MCSymbol *Owner,
+                                               const MCSymbol *Begin) {
+  uint64_t Id = 0;
+  if (Owner && Begin &&
+      RewriteFunctionRanges.size() < std::numeric_limits<uint64_t>::max())
+    Id = static_cast<uint64_t>(RewriteFunctionRanges.size()) + 1;
+  RewriteFunctionRanges.push_back({Id, Owner, Begin, nullptr});
+}
+
+void MCAssembler::completeRewriteFunctionRange(const MCSymbol *Begin,
+                                               const MCSymbol *End) {
+  auto It = llvm::find_if(llvm::reverse(RewriteFunctionRanges),
+                          [Begin](const MCRewriteFunctionRange &Range) {
+                            return Range.Begin == Begin && !Range.End;
+                          });
+  if (It != RewriteFunctionRanges.rend()) {
+    It->End = End;
+    return;
+  }
+
+  // A compiler-created frame without an authenticated owner must survive to
+  // the final writer as malformed provenance, where rewrite emission fails
+  // closed instead of silently omitting the frame.
+  RewriteFunctionRanges.push_back({0, nullptr, Begin, End});
 }
 
 bool MCAssembler::registerSection(MCSection &Section) {

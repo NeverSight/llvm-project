@@ -1010,6 +1010,9 @@ public:
   virtual MCSymbol *getDwarfLineTableSymbol(unsigned CUID);
   virtual void emitCFISections(bool EH, bool Debug, bool SFrame);
   void emitCFIStartProc(bool IsSimple, SMLoc Loc = SMLoc());
+  /// Authenticate the current CFI fragment with its exact compiler function.
+  /// This is an object-generation contract, not an assembler directive.
+  void emitCFIFunctionOwner(const MCSymbol *Owner);
   void emitCFIEndProc();
   virtual void emitCFIDefCfa(int64_t Register, int64_t Offset, SMLoc Loc = {});
   virtual void emitCFIDefCfaOffset(int64_t Offset, SMLoc Loc = {});

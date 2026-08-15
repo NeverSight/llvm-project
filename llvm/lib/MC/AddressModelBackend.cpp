@@ -122,6 +122,20 @@ AddressModelBackend::createObjectTargetWriter() const {
   return Wrapped->createObjectTargetWriter();
 }
 
+uint64_t
+AddressModelBackend::getSectionImageVA(const MCSection &Section) const {
+  const uint64_t VA = mc_rewrite::sectionImageVA(*Asm, Opts, Section);
+  if (Asm->getContext().hadError())
+    Result.ImageValid = false;
+  return VA;
+}
+
+void AddressModelBackend::reset() {
+  if (Asm && Asm->getContext().hadError())
+    Result.ImageValid = false;
+  Wrapped->reset();
+}
+
 std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
                                                        MCFixup &Fixup,
                                                        MCValue &Target,
@@ -184,7 +198,7 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
       // sectionImageVA (not getSectionVA(name)) so that same-named sections —
       // e.g. COFF's per-constant COMDAT ".rdata" — resolve to their packed VA
       // instead of all overlapping at getSectionVA(name).
-      uint64_t Base = mc_rewrite::sectionImageVA(*Asm, Opts, Sym->getSection());
+      uint64_t Base = getSectionImageVA(Sym->getSection());
       const uint64_t Offset = Asm->getSymbolOffset(*Sym);
       if (Offset > std::numeric_limits<uint64_t>::max() - Base)
         return std::nullopt;
@@ -316,8 +330,7 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
   if ((Fixup.getKind() == FK_SecRel_1 || Fixup.getKind() == FK_SecRel_2 ||
        Fixup.getKind() == FK_SecRel_4 || Fixup.getKind() == FK_SecRel_8) &&
       Target.getAddSym() && Target.getAddSym()->isInSection()) {
-    Value -= mc_rewrite::sectionImageVA(*Asm, Opts,
-                                        Target.getAddSym()->getSection());
+    Value -= getSectionImageVA(Target.getAddSym()->getSection());
   }
 
   // Detect PAGE / PAGEOFF addressing mode via specifier OR fixup kind.
@@ -350,8 +363,7 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
                            Fixup.getKind() == FK_Data_4 && Prel31Specifier &&
                            Target.getSpecifier() == *Prel31Specifier;
   if (IsArmPrel31) {
-    const uint64_t SecVA =
-        mc_rewrite::sectionImageVA(*Asm, Opts, *F.getParent());
+    const uint64_t SecVA = getSectionImageVA(*F.getParent());
     const uint64_t FixupPC =
         SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
     // AArch32 address arithmetic wraps modulo 2^32.  PREL31 can encode the
@@ -367,7 +379,7 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
     }
     Value = Delta & 0x7fffffffu;
   } else if (Fixup.isPCRel() || IsX86GOTPCRel) {
-    uint64_t SecVA = mc_rewrite::sectionImageVA(*Asm, Opts, *F.getParent());
+    uint64_t SecVA = getSectionImageVA(*F.getParent());
     uint64_t FixupPC = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
     if (IsPage) {
       uint64_t PageDelta =
@@ -400,7 +412,7 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
     Ctx.Kind = Fixup.getKind();
     const MCSection &Section = *F.getParent();
     Ctx.SectionName = Section.getName();
-    const uint64_t SecVA = mc_rewrite::sectionImageVA(*Asm, Opts, Section);
+    const uint64_t SecVA = getSectionImageVA(Section);
     const uint64_t SectionBaseVA =
         Opts.Model.getSectionVA ? Opts.Model.getSectionVA(Section.getName())
                                 : 0;
@@ -453,8 +465,7 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
         if (TargetVA && (*TargetVA & 1) == 0) {
           // Target VA is even → ARM mode. Re-encode BL as BLX.
           // BLX offset base = Align(PC+4, 4), not PC+4.
-          uint64_t SecVA =
-              mc_rewrite::sectionImageVA(*Asm, Opts, *F.getParent());
+          uint64_t SecVA = getSectionImageVA(*F.getParent());
           uint64_t PC = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
           uint64_t AlignedBase = (PC + 4) & ~uint64_t(3);
           int32_t Delta =
@@ -488,6 +499,7 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
 
 std::unique_ptr<MCAsmBackend> llvm::mc_rewrite::createAddressModelBackend(
     std::unique_ptr<MCAsmBackend> TargetBackend,
-    const mc_rewrite::RewriteOptions &Opts) {
-  return std::make_unique<AddressModelBackend>(std::move(TargetBackend), Opts);
+    const mc_rewrite::RewriteOptions &Opts, mc_rewrite::RewriteResult &Result) {
+  return std::make_unique<AddressModelBackend>(std::move(TargetBackend), Opts,
+                                               Result);
 }

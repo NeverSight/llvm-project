@@ -23,6 +23,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Compiler.h"
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -126,6 +127,48 @@ struct RewriteSection {
   std::vector<RewriteSymbolIndexReference> SymbolIndexReferences;
 };
 
+/// One compiler-authenticated CFI fragment.  Range IDs are opaque, nonzero,
+/// and unique within one RewriteResult; consumers must not derive identity from
+/// symbol spelling or address proximity.  BeginVA and EndVA form an exact
+/// half-open range even when the underlying MC labels are temporary.
+struct RewriteFunctionRange {
+  uint64_t Id = 0;
+  std::string OwnerSymbol;
+  uint64_t OwnerVA = 0;
+  std::string BeginSymbol;
+  uint64_t BeginVA = 0;
+  std::string EndSymbol;
+  uint64_t EndVA = 0;
+};
+
+/// One exact IR-definition to final MC-owner association.  SourceFunction is
+/// the original IR name and OwnerSymbol is the target-selected symbol spelling;
+/// consumers compare both identities exactly and never infer one from the
+/// other.
+struct RewriteSourceFunctionOwner {
+  std::string SourceFunction;
+  std::string OwnerSymbol;
+  uint64_t OwnerVA = 0;
+  bool IsPrivate = false;
+};
+
+/// Validate the portable identity constraints of source-owner provenance.
+/// Source identities are unique.  Owner addresses need not be unique because
+/// zero-sized or folded entries can legally share an address while retaining
+/// distinct symbol identities.
+LLVM_ABI bool validateRewriteSourceFunctionOwners(
+    ArrayRef<RewriteSourceFunctionOwner> Owners);
+
+/// Validate the portable portion of function-range provenance.  IDs are
+/// checked for uniqueness independently of address order; exact half-open
+/// ranges may be adjacent but may not be empty or duplicated.  Global address
+/// overlap may be deferred while a provisional multi-section layout is being
+/// measured; final images must use the default complete validation.
+LLVM_ABI bool validateRewriteFunctionRanges(
+    ArrayRef<RewriteFunctionRange> Ranges,
+    const std::map<std::string, uint64_t> &FunctionOwnerAddrs,
+    bool ValidateGlobalOverlap = true);
+
 /// Per-image hook: called after every fixup is applied, to mutate the final
 /// bytes in place (whole-section checksum / code encryption / ...). Defaults to
 /// a no-op when unset.
@@ -136,6 +179,9 @@ struct RewriteOptions {
   RewriteAddressModel Model;
   FixupTransform onFixup;   // may be empty
   ImagePostProcess onImage; // may be empty
+  /// Permit provisional ranges in distinct MC sections to share an address.
+  /// The final placement must leave this false so global overlap is rejected.
+  bool DeferGlobalFunctionRangeOverlap = false;
 };
 
 /// Result of a binary-rewrite emit.
@@ -144,16 +190,29 @@ struct RewriteResult {
   std::vector<RewriteSection> Sections;
   /// Defined symbol -> final VA.
   std::map<std::string, uint64_t> SymbolAddrs;
+  /// False when final section placement or byte materialization failed.
+  bool ImageValid = true;
+  /// Function owners used only to authenticate FunctionRanges.  Temporary
+  /// owners are retained here without exposing them as public symbols.
+  std::map<std::string, uint64_t> FunctionOwnerAddrs;
+  /// Exact source IR definition -> final compiler owner association.  This is
+  /// populated only by the binary-rewrite emission path.
+  std::vector<RewriteSourceFunctionOwner> SourceFunctionOwners;
+  /// Compiler-authenticated CFI fragment ownership and exact final ranges.
+  std::vector<RewriteFunctionRange> FunctionRanges;
+  /// False when any registered range failed identity or bounds validation.
+  bool FunctionRangesValid = true;
   /// External symbols that could not be resolved (should be empty on success).
   std::vector<std::string> Unresolved;
 };
 
 /// Wrap a target MCAsmBackend with address-model resolution for binary rewrite.
 /// The returned backend intercepts evaluateFixup/applyFixup; all other virtuals
-/// forward to \p TargetBackend.  \p Opts must outlive the returned backend.
+/// forward to \p TargetBackend.  \p Opts and \p Result must outlive the
+/// returned backend.
 std::unique_ptr<MCAsmBackend>
 createAddressModelBackend(std::unique_ptr<MCAsmBackend> TargetBackend,
-                          const RewriteOptions &Opts);
+                          const RewriteOptions &Opts, RewriteResult &Result);
 
 /// Create an MCObjectWriter that emits fully fixed-up section bytes into
 /// \p Result instead of a relocatable object file.  \p Opts and \p Result must

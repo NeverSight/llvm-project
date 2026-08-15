@@ -320,6 +320,8 @@ bool CodeGenTargetMachineImpl::addPassesToEmitBinaryRewrite(
          "Cannot emit binary rewrite with limited codegen pipeline");
 
   MCContext &Ctx = MMIWP->getMMI().getContext();
+  Ctx.setUseNamesOnTempLabels(true);
+  Ctx.setRequireRewriteFunctionProvenance(true);
   const MCSubtargetInfo &STI = getMCSubtargetInfo();
   const MCRegisterInfo &MRI = getMCRegisterInfo();
 
@@ -334,7 +336,7 @@ bool CodeGenTargetMachineImpl::addPassesToEmitBinaryRewrite(
     return true;
 
   auto WrappedMAB =
-      mc_rewrite::createAddressModelBackend(std::move(MAB), Opts);
+      mc_rewrite::createAddressModelBackend(std::move(MAB), Opts, Result);
   auto Writer = mc_rewrite::createFinalImageObjectWriter(Opts, Result);
 
   const Triple &T = getTargetTriple();

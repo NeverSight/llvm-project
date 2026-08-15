@@ -13,6 +13,7 @@
 #include "llvm/BinaryFormat/COFF.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/DebugInfo/CodeView/SymbolRecord.h"
+#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeView.h"
 #include "llvm/MC/MCContext.h"
@@ -449,7 +450,17 @@ void MCStreamer::emitCFIStartProc(bool IsSimple, SMLoc Loc) {
   DwarfFrameInfos.push_back(std::move(Frame));
 }
 
-void MCStreamer::emitCFIStartProcImpl(MCDwarfFrameInfo &Frame) {
+void MCStreamer::emitCFIStartProcImpl(MCDwarfFrameInfo &Frame) {}
+
+void MCStreamer::emitCFIFunctionOwner(const MCSymbol *Owner) {
+  MCDwarfFrameInfo *Frame = getCurrentDwarfFrameInfo();
+  assert(Frame && "function owner requires an open CFI frame");
+  assert(Owner && "CFI function owner cannot be null");
+  if (!Context.requiresRewriteFunctionProvenance())
+    return;
+  MCAssembler *Assembler = getAssemblerPtr();
+  assert(Assembler && "rewrite provenance requires an object streamer");
+  Assembler->registerRewriteFunctionRange(Owner, Frame->Begin);
 }
 
 void MCStreamer::emitCFIEndProc() {

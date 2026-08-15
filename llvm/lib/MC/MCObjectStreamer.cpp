@@ -277,6 +277,8 @@ void MCObjectStreamer::emitCFIStartProcImpl(MCDwarfFrameInfo &Frame) {
 void MCObjectStreamer::emitCFIEndProcImpl(MCDwarfFrameInfo &Frame) {
   Frame.End = getContext().createTempSymbol();
   emitLabel(Frame.End);
+  if (getContext().requiresRewriteFunctionProvenance())
+    getAssembler().completeRewriteFunctionRange(Frame.Begin, Frame.End);
 }
 
 void MCObjectStreamer::emitLabel(MCSymbol *Symbol, SMLoc Loc) {

@@ -384,6 +384,17 @@ template <typename ELFT> Error ELFLinkGraphBuilder<ELFT>::graphifySections() {
       return make_error<JITLinkError>(std::move(ErrMsg));
     }
 
+    // ELF defines sh_addralign values 0 and 1 as having no alignment
+    // constraint. LinkGraph blocks use an explicit power-of-two alignment, so
+    // canonicalize zero to one and reject malformed non-powers before reaching
+    // the Block constructor's assertion.
+    if (Sec.sh_addralign != 0 && !isPowerOf2_64(Sec.sh_addralign))
+      return make_error<JITLinkError>(
+          formatv("In {0}, section {1} has invalid alignment {2}", G->getName(),
+                  *Name, Sec.sh_addralign)
+              .str());
+    const uint64_t Alignment = Sec.sh_addralign ? Sec.sh_addralign : 1;
+
     Block *B = nullptr;
     if (Sec.sh_type != ELF::SHT_NOBITS) {
       auto Data = Obj.template getSectionContentsAsArray<char>(Sec);
@@ -391,12 +402,10 @@ template <typename ELFT> Error ELFLinkGraphBuilder<ELFT>::graphifySections() {
         return Data.takeError();
 
       B = &G->createContentBlock(*GraphSec, *Data,
-                                 orc::ExecutorAddr(Sec.sh_addr),
-                                 Sec.sh_addralign, 0);
+                                 orc::ExecutorAddr(Sec.sh_addr), Alignment, 0);
     } else
       B = &G->createZeroFillBlock(*GraphSec, Sec.sh_size,
-                                  orc::ExecutorAddr(Sec.sh_addr),
-                                  Sec.sh_addralign, 0);
+                                  orc::ExecutorAddr(Sec.sh_addr), Alignment, 0);
 
     if (Sec.sh_type == ELF::SHT_ARM_EXIDX) {
       // Add live symbol to avoid dead-stripping for .ARM.exidx sections

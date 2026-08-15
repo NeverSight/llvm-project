@@ -144,6 +144,7 @@ void MCContext::reset() {
   InlineSrcMgr.reset();
   LocInfos.clear();
   DiagHandler = defaultDiagHandler;
+  RequireRewriteFunctionProvenance = false;
 
   // Call the destructors so the fragments are freed
   COFFAllocator.DestroyAll();

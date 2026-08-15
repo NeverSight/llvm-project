@@ -43,6 +43,25 @@ class MCObjectWriter;
 class MCSection;
 class MCValue;
 
+/// Symbol-backed function range retained until final MC layout.  The symbols
+/// may be temporary; only the final-image writer decides how to serialize the
+/// authenticated range without publishing those labels as ordinary symbols.
+struct MCRewriteFunctionRange {
+  uint64_t Id = 0;
+  const MCSymbol *Owner = nullptr;
+  const MCSymbol *Begin = nullptr;
+  const MCSymbol *End = nullptr;
+};
+
+/// Exact rewrite-only association between one IR definition and the MC symbol
+/// selected by the target-independent AsmPrinter for that definition's entry.
+/// SourceFunction is the unmodified IR identity, not a guessed object spelling.
+struct MCRewriteSourceFunctionOwner {
+  std::string SourceFunction;
+  const MCSymbol *Owner = nullptr;
+  bool IsPrivate = false;
+};
+
 class MCAssembler {
 public:
   friend class MCObjectWriter;
@@ -87,6 +106,11 @@ private:
   // this can go with it? The streamer would need some target specific
   // refactoring too.
   mutable SmallPtrSet<const MCSymbol *, 32> ThumbFuncs;
+
+  // Keep rewrite-only state last so it does not perturb the offsets of the
+  // ordinary assembler state used by format-specific object writers.
+  SmallVector<MCRewriteSourceFunctionOwner, 0> RewriteSourceFunctionOwners;
+  SmallVector<MCRewriteFunctionRange, 0> RewriteFunctionRanges;
 
   /// Evaluate a fixup to a relocatable expression and the value which should be
   /// placed into the fixup.
@@ -210,6 +234,20 @@ public:
 
   LLVM_ABI bool registerSection(MCSection &Section);
   LLVM_ABI bool registerSymbol(const MCSymbol &Symbol);
+  LLVM_ABI void registerRewriteSourceFunctionOwner(StringRef SourceFunction,
+                                                   const MCSymbol *Owner,
+                                                   bool IsPrivate);
+  ArrayRef<MCRewriteSourceFunctionOwner>
+  getRewriteSourceFunctionOwners() const {
+    return RewriteSourceFunctionOwners;
+  }
+  LLVM_ABI void registerRewriteFunctionRange(const MCSymbol *Owner,
+                                             const MCSymbol *Begin);
+  LLVM_ABI void completeRewriteFunctionRange(const MCSymbol *Begin,
+                                             const MCSymbol *End);
+  ArrayRef<MCRewriteFunctionRange> getRewriteFunctionRanges() const {
+    return RewriteFunctionRanges;
+  }
   LLVM_ABI void addRelocDirective(RelocDirective RD);
 
   LLVM_ABI void reportError(SMLoc L, const Twine &Msg) const;

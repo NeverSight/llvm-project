@@ -93,6 +93,7 @@
 #include "llvm/IR/Value.h"
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDirectives.h"
 #include "llvm/MC/MCExpr.h"
@@ -1111,6 +1112,17 @@ void AsmPrinter::emitFunctionHeader() {
   // Emit the CurrentFnSym. This is a virtual function to allow targets to do
   // their wild and crazy things as required.
   emitFunctionEntryLabel();
+
+  // Binary rewrite consumers must bind the IR definition to the exact MC
+  // entry symbol selected by the target.  Preserve that identity directly;
+  // object-format prefixes and private-label policy are deliberately opaque
+  // to downstream exception installers.
+  if (OutContext.requiresRewriteFunctionProvenance()) {
+    MCAssembler *Assembler = OutStreamer->getAssemblerPtr();
+    assert(Assembler && "rewrite provenance requires an object streamer");
+    Assembler->registerRewriteSourceFunctionOwner(
+        F.getName(), CurrentFnSym, F.hasLocalLinkage());
+  }
 
   // If the function had address-taken blocks that got deleted, then we have
   // references to the dangling symbols.  Emit them at the start of the function
