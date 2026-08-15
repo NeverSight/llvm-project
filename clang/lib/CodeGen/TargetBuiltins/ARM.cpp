@@ -4506,6 +4506,46 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
   if (BuiltinID == Builtin::BI__builtin_cpu_supports)
     return EmitAArch64CpuSupports(E);
 
+  if (BuiltinID == clang::AArch64::BI__neverd_a64_scvtf_fixed ||
+      BuiltinID == clang::AArch64::BI__neverd_a64_ucvtf_fixed ||
+      BuiltinID == clang::AArch64::BI__neverd_a64_fcvtzs_fixed ||
+      BuiltinID == clang::AArch64::BI__neverd_a64_fcvtzu_fixed) {
+    bool IntToFP = BuiltinID == clang::AArch64::BI__neverd_a64_scvtf_fixed ||
+                   BuiltinID == clang::AArch64::BI__neverd_a64_ucvtf_fixed;
+    bool IsUnsigned =
+        BuiltinID == clang::AArch64::BI__neverd_a64_ucvtf_fixed ||
+        BuiltinID == clang::AArch64::BI__neverd_a64_fcvtzu_fixed;
+    bool Is64 = E->getArg(2)
+                    ->EvaluateKnownConstInt(getContext())
+                    .getZExtValue() != 0;
+    uint64_t FBits = E->getArg(1)
+                         ->EvaluateKnownConstInt(getContext())
+                         .getZExtValue();
+    llvm::IntegerType *GPRTy = Is64 ? Int64Ty : Int32Ty;
+    llvm::Value *Scale = llvm::ConstantInt::get(Int32Ty, FBits);
+
+    if (IntToFP) {
+      llvm::Value *Value = EmitScalarExpr(E->getArg(0));
+      Value = Builder.CreateIntCast(Value, GPRTy, /*isSigned=*/false);
+      llvm::Intrinsic::ID IID =
+          IsUnsigned ? llvm::Intrinsic::aarch64_neverd_ucvtf_fixed
+                     : llvm::Intrinsic::aarch64_neverd_scvtf_fixed;
+      llvm::Function *F = CGM.getIntrinsic(IID, {GPRTy});
+      llvm::Value *Result = Builder.CreateCall(F, {Value, Scale});
+      return Builder.CreateBitCast(Result, Int16Ty);
+    }
+
+    llvm::Value *Value = EmitScalarExpr(E->getArg(0));
+    Value = Builder.CreateIntCast(Value, Int16Ty, /*isSigned=*/false);
+    Value = Builder.CreateBitCast(Value, HalfTy);
+    llvm::Intrinsic::ID IID =
+        IsUnsigned ? llvm::Intrinsic::aarch64_neverd_fcvtzu_fixed
+                   : llvm::Intrinsic::aarch64_neverd_fcvtzs_fixed;
+    llvm::Function *F = CGM.getIntrinsic(IID, {GPRTy});
+    llvm::Value *Result = Builder.CreateCall(F, {Value, Scale});
+    return Is64 ? Result : Builder.CreateZExt(Result, Int64Ty);
+  }
+
   unsigned HintID = static_cast<unsigned>(-1);
   switch (BuiltinID) {
   default: break;

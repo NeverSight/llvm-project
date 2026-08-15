@@ -31,6 +31,11 @@ class AArch64TargetBuiltin<string prototype> : TargetBuiltin {
   let RequiredNamePrefix = AArch64Prefix;
 }
 
+class AArch64NoPrefixTargetBuiltin<string prototype> : TargetBuiltin {
+  let Spellings = [NAME];
+  let Prototype = prototype;
+}
+
 class AArch64NoPrefixTargetLibBuiltin<string prototype> : TargetLibBuiltin {
   let Spellings = [NAME];
   let Prototype = prototype;

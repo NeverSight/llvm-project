@@ -477,6 +477,20 @@ let TargetPrefix = "aarch64" in {
   def int_aarch64_neon_vcvtfxs2fp : AdvSIMD_CvtFxToFP_Intrinsic;
   def int_aarch64_neon_vcvtfxu2fp : AdvSIMD_CvtFxToFP_Intrinsic;
 
+  // Scalar fixed-point conversions between a general-purpose register and
+  // FP16.  The AdvSIMD intrinsics above model the H-register source/destination
+  // forms, which have different semantics from the W/X-register forms.
+  class NeverD_GPRToFP16Fixed_Intrinsic
+    : DefaultAttrsIntrinsic<[llvm_half_ty], [llvm_anyint_ty, llvm_i32_ty],
+                [IntrNoMem, IntrHasSideEffects, ImmArg<ArgIndex<1>>]>;
+  class NeverD_FP16ToGPRFixed_Intrinsic
+    : DefaultAttrsIntrinsic<[llvm_anyint_ty], [llvm_half_ty, llvm_i32_ty],
+                [IntrNoMem, IntrHasSideEffects, ImmArg<ArgIndex<1>>]>;
+  def int_aarch64_neverd_scvtf_fixed : NeverD_GPRToFP16Fixed_Intrinsic;
+  def int_aarch64_neverd_ucvtf_fixed : NeverD_GPRToFP16Fixed_Intrinsic;
+  def int_aarch64_neverd_fcvtzs_fixed : NeverD_FP16ToGPRFixed_Intrinsic;
+  def int_aarch64_neverd_fcvtzu_fixed : NeverD_FP16ToGPRFixed_Intrinsic;
+
   // Vector FP->Int Conversions
   def int_aarch64_neon_fcvtas : AdvSIMD_FPToIntRounding_Intrinsic;
   def int_aarch64_neon_fcvtau : AdvSIMD_FPToIntRounding_Intrinsic;

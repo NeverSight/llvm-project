@@ -29,6 +29,20 @@ let Attributes = [CustomTypeChecking] in {
 
 def clrex : AArch64Builtin<"void ()">;
 
+// NeverD scalar GPR <-> FP16 fixed-point conversions.  Values crossing the C
+// boundary are raw register bits.  The last constant selects W (0) or X (1),
+// allowing the same source-level name to preserve the architectural width.
+let Attributes = [NoThrow], Features = "fullfp16" in {
+  def __neverd_a64_scvtf_fixed : AArch64NoPrefixTargetBuiltin<
+      "unsigned short (unsigned long long int, _Constant unsigned int, _Constant unsigned int)">;
+  def __neverd_a64_ucvtf_fixed : AArch64NoPrefixTargetBuiltin<
+      "unsigned short (unsigned long long int, _Constant unsigned int, _Constant unsigned int)">;
+  def __neverd_a64_fcvtzs_fixed : AArch64NoPrefixTargetBuiltin<
+      "unsigned long long int (unsigned short, _Constant unsigned int, _Constant unsigned int)">;
+  def __neverd_a64_fcvtzu_fixed : AArch64NoPrefixTargetBuiltin<
+      "unsigned long long int (unsigned short, _Constant unsigned int, _Constant unsigned int)">;
+}
+
 // Bit manipulation
 let Attributes = [NoThrow, Const] in {
 	def rbit   : AArch64Builtin<"unsigned int (unsigned int)">;
