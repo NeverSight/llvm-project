@@ -65,6 +65,10 @@ public:
 
   MCAsmBackend &getWrapped() const { return *Wrapped; }
 
+  bool shouldPreserveSymbolicFixupExpressions() const override {
+    return true;
+  }
+
   // —— The two rewrite hooks (implemented in AddressModelBackend.cpp) ——
   std::optional<bool> evaluateFixup(const MCFragment &F, MCFixup &Fixup,
                                     MCValue &Target, uint64_t &Value) override;

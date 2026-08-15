@@ -341,12 +341,18 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
                                 : 0;
     Ctx.FixupVA = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
     Ctx.SectionOffset = Ctx.FixupVA - SectionBaseVA;
-    if (Target.getAddSym())
-      Ctx.Sym = Target.getAddSym()->getName();
-    if (Target.getSubSym())
-      Ctx.SubSym = Target.getSubSym()->getName();
-    Ctx.Addend = Target.getConstant();
-    Ctx.Specifier = Target.getSpecifier();
+    MCValue SymbolicTarget;
+    const bool HasSymbolicTarget =
+        Fixup.getValue() &&
+        Fixup.getValue()->evaluateAsRelocatable(SymbolicTarget, nullptr) &&
+        (SymbolicTarget.getAddSym() || SymbolicTarget.getSubSym());
+    const MCValue &Identity = HasSymbolicTarget ? SymbolicTarget : Target;
+    if (Identity.getAddSym())
+      Ctx.Sym = Identity.getAddSym()->getName();
+    if (Identity.getSubSym())
+      Ctx.SubSym = Identity.getSubSym()->getName();
+    Ctx.Addend = Identity.getConstant();
+    Ctx.Specifier = Identity.getSpecifier();
     Ctx.IsPCRel = Fixup.isPCRel();
     Ctx.IsResolved = IsResolved;
     Ctx.BitWidth =
