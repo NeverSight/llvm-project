@@ -24,6 +24,7 @@
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
+#include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/EndianStream.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -2115,7 +2116,9 @@ void MCDwarfFrameEmitter::emit(MCObjectStreamer &Streamer, bool IsEH) {
   ArrayRef<MCDwarfFrameInfo> FrameArray = Streamer.getDwarfFrameInfos();
 
   // Emit the compact unwind info if available.
-  bool NeedsEHFrameSection = !MOFI->getSupportsCompactUnwindWithoutEHFrame();
+  bool NeedsEHFrameSection =
+      !MOFI->getSupportsCompactUnwindWithoutEHFrame() ||
+      Context.emitDwarfUnwindInfo() == EmitDwarfUnwindType::Always;
   if (IsEH && MOFI->getCompactUnwindSection()) {
     Streamer.generateCompactUnwindEncodings();
     bool SectionEmitted = false;
