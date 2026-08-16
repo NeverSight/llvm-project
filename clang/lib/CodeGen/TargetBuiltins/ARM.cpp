@@ -4992,6 +4992,14 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
     return Builder.CreateCall(F, {Arg0, Arg1});
   }
 
+  if (BuiltinID == AArch64::BI__builtin_arm_pacga) {
+    Value *Input = EmitScalarExpr(E->getArg(0));
+    Value *Modifier = EmitScalarExpr(E->getArg(1));
+    return Builder.CreateCall(
+        CGM.getIntrinsic(Intrinsic::ptrauth_sign_generic),
+        {Input, Modifier});
+  }
+
   // Memory Operations (MOPS)
   if (BuiltinID == AArch64::BI__builtin_arm_mops_memset_tag) {
     Value *Dst = EmitScalarExpr(E->getArg(0));

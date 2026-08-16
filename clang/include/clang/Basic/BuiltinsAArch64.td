@@ -43,6 +43,14 @@ let Attributes = [NoThrow], Features = "fullfp16" in {
       "unsigned long long int (unsigned short, _Constant unsigned int, _Constant unsigned int)">;
 }
 
+// PACGA computes a generic authentication code without embedding it in a
+// pointer.  Keep this instruction-level builtin available on every AArch64
+// target with FEAT_PAuth, independently of the platform pointer-auth ABI.
+let Attributes = [NoThrow, Const], Features = "pauth" in {
+  def pacga : AArch64TargetBuiltin<
+      "uint64_t (uint64_t, uint64_t)">;
+}
+
 // FEAT_THE + FEAT_D128 read-check-write pair compare-and-swap.  Expose each
 // architectural ordering/check variant directly so generated C can preserve
 // the original instruction without an out-of-tree helper declaration.
