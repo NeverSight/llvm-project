@@ -77,6 +77,26 @@ bool SemaARM::BuiltinARMMemoryTaggingCall(unsigned BuiltinID,
     return SemaRef.BuiltinConstantArgRange(TheCall, 1, 0, 15);
   }
 
+  if (BuiltinID == AArch64::BI__builtin_arm_subg) {
+    if (SemaRef.checkArgCount(TheCall, 3))
+      return true;
+
+    Expr *Arg0 = TheCall->getArg(0);
+    ExprResult FirstArg = SemaRef.DefaultFunctionArrayLvalueConversion(Arg0);
+    if (FirstArg.isInvalid())
+      return true;
+    QualType FirstArgType = FirstArg.get()->getType();
+    if (!FirstArgType->isAnyPointerType())
+      return Diag(TheCall->getBeginLoc(), diag::err_memtag_arg_must_be_pointer)
+             << "first" << FirstArgType << Arg0->getSourceRange();
+    TheCall->setArg(0, FirstArg.get());
+    TheCall->setType(FirstArgType);
+
+    return SemaRef.BuiltinConstantArgRange(TheCall, 1, 0, 1008) ||
+           SemaRef.BuiltinConstantArgMultiple(TheCall, 1, 16) ||
+           SemaRef.BuiltinConstantArgRange(TheCall, 2, 0, 15);
+  }
+
   if (BuiltinID == AArch64::BI__builtin_arm_gmi) {
     if (SemaRef.checkArgCount(TheCall, 2))
       return true;
@@ -1167,6 +1187,7 @@ bool SemaARM::CheckAArch64BuiltinFunctionCall(const TargetInfo &TI,
   // Memory Tagging Extensions (MTE) Intrinsics
   if (BuiltinID == AArch64::BI__builtin_arm_irg ||
       BuiltinID == AArch64::BI__builtin_arm_addg ||
+      BuiltinID == AArch64::BI__builtin_arm_subg ||
       BuiltinID == AArch64::BI__builtin_arm_gmi ||
       BuiltinID == AArch64::BI__builtin_arm_ldg ||
       BuiltinID == AArch64::BI__builtin_arm_stg ||

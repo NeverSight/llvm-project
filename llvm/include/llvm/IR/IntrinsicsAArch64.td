@@ -918,6 +918,8 @@ def int_aarch64_irg   : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_ptr_ty, llvm_
     [IntrNoMem, IntrHasSideEffects]>;
 def int_aarch64_addg  : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_ptr_ty, llvm_i64_ty],
     [IntrNoMem]>;
+def int_aarch64_subg  : DefaultAttrsIntrinsic<[llvm_ptr_ty],
+    [llvm_ptr_ty, llvm_i64_ty, llvm_i64_ty], [IntrNoMem]>;
 def int_aarch64_gmi   : DefaultAttrsIntrinsic<[llvm_i64_ty], [llvm_ptr_ty, llvm_i64_ty],
     [IntrNoMem]>;
 def int_aarch64_ldg   : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_ptr_ty, llvm_ptr_ty],

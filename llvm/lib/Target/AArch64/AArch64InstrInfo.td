@@ -3126,6 +3126,10 @@ defm : STOPregister<"stsmin","LDSMIN">;// STSMINx
 defm : STOPregister<"stumax","LDUMAX">;// STUMAXx
 defm : STOPregister<"stumin","LDUMIN">;// STUMINx
 
+def subg_uimm6s16 : ImmLeaf<i64, [{
+  return Imm >= 0 && Imm < (64 * 16) && ((Imm % 16) == 0);
+}]>;
+
 // v8.5 Memory Tagging Extension
 let Predicates = [HasMTE] in {
 
@@ -3152,6 +3156,9 @@ def LDG : MemTagLoad<"ldg", "\t$Rt, [$Rn, $offset]">;
 
 def : Pat<(int_aarch64_addg (am_indexedu6s128 GPR64sp:$Rn, uimm6s16:$imm6), imm0_15:$imm4),
           (ADDG GPR64sp:$Rn, imm0_63:$imm6, imm0_15:$imm4)>;
+def : Pat<(int_aarch64_subg GPR64sp:$Rn,
+                              subg_uimm6s16:$imm6, imm0_15:$imm4),
+          (SUBG GPR64sp:$Rn, (SImmS16XForm imm:$imm6), imm0_15:$imm4)>;
 def : Pat<(int_aarch64_ldg GPR64:$Rt, (am_indexeds9s128 GPR64sp:$Rn,  simm9s16:$offset)),
           (LDG GPR64:$Rt, GPR64sp:$Rn,  simm9s16:$offset)>;
 

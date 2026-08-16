@@ -2011,6 +2011,9 @@ CIRGenFunction::emitAArch64BuiltinExpr(unsigned builtinID, const CallExpr *expr,
   case clang::AArch64::BI__builtin_arm_addg:
     mteIntrinsicID = Intrinsic::aarch64_addg;
     break;
+  case clang::AArch64::BI__builtin_arm_subg:
+    mteIntrinsicID = Intrinsic::aarch64_subg;
+    break;
   case clang::AArch64::BI__builtin_arm_gmi:
     mteIntrinsicID = Intrinsic::aarch64_gmi;
     break;

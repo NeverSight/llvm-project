@@ -5014,6 +5014,8 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
     MTEIntrinsicID = Intrinsic::aarch64_irg; break;
   case clang::AArch64::BI__builtin_arm_addg:
     MTEIntrinsicID = Intrinsic::aarch64_addg; break;
+  case clang::AArch64::BI__builtin_arm_subg:
+    MTEIntrinsicID = Intrinsic::aarch64_subg; break;
   case clang::AArch64::BI__builtin_arm_gmi:
     MTEIntrinsicID = Intrinsic::aarch64_gmi; break;
   case clang::AArch64::BI__builtin_arm_ldg:
@@ -5040,6 +5042,16 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
       TagOffset = Builder.CreateZExt(TagOffset, Int64Ty);
       return Builder.CreateCall(CGM.getIntrinsic(MTEIntrinsicID),
                                 {Pointer, TagOffset});
+    }
+    if (MTEIntrinsicID == Intrinsic::aarch64_subg) {
+      Value *Pointer = EmitScalarExpr(E->getArg(0));
+      Value *AddressOffset = EmitScalarExpr(E->getArg(1));
+      Value *TagOffset = EmitScalarExpr(E->getArg(2));
+
+      AddressOffset = Builder.CreateZExt(AddressOffset, Int64Ty);
+      TagOffset = Builder.CreateZExt(TagOffset, Int64Ty);
+      return Builder.CreateCall(CGM.getIntrinsic(MTEIntrinsicID),
+                                {Pointer, AddressOffset, TagOffset});
     }
     if (MTEIntrinsicID == Intrinsic::aarch64_gmi) {
       Value *Pointer = EmitScalarExpr(E->getArg(0));
