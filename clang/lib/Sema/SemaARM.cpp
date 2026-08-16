@@ -1115,10 +1115,10 @@ bool SemaARM::CheckARMBuiltinFunctionCall(const TargetInfo &TI,
 bool SemaARM::CheckAArch64BuiltinFunctionCall(const TargetInfo &TI,
                                               unsigned BuiltinID,
                                               CallExpr *TheCall) {
-  if (BuiltinID == AArch64::BI__neverd_a64_scvtf_fixed ||
-      BuiltinID == AArch64::BI__neverd_a64_ucvtf_fixed ||
-      BuiltinID == AArch64::BI__neverd_a64_fcvtzs_fixed ||
-      BuiltinID == AArch64::BI__neverd_a64_fcvtzu_fixed) {
+  if (BuiltinID == AArch64::BI__builtin_arm_scvtf_fixed ||
+      BuiltinID == AArch64::BI__builtin_arm_ucvtf_fixed ||
+      BuiltinID == AArch64::BI__builtin_arm_fcvtzs_fixed ||
+      BuiltinID == AArch64::BI__builtin_arm_fcvtzu_fixed) {
     if (SemaRef.BuiltinConstantArgRange(TheCall, 2, 0, 1))
       return true;
     if (TheCall->getArg(2)->isValueDependent())

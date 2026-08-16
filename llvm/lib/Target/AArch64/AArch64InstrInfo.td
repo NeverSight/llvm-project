@@ -5416,7 +5416,7 @@ defm UCVTF : IntegerToFP<0b00, 0b011, "ucvtf", any_uint_to_fp>;
 // The instruction operands are typed like the floating-point constants used
 // by the generic combines.  This identity transform lets an intrinsic's i32
 // immediate feed that operand without changing its value.
-def neverd_fixedpoint_xform : SDNodeXForm<timm, [{
+def gpr_fp16_fixedpoint_xform : SDNodeXForm<timm, [{
   (void)N;
   return V;
 }]>;
@@ -5426,50 +5426,50 @@ def neverd_fixedpoint_xform : SDNodeXForm<timm, [{
 // one-for-one to the architectural instruction after instruction selection.
 let Predicates = [HasFullFP16], hasSideEffects = 1,
     mayRaiseFPException = 1, Uses = [FPCR], Defs = [FPSR] in {
-def NEVERD_SCVTF_SWHri
+def GPR_FP16_SCVTF_SWHri
     : Pseudo<(outs FPR16:$Rd),
              (ins GPR32:$Rn, fixedpoint_recip_f16_i32:$scale), []>,
       PseudoInstExpansion<(SCVTFSWHri FPR16:$Rd, GPR32:$Rn,
                            fixedpoint_recip_f16_i32:$scale)>,
       Sched<[WriteFCvt]>;
-def NEVERD_SCVTF_SXHri
+def GPR_FP16_SCVTF_SXHri
     : Pseudo<(outs FPR16:$Rd),
              (ins GPR64:$Rn, fixedpoint_recip_f16_i64:$scale), []>,
       PseudoInstExpansion<(SCVTFSXHri FPR16:$Rd, GPR64:$Rn,
                            fixedpoint_recip_f16_i64:$scale)>,
       Sched<[WriteFCvt]>;
-def NEVERD_UCVTF_SWHri
+def GPR_FP16_UCVTF_SWHri
     : Pseudo<(outs FPR16:$Rd),
              (ins GPR32:$Rn, fixedpoint_recip_f16_i32:$scale), []>,
       PseudoInstExpansion<(UCVTFSWHri FPR16:$Rd, GPR32:$Rn,
                            fixedpoint_recip_f16_i32:$scale)>,
       Sched<[WriteFCvt]>;
-def NEVERD_UCVTF_SXHri
+def GPR_FP16_UCVTF_SXHri
     : Pseudo<(outs FPR16:$Rd),
              (ins GPR64:$Rn, fixedpoint_recip_f16_i64:$scale), []>,
       PseudoInstExpansion<(UCVTFSXHri FPR16:$Rd, GPR64:$Rn,
                            fixedpoint_recip_f16_i64:$scale)>,
       Sched<[WriteFCvt]>;
 
-def NEVERD_FCVTZS_SWHri
+def GPR_FP16_FCVTZS_SWHri
     : Pseudo<(outs GPR32:$Rd),
              (ins FPR16:$Rn, fixedpoint_f16_i32:$scale), []>,
       PseudoInstExpansion<(FCVTZSSWHri GPR32:$Rd, FPR16:$Rn,
                            fixedpoint_f16_i32:$scale)>,
       Sched<[WriteFCvt]>;
-def NEVERD_FCVTZS_SXHri
+def GPR_FP16_FCVTZS_SXHri
     : Pseudo<(outs GPR64:$Rd),
              (ins FPR16:$Rn, fixedpoint_f16_i64:$scale), []>,
       PseudoInstExpansion<(FCVTZSSXHri GPR64:$Rd, FPR16:$Rn,
                            fixedpoint_f16_i64:$scale)>,
       Sched<[WriteFCvt]>;
-def NEVERD_FCVTZU_SWHri
+def GPR_FP16_FCVTZU_SWHri
     : Pseudo<(outs GPR32:$Rd),
              (ins FPR16:$Rn, fixedpoint_f16_i32:$scale), []>,
       PseudoInstExpansion<(FCVTZUSWHri GPR32:$Rd, FPR16:$Rn,
                            fixedpoint_f16_i32:$scale)>,
       Sched<[WriteFCvt]>;
-def NEVERD_FCVTZU_SXHri
+def GPR_FP16_FCVTZU_SXHri
     : Pseudo<(outs GPR64:$Rd),
              (ins FPR16:$Rn, fixedpoint_f16_i64:$scale), []>,
       PseudoInstExpansion<(FCVTZUSXHri GPR64:$Rd, FPR16:$Rn,
@@ -5478,39 +5478,39 @@ def NEVERD_FCVTZU_SXHri
 }
 
 let Predicates = [HasFullFP16] in {
-def : Pat<(f16 (int_aarch64_neverd_scvtf_fixed
+def : Pat<(f16 (int_aarch64_scvtf_fixed
                     (i32 GPR32:$Rn), vecshiftR32:$scale)),
-          (NEVERD_SCVTF_SWHri GPR32:$Rn,
-              (neverd_fixedpoint_xform vecshiftR32:$scale))>;
-def : Pat<(f16 (int_aarch64_neverd_scvtf_fixed
+          (GPR_FP16_SCVTF_SWHri GPR32:$Rn,
+              (gpr_fp16_fixedpoint_xform vecshiftR32:$scale))>;
+def : Pat<(f16 (int_aarch64_scvtf_fixed
                     (i64 GPR64:$Rn), vecshiftR64:$scale)),
-          (NEVERD_SCVTF_SXHri GPR64:$Rn,
-              (neverd_fixedpoint_xform vecshiftR64:$scale))>;
-def : Pat<(f16 (int_aarch64_neverd_ucvtf_fixed
+          (GPR_FP16_SCVTF_SXHri GPR64:$Rn,
+              (gpr_fp16_fixedpoint_xform vecshiftR64:$scale))>;
+def : Pat<(f16 (int_aarch64_ucvtf_fixed
                     (i32 GPR32:$Rn), vecshiftR32:$scale)),
-          (NEVERD_UCVTF_SWHri GPR32:$Rn,
-              (neverd_fixedpoint_xform vecshiftR32:$scale))>;
-def : Pat<(f16 (int_aarch64_neverd_ucvtf_fixed
+          (GPR_FP16_UCVTF_SWHri GPR32:$Rn,
+              (gpr_fp16_fixedpoint_xform vecshiftR32:$scale))>;
+def : Pat<(f16 (int_aarch64_ucvtf_fixed
                     (i64 GPR64:$Rn), vecshiftR64:$scale)),
-          (NEVERD_UCVTF_SXHri GPR64:$Rn,
-              (neverd_fixedpoint_xform vecshiftR64:$scale))>;
+          (GPR_FP16_UCVTF_SXHri GPR64:$Rn,
+              (gpr_fp16_fixedpoint_xform vecshiftR64:$scale))>;
 
-def : Pat<(i32 (int_aarch64_neverd_fcvtzs_fixed
+def : Pat<(i32 (int_aarch64_fcvtzs_fixed
                     (f16 FPR16:$Rn), vecshiftR32:$scale)),
-          (NEVERD_FCVTZS_SWHri FPR16:$Rn,
-              (neverd_fixedpoint_xform vecshiftR32:$scale))>;
-def : Pat<(i64 (int_aarch64_neverd_fcvtzs_fixed
+          (GPR_FP16_FCVTZS_SWHri FPR16:$Rn,
+              (gpr_fp16_fixedpoint_xform vecshiftR32:$scale))>;
+def : Pat<(i64 (int_aarch64_fcvtzs_fixed
                     (f16 FPR16:$Rn), vecshiftR64:$scale)),
-          (NEVERD_FCVTZS_SXHri FPR16:$Rn,
-              (neverd_fixedpoint_xform vecshiftR64:$scale))>;
-def : Pat<(i32 (int_aarch64_neverd_fcvtzu_fixed
+          (GPR_FP16_FCVTZS_SXHri FPR16:$Rn,
+              (gpr_fp16_fixedpoint_xform vecshiftR64:$scale))>;
+def : Pat<(i32 (int_aarch64_fcvtzu_fixed
                     (f16 FPR16:$Rn), vecshiftR32:$scale)),
-          (NEVERD_FCVTZU_SWHri FPR16:$Rn,
-              (neverd_fixedpoint_xform vecshiftR32:$scale))>;
-def : Pat<(i64 (int_aarch64_neverd_fcvtzu_fixed
+          (GPR_FP16_FCVTZU_SWHri FPR16:$Rn,
+              (gpr_fp16_fixedpoint_xform vecshiftR32:$scale))>;
+def : Pat<(i64 (int_aarch64_fcvtzu_fixed
                     (f16 FPR16:$Rn), vecshiftR64:$scale)),
-          (NEVERD_FCVTZU_SXHri FPR16:$Rn,
-              (neverd_fixedpoint_xform vecshiftR64:$scale))>;
+          (GPR_FP16_FCVTZU_SXHri FPR16:$Rn,
+              (gpr_fp16_fixedpoint_xform vecshiftR64:$scale))>;
 }
 
 let Predicates = [HasFPRCVT] in {
