@@ -5000,6 +5000,19 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
         {Input, Modifier});
   }
 
+  if (BuiltinID == AArch64::BI__builtin_arm_wsp_write) {
+    Value *Input = EmitScalarExpr(E->getArg(0));
+    Builder.CreateCall(CGM.getIntrinsic(Intrinsic::aarch64_wsp_write), {Input});
+    return Builder.CreateZExt(Input, Int64Ty);
+  }
+
+  if (BuiltinID == AArch64::BI__builtin_arm_wsp_zero_extend) {
+    Value *Input = Builder.CreateCall(
+        CGM.getIntrinsic(Intrinsic::aarch64_wsp_read));
+    Builder.CreateCall(CGM.getIntrinsic(Intrinsic::aarch64_wsp_write), {Input});
+    return Builder.CreateZExt(Input, Int64Ty);
+  }
+
   // Memory Operations (MOPS)
   if (BuiltinID == AArch64::BI__builtin_arm_mops_memset_tag) {
     Value *Dst = EmitScalarExpr(E->getArg(0));

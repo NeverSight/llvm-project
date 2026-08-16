@@ -2731,6 +2731,25 @@ def : InstAlias<"ngcs $dst, $src", (SBCSXr GPR64:$dst, XZR, GPR64:$src)>;
 defm ADD : AddSub<0, "add", "sub", add>;
 defm SUB : AddSub<1, "sub", "add">;
 
+// Preserve explicit architectural WSP access across LLVM's normal stack-frame
+// reconstruction.  Fixed WSP operands are represented as implicit full-SP
+// uses/definitions on the pseudos and expanded after selection.
+let Uses = [SP] in
+def WSP_READ : Pseudo<(outs GPR32sp:$dst), (ins),
+                      [(set GPR32sp:$dst, (int_aarch64_wsp_read))]>,
+               PseudoInstExpansion<
+                   (ADDWri GPR32sp:$dst, WSP,
+                           (addsub_shifted_imm32 0, 0))>,
+               Sched<[WriteI]>;
+
+let Defs = [SP] in
+def WSP_WRITE : Pseudo<(outs), (ins GPR32sp:$src),
+                       [(int_aarch64_wsp_write GPR32sp:$src)]>,
+                PseudoInstExpansion<
+                    (ADDWri WSP, GPR32sp:$src,
+                            (addsub_shifted_imm32 0, 0))>,
+                Sched<[WriteI]>;
+
 def : InstAlias<"mov $dst, $src",
                 (ADDWri GPR32sponly:$dst, GPR32sp:$src,
                         (addsub_shifted_imm32 0, 0))>;

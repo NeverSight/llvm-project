@@ -29,6 +29,13 @@ let Attributes = [CustomTypeChecking] in {
 
 def clrex : AArch64Builtin<"void ()">;
 
+// Explicitly write the architectural 32-bit stack-pointer view.  This is not
+// a compiler frame adjustment: writing WSP clears SP[63:32].
+let Attributes = [NoThrow] in {
+  def wsp_write : AArch64TargetBuiltin<"uint64_t (uint32_t)">;
+  def wsp_zero_extend : AArch64TargetBuiltin<"uint64_t ()">;
+}
+
 // Scalar GPR <-> FP16 fixed-point conversions.  Values crossing the C boundary
 // are raw register bits.  The last constant selects W (0) or X (1), allowing
 // the same source-level builtin to preserve the architectural width.

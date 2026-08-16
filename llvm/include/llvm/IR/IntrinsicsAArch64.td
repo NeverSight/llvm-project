@@ -760,6 +760,10 @@ let TargetPrefix = "aarch64" in {
     : DefaultAttrsIntrinsic<[llvm_i64_ty, llvm_i1_ty], [], [IntrNoMem, IntrHasSideEffects]>;
   class FPMR_Set_Intrinsic
     : DefaultAttrsIntrinsic<[], [llvm_i64_ty], [IntrWriteMem, IntrInaccessibleMemOnly]>;
+  class WSP_Read_Intrinsic
+    : DefaultAttrsIntrinsic<[llvm_i32_ty], [], [IntrNoMem, IntrHasSideEffects]>;
+  class WSP_Write_Intrinsic
+    : DefaultAttrsIntrinsic<[], [llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
 }
 
 // FP environment registers.
@@ -768,6 +772,12 @@ def int_aarch64_set_fpcr : FPENV_Set_Intrinsic;
 def int_aarch64_get_fpsr : FPENV_Get_Intrinsic;
 def int_aarch64_set_fpsr : FPENV_Set_Intrinsic;
 def int_aarch64_set_fpmr : FPMR_Set_Intrinsic;
+
+// Read and write the 32-bit stack-pointer view.  The architectural write
+// clears the upper half of SP, unlike an ordinary compiler-managed frame
+// adjustment.
+def int_aarch64_wsp_read : WSP_Read_Intrinsic;
+def int_aarch64_wsp_write : WSP_Write_Intrinsic;
 
 // Armv8.5-A Random number generation intrinsics
 def int_aarch64_rndr : RNDR_Intrinsic;
