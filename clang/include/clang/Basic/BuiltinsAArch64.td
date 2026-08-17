@@ -29,6 +29,26 @@ let Attributes = [CustomTypeChecking] in {
 
 def clrex : AArch64Builtin<"void ()">;
 
+// Scalar FEAT_LSE read-modify-write operations.  Values cross the C boundary
+// as raw GPR bits; byte width and GCC memory order are constant operands so
+// decompiler output can preserve the exact architectural access.
+let Attributes = [NoThrow], Features = "lse" in {
+  def ldclr : AArch64TargetBuiltin<
+      "uint64_t (uint64_t, void *, _Constant unsigned int, _Constant unsigned int)">;
+  def ldeor : AArch64TargetBuiltin<
+      "uint64_t (uint64_t, void *, _Constant unsigned int, _Constant unsigned int)">;
+  def ldset : AArch64TargetBuiltin<
+      "uint64_t (uint64_t, void *, _Constant unsigned int, _Constant unsigned int)">;
+  def ldsmax : AArch64TargetBuiltin<
+      "uint64_t (uint64_t, void *, _Constant unsigned int, _Constant unsigned int)">;
+  def ldsmin : AArch64TargetBuiltin<
+      "uint64_t (uint64_t, void *, _Constant unsigned int, _Constant unsigned int)">;
+  def ldumax : AArch64TargetBuiltin<
+      "uint64_t (uint64_t, void *, _Constant unsigned int, _Constant unsigned int)">;
+  def ldumin : AArch64TargetBuiltin<
+      "uint64_t (uint64_t, void *, _Constant unsigned int, _Constant unsigned int)">;
+}
+
 // Explicitly write the architectural 32-bit stack-pointer view.  This is not
 // a compiler frame adjustment: writing WSP clears SP[63:32].
 let Attributes = [NoThrow] in {

@@ -1135,6 +1135,25 @@ bool SemaARM::CheckARMBuiltinFunctionCall(const TargetInfo &TI,
 bool SemaARM::CheckAArch64BuiltinFunctionCall(const TargetInfo &TI,
                                               unsigned BuiltinID,
                                               CallExpr *TheCall) {
+  if (BuiltinID == AArch64::BI__builtin_arm_ldclr ||
+      BuiltinID == AArch64::BI__builtin_arm_ldeor ||
+      BuiltinID == AArch64::BI__builtin_arm_ldset ||
+      BuiltinID == AArch64::BI__builtin_arm_ldsmax ||
+      BuiltinID == AArch64::BI__builtin_arm_ldsmin ||
+      BuiltinID == AArch64::BI__builtin_arm_ldumax ||
+      BuiltinID == AArch64::BI__builtin_arm_ldumin) {
+    llvm::APSInt Bytes;
+    if (SemaRef.BuiltinConstantArg(TheCall, 2, Bytes))
+      return true;
+    if (!llvm::is_contained({1u, 2u, 4u, 8u},
+                            static_cast<unsigned>(Bytes.getZExtValue()))) {
+      Expr *Arg = TheCall->getArg(2);
+      return Diag(Arg->getBeginLoc(), diag::err_argument_invalid_range)
+             << Bytes.getZExtValue() << "1, 2, 4" << 8 << Arg->getSourceRange();
+    }
+    return SemaRef.BuiltinConstantArgRange(TheCall, 3, 0, 5);
+  }
+
   if (BuiltinID == AArch64::BI__builtin_arm_scvtf_fixed ||
       BuiltinID == AArch64::BI__builtin_arm_ucvtf_fixed ||
       BuiltinID == AArch64::BI__builtin_arm_fcvtzs_fixed ||

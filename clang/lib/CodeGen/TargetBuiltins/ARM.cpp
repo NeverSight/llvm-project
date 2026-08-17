@@ -4506,6 +4506,64 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
   if (BuiltinID == Builtin::BI__builtin_cpu_supports)
     return EmitAArch64CpuSupports(E);
 
+  if (BuiltinID == clang::AArch64::BI__builtin_arm_ldclr ||
+      BuiltinID == clang::AArch64::BI__builtin_arm_ldeor ||
+      BuiltinID == clang::AArch64::BI__builtin_arm_ldset ||
+      BuiltinID == clang::AArch64::BI__builtin_arm_ldsmax ||
+      BuiltinID == clang::AArch64::BI__builtin_arm_ldsmin ||
+      BuiltinID == clang::AArch64::BI__builtin_arm_ldumax ||
+      BuiltinID == clang::AArch64::BI__builtin_arm_ldumin) {
+    const uint64_t Bytes =
+        E->getArg(2)->EvaluateKnownConstInt(getContext()).getZExtValue();
+    const uint64_t Order =
+        E->getArg(3)->EvaluateKnownConstInt(getContext()).getZExtValue();
+    llvm::AtomicOrdering Ordering;
+    switch (Order) {
+    case 0:
+      Ordering = llvm::AtomicOrdering::Monotonic;
+      break;
+    case 1:
+    case 2:
+      Ordering = llvm::AtomicOrdering::Acquire;
+      break;
+    case 3:
+      Ordering = llvm::AtomicOrdering::Release;
+      break;
+    case 4:
+      Ordering = llvm::AtomicOrdering::AcquireRelease;
+      break;
+    case 5:
+      Ordering = llvm::AtomicOrdering::SequentiallyConsistent;
+      break;
+    default:
+      llvm_unreachable("invalid scalar LSE memory order");
+    }
+
+    llvm::IntegerType *ValueTy =
+        llvm::IntegerType::get(getLLVMContext(), Bytes * 8);
+    llvm::Value *Value = EmitScalarExpr(E->getArg(0));
+    Value = Builder.CreateTruncOrBitCast(Value, ValueTy);
+    if (BuiltinID == clang::AArch64::BI__builtin_arm_ldclr)
+      Value = Builder.CreateNot(Value, "ldclr.mask");
+    llvm::Value *Pointer = EmitScalarExpr(E->getArg(1));
+    Address Dest(Pointer, ValueTy, CharUnits::fromQuantity(Bytes));
+    llvm::AtomicRMWInst::BinOp AtomicOp = llvm::AtomicRMWInst::And;
+    if (BuiltinID == clang::AArch64::BI__builtin_arm_ldeor)
+      AtomicOp = llvm::AtomicRMWInst::Xor;
+    else if (BuiltinID == clang::AArch64::BI__builtin_arm_ldset)
+      AtomicOp = llvm::AtomicRMWInst::Or;
+    else if (BuiltinID == clang::AArch64::BI__builtin_arm_ldsmax)
+      AtomicOp = llvm::AtomicRMWInst::Max;
+    else if (BuiltinID == clang::AArch64::BI__builtin_arm_ldsmin)
+      AtomicOp = llvm::AtomicRMWInst::Min;
+    else if (BuiltinID == clang::AArch64::BI__builtin_arm_ldumax)
+      AtomicOp = llvm::AtomicRMWInst::UMax;
+    else if (BuiltinID == clang::AArch64::BI__builtin_arm_ldumin)
+      AtomicOp = llvm::AtomicRMWInst::UMin;
+    llvm::Value *Old = Builder.CreateAtomicRMW(AtomicOp, Dest, Value, Ordering);
+    return Bytes == 8 ? Old : Builder.CreateZExt(Old, Int64Ty);
+  }
+
   if (BuiltinID == clang::AArch64::BI__builtin_arm_scvtf_fixed ||
       BuiltinID == clang::AArch64::BI__builtin_arm_ucvtf_fixed ||
       BuiltinID == clang::AArch64::BI__builtin_arm_fcvtzs_fixed ||
