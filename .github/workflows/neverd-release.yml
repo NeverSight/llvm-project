@@ -154,7 +154,6 @@ jobs:
             pkg: neverd-llvm-windows-x64
             archive: zip
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 240
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       HOMEBREW_NO_AUTO_UPDATE: '1'
