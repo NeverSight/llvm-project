@@ -140,7 +140,7 @@ public:
         DebugStrictDwarf(false), Hotpatch(false),
         PPCGenScalarMASSEntries(false), JMCInstrument(false),
         EnableCFIFixup(false), MisExpect(false), XCOFFReadOnlyPointers(false),
-        VerifyArgABICompliance(true) {}
+        VerifyArgABICompliance(true), EmitBinaryRewriteFinalImage(false) {}
 
   /// DisableFramePointerElim - This returns true if frame pointer elimination
   /// optimization should be disabled for the given machine function.
@@ -352,6 +352,12 @@ public:
   /// not done with internal tools like llc that run many tests that ignore
   /// (lack) these extensions.
   unsigned VerifyArgABICompliance : 1;
+
+  /// EmitBinaryRewriteFinalImage - The target is emitting fixed-address final
+  /// image bytes through the binary-rewrite backend, whose symbol resolver
+  /// authenticates every external relation. Target-specific lowering must not
+  /// infer this mode from forgeable IR metadata alone.
+  unsigned EmitBinaryRewriteFinalImage : 1;
 
   /// Name of the stack usage file (i.e., .su file) if user passes
   /// -fstack-usage. If empty, it can be implied that -fstack-usage is not

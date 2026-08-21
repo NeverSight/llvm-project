@@ -18,6 +18,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/CodeGenTargetMachineImpl.h"
+#include "llvm/IR/GlobalVariable.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/TargetParser/ARMTargetParser.h"
@@ -101,6 +102,20 @@ public:
   }
 
   bool isGVIndirectSymbol(const GlobalValue *GV) const {
+    // A final-image rewrite resolver can assign a synthetic, authenticated
+    // image symbol before encoding. Keeping that relation direct avoids a new
+    // Darwin non-lazy pointer slot that is absent from the input dyld rebase
+    // metadata. Restrict the escape hatch to the exact declaration shape that
+    // NeverD creates: ordinary symbols or non-Mach-O/non-PIC emission must
+    // retain Darwin's normal indirection policy even if metadata is forged.
+    if (Options.EmitBinaryRewriteFinalImage &&
+        getTargetTriple().isOSBinFormatMachO() && isPositionIndependent())
+      if (const auto *GVar = dyn_cast<GlobalVariable>(GV);
+          GVar && GVar->isDeclarationForLinker() && GVar->isDSOLocal() &&
+          GVar->getName().starts_with("__nd_data_") &&
+          GVar->getMetadata("neverd.final_image_direct_symbol"))
+        return false;
+
     if (!shouldAssumeDSOLocal(GV))
       return true;
 
