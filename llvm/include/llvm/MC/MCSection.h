@@ -49,6 +49,12 @@ class MCFragment {
   friend class MCSection;
 
 public:
+  enum class LEBEncoding : uint8_t {
+    ULEB128,
+    SLEB128,
+    WinEHCompressed,
+  };
+
   enum FragmentType : uint8_t {
     FT_Data,
     FT_Relaxable,
@@ -147,8 +153,7 @@ private:
       uint8_t Fill;
     } prefalign;
     struct {
-      // True if this is a sleb128, false if uleb128.
-      bool IsSigned;
+      LEBEncoding Encoding;
       // The value this fragment should contain.
       const MCExpr *Value;
     } leb;
@@ -326,11 +331,14 @@ public:
   }
 
   //== FT_LEB functions
-  void makeLEB(bool IsSigned, const MCExpr *Value) {
+  void makeLEB(LEBEncoding Encoding, const MCExpr *Value) {
     assert(Kind == FT_Data);
     Kind = MCFragment::FT_LEB;
-    u.leb.IsSigned = IsSigned;
+    u.leb.Encoding = Encoding;
     u.leb.Value = Value;
+  }
+  void makeLEB(bool IsSigned, const MCExpr *Value) {
+    makeLEB(IsSigned ? LEBEncoding::SLEB128 : LEBEncoding::ULEB128, Value);
   }
   const MCExpr &getLEBValue() const {
     assert(Kind == FT_LEB);
@@ -342,7 +350,11 @@ public:
   }
   bool isLEBSigned() const {
     assert(Kind == FT_LEB);
-    return u.leb.IsSigned;
+    return u.leb.Encoding == LEBEncoding::SLEB128;
+  }
+  bool isWinEHCompressed() const {
+    assert(Kind == FT_LEB);
+    return u.leb.Encoding == LEBEncoding::WinEHCompressed;
   }
 
   //== FT_DwarfFrame functions

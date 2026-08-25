@@ -25,6 +25,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/EHPersonalities.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/InitializePasses.h"
@@ -152,6 +153,49 @@ static int addUnwindMapEntry(WinEHFuncInfo &FuncInfo, int ToState,
   return FuncInfo.getLastStateNumber();
 }
 
+static std::optional<mc_rewrite::RewriteWinEHSemanticToken>
+getRewriteWinEHSemanticToken(
+    const Instruction &Pad, mc_rewrite::RewriteWinEHSemanticKind ExpectedKind) {
+  const MDNode *Metadata =
+      Pad.getMetadata(mc_rewrite::RewriteWinEHSemanticAttachment);
+  if (!Metadata || Metadata->getNumOperands() !=
+                       mc_rewrite::RewriteWinEHSemanticOperandCount)
+    return std::nullopt;
+
+  auto GetUInt = [&](unsigned Index,
+                     unsigned BitWidth) -> std::optional<uint64_t> {
+    const auto *ConstantMetadata =
+        dyn_cast_or_null<ConstantAsMetadata>(Metadata->getOperand(Index).get());
+    const auto *Value =
+        ConstantMetadata ? dyn_cast<ConstantInt>(ConstantMetadata->getValue())
+                         : nullptr;
+    if (!Value || Value->getBitWidth() != BitWidth)
+      return std::nullopt;
+    return Value->getZExtValue();
+  };
+
+  const std::optional<uint64_t> Version = GetUInt(0, 32);
+  const std::optional<uint64_t> Kind = GetUInt(1, 8);
+  const std::optional<uint64_t> Region = GetUInt(2, 32);
+  const std::optional<uint64_t> Clause = GetUInt(3, 32);
+  if (!Version || *Version != mc_rewrite::RewriteWinEHSemanticSchemaVersion ||
+      !Kind || *Kind != static_cast<uint8_t>(ExpectedKind) || !Region ||
+      !Clause)
+    return std::nullopt;
+
+  mc_rewrite::RewriteWinEHSemanticToken Token;
+  Token.Kind = ExpectedKind;
+  Token.Region = static_cast<uint32_t>(*Region);
+  Token.Clause = static_cast<uint32_t>(*Clause);
+  for (unsigned I = 0; I != Token.Digest.size(); ++I) {
+    const std::optional<uint64_t> Digest = GetUInt(4 + I, 64);
+    if (!Digest)
+      return std::nullopt;
+    Token.Digest[I] = *Digest;
+  }
+  return Token;
+}
+
 static void addTryBlockMapEntry(WinEHFuncInfo &FuncInfo, int TryLow,
                                 int TryHigh, int CatchHigh,
                                 ArrayRef<const CatchPadInst *> Handlers) {
@@ -174,6 +218,8 @@ static void addTryBlockMapEntry(WinEHFuncInfo &FuncInfo, int TryLow,
       HT.CatchObj.Alloca = AI;
     else
       HT.CatchObj.Alloca = nullptr;
+    HT.RewriteSemantic = getRewriteWinEHSemanticToken(
+        *CPI, mc_rewrite::RewriteWinEHSemanticKind::CxxCatch);
     TBME.HandlerArray.push_back(HT);
   }
   FuncInfo.TryBlockMap.push_back(TBME);
@@ -473,23 +519,27 @@ static void calculateCXXStateNumbers(WinEHFuncInfo &FuncInfo,
 }
 
 static int addSEHExcept(WinEHFuncInfo &FuncInfo, int ParentState,
-                        const Function *Filter, const BasicBlock *Handler) {
+                        const Function *Filter, const CatchPadInst *Handler) {
   SEHUnwindMapEntry Entry;
   Entry.ToState = ParentState;
   Entry.IsFinally = false;
   Entry.Filter = Filter;
-  Entry.Handler = Handler;
+  Entry.Handler = Handler->getParent();
+  Entry.RewriteSemantic = getRewriteWinEHSemanticToken(
+      *Handler, mc_rewrite::RewriteWinEHSemanticKind::SEHScope);
   FuncInfo.SEHUnwindMap.push_back(Entry);
   return FuncInfo.SEHUnwindMap.size() - 1;
 }
 
 static int addSEHFinally(WinEHFuncInfo &FuncInfo, int ParentState,
-                         const BasicBlock *Handler) {
+                         const CleanupPadInst *Handler) {
   SEHUnwindMapEntry Entry;
   Entry.ToState = ParentState;
   Entry.IsFinally = true;
   Entry.Filter = nullptr;
-  Entry.Handler = Handler;
+  Entry.Handler = Handler->getParent();
+  Entry.RewriteSemantic = getRewriteWinEHSemanticToken(
+      *Handler, mc_rewrite::RewriteWinEHSemanticKind::SEHScope);
   FuncInfo.SEHUnwindMap.push_back(Entry);
   return FuncInfo.SEHUnwindMap.size() - 1;
 }
@@ -513,22 +563,21 @@ static void calculateSEHStateNumbers(WinEHFuncInfo &FuncInfo,
            "SEH doesn't have multiple handlers per __try");
     const auto *CatchPad =
         cast<CatchPadInst>((*CatchSwitch->handler_begin())->getFirstNonPHIIt());
-    const BasicBlock *CatchPadBB = CatchPad->getParent();
     const Constant *FilterOrNull =
         cast<Constant>(CatchPad->getArgOperand(0)->stripPointerCasts());
     const Function *Filter = dyn_cast<Function>(FilterOrNull);
     assert((Filter || FilterOrNull->isNullValue()) &&
            "unexpected filter value");
-    int TryState = addSEHExcept(FuncInfo, ParentState, Filter, CatchPadBB);
+    int TryState = addSEHExcept(FuncInfo, ParentState, Filter, CatchPad);
 
     // Everything in the __try block uses TryState as its parent state.
     FuncInfo.EHPadStateMap[CatchSwitch] = TryState;
     FuncInfo.EHPadStateMap[CatchPad] = TryState;
     LLVM_DEBUG(dbgs() << "Assigning state #" << TryState << " to BB "
-                      << CatchPadBB->getName() << '\n');
+                      << CatchPad->getParent()->getName() << '\n');
     for (const BasicBlock *PredBlock : predecessors(BB))
-      if ((PredBlock = getEHPadFromPredecessor(PredBlock,
-                                               CatchSwitch->getParentPad())))
+      if ((PredBlock =
+               getEHPadFromPredecessor(PredBlock, CatchSwitch->getParentPad())))
         calculateSEHStateNumbers(FuncInfo, &*PredBlock->getFirstNonPHIIt(),
                                  TryState);
 
@@ -559,7 +608,7 @@ static void calculateSEHStateNumbers(WinEHFuncInfo &FuncInfo,
     if (!Inserted)
       return;
 
-    int CleanupState = addSEHFinally(FuncInfo, ParentState, BB);
+    int CleanupState = addSEHFinally(FuncInfo, ParentState, CleanupPad);
     It->second = CleanupState;
     LLVM_DEBUG(dbgs() << "Assigning state #" << CleanupState << " to BB "
                       << BB->getName() << '\n');

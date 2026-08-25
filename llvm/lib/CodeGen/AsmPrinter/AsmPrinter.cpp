@@ -66,6 +66,7 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/Config/config.h"
+#include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Comdat.h"
 #include "llvm/IR/Constant.h"
@@ -92,6 +93,7 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 #include "llvm/IR/ValueHandle.h"
+#include "llvm/MC/BinaryRewrite.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
@@ -1120,8 +1122,17 @@ void AsmPrinter::emitFunctionHeader() {
   if (OutContext.requiresRewriteFunctionProvenance()) {
     MCAssembler *Assembler = OutStreamer->getAssemblerPtr();
     assert(Assembler && "rewrite provenance requires an object streamer");
-    Assembler->registerRewriteSourceFunctionOwner(
-        F.getName(), CurrentFnSym, F.hasLocalLinkage());
+    if (F.hasFnAttribute(mc_rewrite::RewriteWinCxxCatchParentAttribute)) {
+      const Attribute Delegation =
+          F.getFnAttribute(mc_rewrite::RewriteWinCxxCatchParentAttribute);
+      Assembler->expectRewriteSourceFunctionOwner(
+          F.getName(),
+          mc_rewrite::RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet,
+          Delegation.getValueAsString());
+    } else {
+      Assembler->registerRewriteSourceFunctionOwner(F.getName(), CurrentFnSym,
+                                                    F.hasLocalLinkage());
+    }
   }
 
   // If the function had address-taken blocks that got deleted, then we have

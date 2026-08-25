@@ -15,6 +15,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
+#include "llvm/MC/BinaryRewrite.h"
 #include "llvm/MC/MCDwarf.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/Compiler.h"
@@ -53,6 +54,31 @@ struct MCRewriteFunctionRange {
   const MCSymbol *End = nullptr;
 };
 
+/// Compiler-authenticated private function owner derived from one ordinary IR
+/// function owner. This relation lets target-created Windows funclets own exact
+/// unwind ranges without publishing them as independent source definitions.
+struct MCRewriteDerivedFunctionOwner {
+  const MCSymbol *Owner = nullptr;
+  const MCSymbol *ParentOwner = nullptr;
+};
+
+/// Symbol-backed WinEH semantic row retained until final MC layout. The source
+/// token is opaque to MC; kind-specific symbol requirements are validated by
+/// the final-image writer before any record is published.
+struct MCRewriteWinEHSemanticRecord {
+  mc_rewrite::RewriteWinEHSemanticToken Token;
+  mc_rewrite::RewriteWinEHSemanticEncoding Encoding =
+      mc_rewrite::RewriteWinEHSemanticEncoding::SEH;
+  std::string SourceFunction;
+  const MCSymbol *Owner = nullptr;
+  const MCSymbol *Container = nullptr;
+  const MCSymbol *RecordBegin = nullptr;
+  const MCSymbol *RecordEnd = nullptr;
+  const MCSymbol *Begin = nullptr;
+  const MCSymbol *End = nullptr;
+  const MCSymbol *Handler = nullptr;
+};
+
 /// Exact rewrite-only association between one IR definition and the MC symbol
 /// selected by the target-independent AsmPrinter for that definition's entry.
 /// SourceFunction is the unmodified IR identity, not a guessed object spelling.
@@ -60,6 +86,12 @@ struct MCRewriteSourceFunctionOwner {
   std::string SourceFunction;
   const MCSymbol *Owner = nullptr;
   bool IsPrivate = false;
+  mc_rewrite::RewriteSourceFunctionOwnerKind Kind =
+      mc_rewrite::RewriteSourceFunctionOwnerKind::FunctionEntry;
+  std::string ParentSourceFunction;
+  /// Transient compiler-side evidence that a delegated source definition was
+  /// observed exactly once.  This is never serialized into RewriteResult.
+  bool WasExpected = false;
 };
 
 class MCAssembler {
@@ -110,7 +142,9 @@ private:
   // Keep rewrite-only state last so it does not perturb the offsets of the
   // ordinary assembler state used by format-specific object writers.
   SmallVector<MCRewriteSourceFunctionOwner, 0> RewriteSourceFunctionOwners;
+  SmallVector<MCRewriteDerivedFunctionOwner, 0> RewriteDerivedFunctionOwners;
   SmallVector<MCRewriteFunctionRange, 0> RewriteFunctionRanges;
+  SmallVector<MCRewriteWinEHSemanticRecord, 0> RewriteWinEHSemanticRecords;
 
   /// Evaluate a fixup to a relocatable expression and the value which should be
   /// placed into the fixup.
@@ -234,12 +268,44 @@ public:
 
   LLVM_ABI bool registerSection(MCSection &Section);
   LLVM_ABI bool registerSymbol(const MCSymbol &Symbol);
+  /// Preserve the original entry-owner ABI for existing rewrite producers.
   LLVM_ABI void registerRewriteSourceFunctionOwner(StringRef SourceFunction,
                                                    const MCSymbol *Owner,
                                                    bool IsPrivate);
+  LLVM_ABI void registerRewriteSourceFunctionOwner(
+      StringRef SourceFunction, const MCSymbol *Owner, bool IsPrivate,
+      mc_rewrite::RewriteSourceFunctionOwnerKind Kind,
+      StringRef ParentSourceFunction);
+  /// Require a later exact owner receipt for a delegated source function.  An
+  /// unresolved or multiply registered expectation remains malformed so final
+  /// rewrite emission fails closed.  Registration and expectation order do
+  /// not affect a valid result.
+  LLVM_ABI void expectRewriteSourceFunctionOwner(
+      StringRef SourceFunction, mc_rewrite::RewriteSourceFunctionOwnerKind Kind,
+      StringRef ParentSourceFunction);
+  /// Shared pre-layout gate used by FinalImageObjectWriter and unit tests.
+  LLVM_ABI bool validateRewriteSourceFunctionOwnerRegistrations() const;
   ArrayRef<MCRewriteSourceFunctionOwner>
   getRewriteSourceFunctionOwners() const {
     return RewriteSourceFunctionOwners;
+  }
+  LLVM_ABI void
+  registerRewriteDerivedFunctionOwner(const MCSymbol *Owner,
+                                      const MCSymbol *ParentOwner);
+  ArrayRef<MCRewriteDerivedFunctionOwner>
+  getRewriteDerivedFunctionOwners() const {
+    return RewriteDerivedFunctionOwners;
+  }
+  LLVM_ABI void registerRewriteWinEHSemanticRecord(
+      const mc_rewrite::RewriteWinEHSemanticToken &Token,
+      mc_rewrite::RewriteWinEHSemanticEncoding Encoding,
+      StringRef SourceFunction, const MCSymbol *Owner,
+      const MCSymbol *Container, const MCSymbol *RecordBegin,
+      const MCSymbol *RecordEnd, const MCSymbol *Begin, const MCSymbol *End,
+      const MCSymbol *Handler);
+  ArrayRef<MCRewriteWinEHSemanticRecord>
+  getRewriteWinEHSemanticRecords() const {
+    return RewriteWinEHSemanticRecords;
   }
   LLVM_ABI void registerRewriteFunctionRange(const MCSymbol *Owner,
                                              const MCSymbol *Begin);

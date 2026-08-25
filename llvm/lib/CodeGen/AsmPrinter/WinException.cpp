@@ -23,14 +23,69 @@
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGen/WinEHFuncInfo.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
+#include "llvm/MC/BinaryRewrite.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetMachine.h"
 using namespace llvm;
+
+static bool hasCXXFrameHandler4Personality(const Function &F) {
+  if (!F.hasPersonalityFn())
+    return false;
+  const auto *Personality =
+      dyn_cast<Function>(F.getPersonalityFn()->stripPointerCasts());
+  return Personality && Personality->getName() == "__CxxFrameHandler4";
+}
+
+static bool usesCXXFrameHandler4Writer(const Function &F) {
+  return hasCXXFrameHandler4Personality(F) &&
+         F.hasFnAttribute(mc_rewrite::RewriteWinCxxFH4Attribute);
+}
+
+static bool usesRewriteWinGSHandler(const Function &F) {
+  const Attribute GS =
+      F.getFnAttribute(mc_rewrite::RewriteWinGSHandlerAttribute);
+  return usesCXXFrameHandler4Writer(F) && GS.isStringAttribute() &&
+         GS.getValueAsString() == mc_rewrite::RewriteWinGSHandlerCxxFH4;
+}
+
+static bool isExactExternalWinEHDeclaration(const Function *F, StringRef Name) {
+  if (!F || F->getName() != Name || !F->isDeclaration() ||
+      !F->hasExternalLinkage() ||
+      F->getVisibility() != GlobalValue::DefaultVisibility ||
+      F->getCallingConv() != CallingConv::C || F->getAddressSpace() != 0)
+    return false;
+  const FunctionType *Type = F->getFunctionType();
+  return Type->getReturnType()->isIntegerTy(32) && Type->getNumParams() == 0 &&
+         Type->isVarArg();
+}
+
+static const Function *getRewriteWinGSHandler(const Function &F) {
+  if (!usesRewriteWinGSHandler(F))
+    return nullptr;
+  const Function *Handler = F.getParent()->getFunction("__GSHandlerCheck_EH4");
+  const auto *Base =
+      dyn_cast<Function>(F.getPersonalityFn()->stripPointerCasts());
+  if (!isExactExternalWinEHDeclaration(Base, "__CxxFrameHandler4") ||
+      !isExactExternalWinEHDeclaration(Handler, "__GSHandlerCheck_EH4") ||
+      Handler == &F || Handler == Base ||
+      Handler->getFunctionType() != Base->getFunctionType())
+    return nullptr;
+  return Handler;
+}
+
+static MCSymbol *getCXXFrameHandler4FuncInfoSymbol(AsmPrinter *Asm,
+                                                   const Function &F) {
+  StringRef LinkageName = GlobalValue::dropLLVMManglingEscape(F.getName());
+  return Asm->OutContext.getOrCreateSymbol(Twine("$cppxdata4$", LinkageName));
+}
 
 WinException::WinException(AsmPrinter *A) : EHStreamer(A) {
   // MSVC's EH tables are always composed of 32-bit words. All known
@@ -151,9 +206,22 @@ void WinException::endFunction(const MachineFunction *MF) {
       emitCSpecificHandlerTable(MF);
     else if (Per == EHPersonality::MSVC_X86SEH)
       emitExceptHandlerTable(MF);
-    else if (Per == EHPersonality::MSVC_CXX)
-      emitCXXFrameHandler3Table(MF);
-    else if (Per == EHPersonality::CoreCLR)
+    else if (Per == EHPersonality::MSVC_CXX) {
+      if (hasCXXFrameHandler4Personality(F)) {
+        if (!F.hasFnAttribute(mc_rewrite::RewriteWinCxxFH4Attribute))
+          Asm->OutContext.reportError(
+              SMLoc(), "__CxxFrameHandler4 requires the bounded rewrite "
+                       "writer attribute");
+        else
+          emitCXXFrameHandler4Table(MF);
+      } else if (F.hasFnAttribute(mc_rewrite::RewriteWinCxxFH4Attribute)) {
+        Asm->OutContext.reportError(SMLoc(),
+                                    "C++ EH4 writer attribute requires "
+                                    "__CxxFrameHandler4");
+      } else {
+        emitCXXFrameHandler3Table(MF);
+      }
+    } else if (Per == EHPersonality::CoreCLR)
       emitCLRExceptionTable(MF);
     else
       emitExceptionTable();
@@ -187,6 +255,75 @@ static MCSymbol *getMCSymbolForMBB(AsmPrinter *Asm,
                                FuncLinkageName + "@4HA");
 }
 
+/// Bind a rewrite-only delegated source function to the exact catch-funclet
+/// symbol referenced by the C++ handler table.  Any present but malformed
+/// attachment poisons source-owner provenance; an absent attachment leaves a
+/// separately registered source expectation unresolved and therefore also
+/// fails closed.
+static void registerRewriteWinCxxCatchOwner(AsmPrinter *Asm,
+                                            const MachineBasicBlock *MBB,
+                                            const MCSymbol *HandlerSym) {
+  if (!Asm->OutContext.requiresRewriteFunctionProvenance())
+    return;
+  MCAssembler *Assembler = Asm->OutStreamer->getAssemblerPtr();
+  assert(Assembler && "rewrite provenance requires an object streamer");
+
+  const BasicBlock *IRBlock = MBB ? MBB->getBasicBlock() : nullptr;
+  const auto *CatchPad =
+      IRBlock ? dyn_cast<CatchPadInst>(&*IRBlock->getFirstNonPHIIt()) : nullptr;
+  const MDNode *Attachment =
+      CatchPad ? CatchPad->getMetadata(
+                     mc_rewrite::RewriteWinCxxCatchSourceAttachment)
+               : nullptr;
+  if (!Attachment)
+    return;
+
+  auto Poison = [&]() {
+    Assembler->expectRewriteSourceFunctionOwner(
+        {}, mc_rewrite::RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet, {});
+  };
+  if (!HandlerSym || Attachment->getNumOperands() != 1) {
+    Poison();
+    return;
+  }
+  const auto *SourceName =
+      dyn_cast_or_null<MDString>(Attachment->getOperand(0).get());
+  if (!SourceName || SourceName->getString().empty()) {
+    Poison();
+    return;
+  }
+
+  const MachineFunction *MF = MBB->getParent();
+  const Function &Parent = MF->getFunction();
+  const Module *Mod = Parent.getParent();
+  const Function *Source = Mod->getFunction(SourceName->getString());
+  if (!Parent.hasPersonalityFn() ||
+      classifyEHPersonality(Parent.getPersonalityFn()->stripPointerCasts()) !=
+          EHPersonality::MSVC_CXX ||
+      !Source || Source == &Parent || Source->isDeclaration() ||
+      !Source->hasFnAttribute(mc_rewrite::RewriteWinCxxCatchParentAttribute)) {
+    Poison();
+    return;
+  }
+
+  const StringRef ParentName =
+      Source->getFnAttribute(mc_rewrite::RewriteWinCxxCatchParentAttribute)
+          .getValueAsString();
+  if (ParentName != Parent.getName() ||
+      !mc_rewrite::isValidRewriteSourceFunctionOwnerDescriptor(
+          Source->getName(), /*IsPrivate=*/true,
+          mc_rewrite::RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet,
+          ParentName)) {
+    Poison();
+    return;
+  }
+
+  Assembler->registerRewriteSourceFunctionOwner(
+      Source->getName(), HandlerSym, /*IsPrivate=*/true,
+      mc_rewrite::RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet,
+      Parent.getName());
+}
+
 void WinException::beginFunclet(const MachineBasicBlock &MBB,
                                 MCSymbol *Sym) {
   CurrentFuncletEntry = &MBB;
@@ -216,6 +353,12 @@ void WinException::beginFunclet(const MachineBasicBlock &MBB,
   if (shouldEmitMoves || shouldEmitPersonality) {
     CurrentFuncletTextSection = Asm->OutStreamer->getCurrentSectionOnly();
     Asm->OutStreamer->emitWinCFIStartProc(Sym);
+    if (Asm->OutContext.requiresRewriteFunctionProvenance() &&
+        Sym != Asm->CurrentFnSym) {
+      MCAssembler *Assembler = Asm->OutStreamer->getAssemblerPtr();
+      assert(Assembler && "rewrite provenance requires an object streamer");
+      Assembler->registerRewriteDerivedFunctionOwner(Sym, Asm->CurrentFnSym);
+    }
   }
 
   if (shouldEmitPersonality) {
@@ -225,15 +368,26 @@ void WinException::beginFunclet(const MachineBasicBlock &MBB,
     // Determine which personality routine we are using for this funclet.
     if (F.hasPersonalityFn())
       PerFn = dyn_cast<Function>(F.getPersonalityFn()->stripPointerCasts());
-    const MCSymbol *PersHandlerSym =
-        TLOF.getCFIPersonalitySymbol(PerFn, Asm->TM, MMI);
+    const Function *HandlerFn = PerFn;
+    if (usesRewriteWinGSHandler(F)) {
+      HandlerFn = getRewriteWinGSHandler(F);
+      if (!HandlerFn)
+        Asm->OutContext.reportError(
+            SMLoc(), "authenticated GS rewrite requires exact external C ABI "
+                     "declarations for __CxxFrameHandler4 and "
+                     "__GSHandlerCheck_EH4");
+    }
+    const MCSymbol *PersHandlerSym = TLOF.getCFIPersonalitySymbol(
+        HandlerFn ? HandlerFn : PerFn, Asm->TM, MMI);
 
     // Do not emit a .seh_handler directives for cleanup funclets.
     // FIXME: This means cleanup funclets cannot handle exceptions. Given that
     // Clang doesn't produce EH constructs inside cleanup funclets and LLVM's
     // inliner doesn't allow inlining them, this isn't a major problem in
     // practice.
-    if (!CurrentFuncletEntry->isCleanupFuncletEntry())
+    if (!CurrentFuncletEntry->isCleanupFuncletEntry() &&
+        !(usesCXXFrameHandler4Writer(F) &&
+          CurrentFuncletEntry->isEHFuncletEntry()))
       Asm->OutStreamer->emitWinEHHandler(PersHandlerSym, true, true);
   }
 }
@@ -259,17 +413,27 @@ void WinException::endFuncletImpl() {
     if (F.hasPersonalityFn())
       Per = classifyEHPersonality(F.getPersonalityFn()->stripPointerCasts());
 
+    const bool IsCXXFH4 = usesCXXFrameHandler4Writer(F);
     if (Per == EHPersonality::MSVC_CXX && shouldEmitPersonality &&
-        !CurrentFuncletEntry->isCleanupFuncletEntry()) {
+        !CurrentFuncletEntry->isCleanupFuncletEntry() &&
+        !(IsCXXFH4 && CurrentFuncletEntry->isEHFuncletEntry())) {
       // Emit an UNWIND_INFO struct describing the prologue.
       Asm->OutStreamer->emitWinEHHandlerData();
 
       // If this is a C++ catch funclet (or the parent function),
       // emit a reference to the LSDA for the parent function.
-      StringRef FuncLinkageName = GlobalValue::dropLLVMManglingEscape(F.getName());
-      MCSymbol *FuncInfoXData = Asm->OutContext.getOrCreateSymbol(
-          Twine("$cppxdata$", FuncLinkageName));
+      MCSymbol *FuncInfoXData =
+          IsCXXFH4 ? getCXXFrameHandler4FuncInfoSymbol(Asm, F)
+                   : Asm->OutContext.getOrCreateSymbol(Twine(
+                         "$cppxdata$",
+                         GlobalValue::dropLLVMManglingEscape(F.getName())));
       Asm->OutStreamer->emitValue(create32bitRef(FuncInfoXData), 4);
+      if (IsCXXFH4 && usesRewriteWinGSHandler(F))
+        emitRewriteWinGSHandlerData(MF);
+    } else if (IsCXXFH4 && CurrentFuncletEntry->isEHFuncletEntry()) {
+      // Ordinary EH4 catch and cleanup funclets carry unwind information only.
+      // Nested EH inside a catch requires a separately authenticated FuncInfo4
+      // and is outside the bounded writer subset below.
     } else if (Per == EHPersonality::MSVC_TableSEH && MF->hasEHFunclets() &&
                !CurrentFuncletEntry->isEHFuncletEntry()) {
       // Emit an UNWIND_INFO struct describing the prologue.
@@ -320,7 +484,13 @@ const MCExpr *WinException::create32bitRef(const GlobalValue *GV) {
 }
 
 const MCExpr *WinException::getLabel(const MCSymbol *Label) {
-  return MCSymbolRefExpr::create(Label, MCSymbolRefExpr::VK_COFF_IMGREL32,
+  const MCExpr *Reference =
+      MCSymbolRefExpr::create(Label, MCSymbolRefExpr::VK_COFF_IMGREL32,
+                              Asm->OutContext);
+  if (!isThumb)
+    return Reference;
+  return MCBinaryExpr::createAdd(Reference,
+                                 MCConstantExpr::create(1, Asm->OutContext),
                                  Asm->OutContext);
 }
 
@@ -361,6 +531,35 @@ int WinException::getFrameIndexOffset(int FrameIndex,
   assert(!Offset.getScalable() &&
          "Frame offsets with a scalable component are not supported");
   return Offset.getFixed();
+}
+
+void WinException::emitRewriteWinGSHandlerData(const MachineFunction *MF) {
+  const Function &F = MF->getFunction();
+  const MachineFrameInfo &MFI = MF->getFrameInfo();
+  const TargetFrameLowering &TFI = *MF->getSubtarget().getFrameLowering();
+  const WinEHFuncInfo *FuncInfo = MF->getWinEHFuncInfo();
+  if (!usesRewriteWinGSHandler(F) || !FuncInfo ||
+      !MFI.hasStackProtectorIndex()) {
+    Asm->OutContext.reportError(
+        SMLoc(), "authenticated GS rewrite has no compiler-owned cookie slot");
+    return;
+  }
+  if (MFI.hasVarSizedObjects() || MFI.getMaxAlign() > TFI.getStackAlign()) {
+    Asm->OutContext.reportError(
+        SMLoc(), "authenticated GS rewrite does not support a realigned "
+                 "machine frame");
+    return;
+  }
+
+  const int CookieOffset =
+      getFrameIndexOffset(MFI.getStackProtectorIndex(), *FuncInfo);
+  if (CookieOffset <= 0 ||
+      (static_cast<uint32_t>(CookieOffset) & uint32_t(7)) != 0) {
+    Asm->OutContext.reportError(
+        SMLoc(), "authenticated GS rewrite produced an invalid cookie offset");
+    return;
+  }
+  Asm->OutStreamer->emitInt32(static_cast<uint32_t>(CookieOffset) | 3u);
 }
 
 namespace {
@@ -610,7 +809,7 @@ void WinException::emitCSpecificHandlerTable(const MachineFunction *MF) {
     // Emit all the actions for the state we just transitioned out of
     // if it was not the null state
     if (LastEHState != -1)
-      emitSEHActionsForRange(FuncInfo, LastStartLabel,
+      emitSEHActionsForRange(MF, FuncInfo, TableBegin, LastStartLabel,
                              StateChange.PreviousEndLabel, LastEHState);
     LastStartLabel = StateChange.NewStartLabel;
     LastEHState = StateChange.NewState;
@@ -619,7 +818,9 @@ void WinException::emitCSpecificHandlerTable(const MachineFunction *MF) {
   OS.emitLabel(TableEnd);
 }
 
-void WinException::emitSEHActionsForRange(const WinEHFuncInfo &FuncInfo,
+void WinException::emitSEHActionsForRange(const MachineFunction *MF,
+                                          const WinEHFuncInfo &FuncInfo,
+                                          const MCSymbol *TableBegin,
                                           const MCSymbol *BeginLabel,
                                           const MCSymbol *EndLabel, int State) {
   auto &OS = *Asm->OutStreamer;
@@ -636,29 +837,252 @@ void WinException::emitSEHActionsForRange(const WinEHFuncInfo &FuncInfo,
     const MCExpr *FilterOrFinally;
     const MCExpr *ExceptOrNull;
     auto *Handler = cast<MachineBasicBlock *>(UME.Handler);
+    MCSymbol *HandlerSym =
+        UME.IsFinally ? getMCSymbolForMBB(Asm, Handler) : Handler->getSymbol();
     if (UME.IsFinally) {
-      FilterOrFinally = create32bitRef(getMCSymbolForMBB(Asm, Handler));
+      FilterOrFinally = getLabel(HandlerSym);
       ExceptOrNull = MCConstantExpr::create(0, Ctx);
     } else {
       // For an except, the filter can be 1 (catch-all) or a function
       // label.
       FilterOrFinally = UME.Filter ? create32bitRef(UME.Filter)
                                    : MCConstantExpr::create(1, Ctx);
-      ExceptOrNull = create32bitRef(Handler->getSymbol());
+      ExceptOrNull = getLabel(HandlerSym);
+    }
+
+    MCSymbol *RecordBegin = nullptr;
+    MCSymbol *RecordEnd = nullptr;
+    MCAssembler *RewriteAssembler = nullptr;
+    if (UME.RewriteSemantic &&
+        Asm->OutContext.requiresRewriteFunctionProvenance()) {
+      RewriteAssembler = Asm->OutStreamer->getAssemblerPtr();
+      assert(RewriteAssembler &&
+             "rewrite provenance requires an object streamer");
+      RecordBegin = Ctx.createTempSymbol("rewrite_seh_row_begin",
+                                         /*AlwaysAddSuffix=*/true);
+      RecordEnd = Ctx.createTempSymbol("rewrite_seh_row_end",
+                                       /*AlwaysAddSuffix=*/true);
+      OS.emitLabel(RecordBegin);
     }
 
     AddComment("LabelStart");
     OS.emitValue(getLabel(BeginLabel), 4);
     AddComment("LabelEnd");
     OS.emitValue(getLabel(EndLabel), 4);
-    AddComment(UME.IsFinally ? "FinallyFunclet" : UME.Filter ? "FilterFunction"
-                                                             : "CatchAll");
+    AddComment(UME.IsFinally ? "FinallyFunclet"
+               : UME.Filter  ? "FilterFunction"
+                             : "CatchAll");
     OS.emitValue(FilterOrFinally, 4);
     AddComment(UME.IsFinally ? "Null" : "ExceptionHandler");
     OS.emitValue(ExceptOrNull, 4);
 
+    if (RecordEnd) {
+      OS.emitLabel(RecordEnd);
+      RewriteAssembler->registerRewriteWinEHSemanticRecord(
+          *UME.RewriteSemantic, mc_rewrite::RewriteWinEHSemanticEncoding::SEH,
+          MF->getFunction().getName(), Asm->CurrentFnSym, TableBegin,
+          RecordBegin, RecordEnd, BeginLabel, EndLabel, HandlerSym);
+    }
+
     assert(UME.ToState < State && "states should decrease");
     State = UME.ToState;
+  }
+}
+
+static bool validateCXXFrameHandler4Subset(AsmPrinter *Asm,
+                                           const MachineFunction *MF,
+                                           const WinEHFuncInfo &FuncInfo) {
+  auto Reject = [&](const Twine &Reason) {
+    Asm->OutContext.reportError(
+        SMLoc(), Twine("unsupported bounded C++ EH4 graph: ") + Reason);
+    return false;
+  };
+
+  const Function &F = MF->getFunction();
+  if (Asm->TM.getTargetTriple().getArch() != Triple::x86_64 ||
+      !Asm->TM.getTargetTriple().isOSWindows())
+    return Reject("target is not Windows x86_64");
+  if (!usesCXXFrameHandler4Writer(F))
+    return Reject("personality or writer attribute does not match");
+  const auto *Personality =
+      dyn_cast<Function>(F.getPersonalityFn()->stripPointerCasts());
+  if (!isExactExternalWinEHDeclaration(Personality, "__CxxFrameHandler4"))
+    return Reject("personality declaration is not the exact external ABI");
+  if (F.getParent()->getModuleFlag("eh-asynch"))
+    return Reject("asynchronous exceptions are not supported");
+  const bool UsesGS = usesRewriteWinGSHandler(F);
+  const bool HasGSState = F.hasStackProtectorFnAttr() ||
+                          MF->getFrameInfo().hasStackProtectorIndex();
+  if (F.hasFnAttribute(mc_rewrite::RewriteWinGSHandlerAttribute) && !UsesGS)
+    return Reject("GS writer attribute is invalid");
+  if (UsesGS) {
+    if (!F.hasFnAttribute(Attribute::StackProtectReq) ||
+        !MF->getFrameInfo().hasStackProtectorIndex() ||
+        !getRewriteWinGSHandler(F))
+      return Reject("GS model has no authenticated compiler-owned cookie");
+  } else if (HasGSState) {
+    return Reject("GS-protected functions require an authenticated GS model");
+  }
+  if (!MF->getEHContTargets().empty())
+    return Reject("EH continuation tables are not supported");
+
+  unsigned CatchFunclets = 0;
+  for (const MachineBasicBlock &MBB : *MF) {
+    if (!MBB.isEHFuncletEntry())
+      continue;
+    if (MBB.isCleanupFuncletEntry())
+      return Reject("cleanup funclets are not supported");
+    ++CatchFunclets;
+  }
+  if (CatchFunclets != 1)
+    return Reject("the graph is not a single catch funclet");
+
+  if (FuncInfo.CxxUnwindMap.size() != 2)
+    return Reject("the unwind map is not the two-state catch-all form");
+  for (const CxxUnwindMapEntry &Entry : FuncInfo.CxxUnwindMap)
+    if (Entry.ToState != -1 || Entry.Cleanup)
+      return Reject("the unwind map contains an action or non-root parent");
+
+  if (FuncInfo.TryBlockMap.size() != 1)
+    return Reject("the graph is not a single try region");
+  const WinEHTryBlockMapEntry &Try = FuncInfo.TryBlockMap.front();
+  if (Try.TryLow != 0 || Try.TryHigh != 0 || Try.CatchHigh != 1)
+    return Reject("try-state numbering is not canonical");
+  if (Try.HandlerArray.size() != 1)
+    return Reject("the try region is not a single catch");
+
+  const WinEHHandlerType &Handler = Try.HandlerArray.front();
+  if (Handler.CatchObj.FrameIndex != INT_MAX)
+    return Reject("the handler requires a catch-object frame home");
+  if (!Handler.TypeDescriptor && Handler.Adjectives != 0x40)
+    return Reject("the untyped handler is not a canonical catch-all");
+  const auto *HandlerMBB =
+      dyn_cast_if_present<MachineBasicBlock *>(Handler.Handler);
+  if (!HandlerMBB || !HandlerMBB->isEHFuncletEntry() ||
+      HandlerMBB->isCleanupFuncletEntry())
+    return Reject("the catch handler has no exact funclet owner");
+  if (Asm->OutContext.requiresRewriteFunctionProvenance() &&
+      !Handler.RewriteSemantic)
+    return Reject("the catch handler lacks rewrite semantic provenance");
+  return true;
+}
+
+void WinException::emitCXXFrameHandler4Table(const MachineFunction *MF) {
+  const Function &F = MF->getFunction();
+  auto &OS = *Asm->OutStreamer;
+  MCContext &Context = Asm->OutContext;
+  const WinEHFuncInfo &FuncInfo = *MF->getWinEHFuncInfo();
+  if (!validateCXXFrameHandler4Subset(Asm, MF, FuncInfo))
+    return;
+
+  SmallVector<std::pair<const MCSymbol *, int>, 4> IPToStateTable;
+  computeCXXFrameHandler4IP2StateTable(MF, FuncInfo, IPToStateTable);
+  if (IPToStateTable.size() != 3 || IPToStateTable[0].second != -1 ||
+      IPToStateTable[1].second != 0 || IPToStateTable[2].second != -1) {
+    Context.reportError(
+        SMLoc(),
+        "unsupported bounded C++ EH4 graph: root IP map is not canonical");
+    return;
+  }
+
+  StringRef LinkageName = GlobalValue::dropLLVMManglingEscape(F.getName());
+  MCSymbol *FuncInfoXData = getCXXFrameHandler4FuncInfoSymbol(Asm, F);
+  MCSymbol *UnwindMapXData =
+      Context.getOrCreateSymbol(Twine("$stateUnwindMap4$", LinkageName));
+  MCSymbol *TryBlockMapXData =
+      Context.getOrCreateSymbol(Twine("$tryMap4$", LinkageName));
+  MCSymbol *HandlerMapXData =
+      Context.getOrCreateSymbol(Twine("$handlerMap4$0$", LinkageName));
+  MCSymbol *IPToStateXData =
+      Context.getOrCreateSymbol(Twine("$ip2state4$", LinkageName));
+
+  auto EmitCompressedConstant = [&](uint32_t Value) {
+    OS.emitWinEHCompressedValue(MCConstantExpr::create(Value, Context));
+  };
+
+  OS.emitValueToAlignment(Align(4));
+  OS.emitLabel(FuncInfoXData);
+  OS.emitInt8(0x38); // unwind map, try map, synchronous exceptions
+  OS.emitValue(create32bitRef(UnwindMapXData), 4);
+  OS.emitValue(create32bitRef(TryBlockMapXData), 4);
+  OS.emitValue(create32bitRef(IPToStateXData), 4);
+
+  OS.emitLabel(UnwindMapXData);
+  EmitCompressedConstant(FuncInfo.CxxUnwindMap.size());
+  SmallVector<MCSymbol *, 2> UnwindRows;
+  for (size_t I = 0; I != FuncInfo.CxxUnwindMap.size(); ++I)
+    UnwindRows.push_back(Context.createTempSymbol("cxx_fh4_unwind_row",
+                                                  /*AlwaysAddSuffix=*/true));
+  for (size_t I = 0; I != FuncInfo.CxxUnwindMap.size(); ++I) {
+    const CxxUnwindMapEntry &Entry = FuncInfo.CxxUnwindMap[I];
+    OS.emitLabel(UnwindRows[I]);
+    const MCExpr *BackDistance =
+        Entry.ToState == -1
+            ? getOffsetPlusOne(UnwindRows[I], UnwindRows.front())
+            : getOffset(UnwindRows[I], UnwindRows[Entry.ToState]);
+    const MCExpr *Encoded = MCBinaryExpr::createMul(
+        BackDistance, MCConstantExpr::create(4, Context), Context);
+    OS.emitWinEHCompressedValue(Encoded);
+  }
+
+  const WinEHTryBlockMapEntry &Try = FuncInfo.TryBlockMap.front();
+  MCSymbol *TryBlockRow = Context.createTempSymbol("rewrite_cxx_fh4_try_row",
+                                                   /*AlwaysAddSuffix=*/true);
+  OS.emitLabel(TryBlockMapXData);
+  EmitCompressedConstant(1);
+  OS.emitLabel(TryBlockRow);
+  EmitCompressedConstant(Try.TryLow);
+  EmitCompressedConstant(Try.TryHigh);
+  EmitCompressedConstant(Try.CatchHigh);
+  OS.emitValue(create32bitRef(HandlerMapXData), 4);
+
+  const WinEHHandlerType &Handler = Try.HandlerArray.front();
+  auto *HandlerMBB = cast<MachineBasicBlock *>(Handler.Handler);
+  MCSymbol *HandlerSym = getMCSymbolForMBB(Asm, HandlerMBB);
+  registerRewriteWinCxxCatchOwner(Asm, HandlerMBB, HandlerSym);
+
+  OS.emitLabel(HandlerMapXData);
+  EmitCompressedConstant(1);
+  MCSymbol *RecordBegin = nullptr;
+  MCSymbol *RecordEnd = nullptr;
+  MCAssembler *RewriteAssembler = nullptr;
+  if (Handler.RewriteSemantic && Context.requiresRewriteFunctionProvenance()) {
+    RewriteAssembler = OS.getAssemblerPtr();
+    assert(RewriteAssembler &&
+           "rewrite provenance requires an object streamer");
+    RecordBegin = Context.createTempSymbol("rewrite_cxx_fh4_catch_row_begin",
+                                           /*AlwaysAddSuffix=*/true);
+    RecordEnd = Context.createTempSymbol("rewrite_cxx_fh4_catch_row_end",
+                                         /*AlwaysAddSuffix=*/true);
+    OS.emitLabel(RecordBegin);
+  }
+  uint8_t HandlerHeader = 0;
+  if (Handler.Adjectives != 0)
+    HandlerHeader |= 0x01;
+  if (Handler.TypeDescriptor)
+    HandlerHeader |= 0x02;
+  OS.emitInt8(HandlerHeader); // no catch-object home or continuation
+  if (Handler.Adjectives != 0)
+    EmitCompressedConstant(Handler.Adjectives);
+  if (Handler.TypeDescriptor)
+    OS.emitValue(create32bitRef(Handler.TypeDescriptor), 4);
+  OS.emitValue(create32bitRef(HandlerSym), 4);
+  if (RecordEnd) {
+    OS.emitLabel(RecordEnd);
+    RewriteAssembler->registerRewriteWinEHSemanticRecord(
+        *Handler.RewriteSemantic,
+        mc_rewrite::RewriteWinEHSemanticEncoding::CxxFH4, F.getName(),
+        Asm->CurrentFnSym, TryBlockRow, RecordBegin, RecordEnd,
+        /*Begin=*/nullptr, /*End=*/nullptr, HandlerSym);
+  }
+
+  OS.emitLabel(IPToStateXData);
+  EmitCompressedConstant(IPToStateTable.size());
+  const MCSymbol *PreviousIP = Asm->getFunctionBegin();
+  for (const auto &[IP, State] : IPToStateTable) {
+    OS.emitWinEHCompressedValue(getOffset(IP, PreviousIP));
+    EmitCompressedConstant(static_cast<uint32_t>(State + 1));
+    PreviousIP = IP;
   }
 }
 
@@ -792,6 +1216,7 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
   if (TryBlockMapXData) {
     OS.emitLabel(TryBlockMapXData);
     SmallVector<MCSymbol *, 1> HandlerMaps;
+    SmallVector<MCSymbol *, 1> TryBlockRows;
     for (size_t I = 0, E = FuncInfo.TryBlockMap.size(); I != E; ++I) {
       const WinEHTryBlockMapEntry &TBME = FuncInfo.TryBlockMap[I];
 
@@ -803,6 +1228,14 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
                                                   .concat("$")
                                                   .concat(FuncLinkageName));
       HandlerMaps.push_back(HandlerMapXData);
+
+      MCSymbol *TryBlockRow = nullptr;
+      if (Asm->OutContext.requiresRewriteFunctionProvenance()) {
+        TryBlockRow = Asm->OutContext.createTempSymbol(
+            "rewrite_cxx_try_row", /*AlwaysAddSuffix=*/true);
+        OS.emitLabel(TryBlockRow);
+      }
+      TryBlockRows.push_back(TryBlockRow);
 
       // TBMEs should form intervals.
       assert(0 <= TBME.TryLow && "bad trymap interval");
@@ -837,6 +1270,7 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
     for (size_t I = 0, E = FuncInfo.TryBlockMap.size(); I != E; ++I) {
       const WinEHTryBlockMapEntry &TBME = FuncInfo.TryBlockMap[I];
       MCSymbol *HandlerMapXData = HandlerMaps[I];
+      MCSymbol *TryBlockRow = TryBlockRows[I];
       if (!HandlerMapXData)
         continue;
       // HandlerType {
@@ -860,8 +1294,24 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
           FrameAllocOffsetRef = MCConstantExpr::create(0, Asm->OutContext);
         }
 
-        MCSymbol *HandlerSym = getMCSymbolForMBB(
-            Asm, dyn_cast_if_present<MachineBasicBlock *>(HT.Handler));
+        auto *HandlerMBB = dyn_cast_if_present<MachineBasicBlock *>(HT.Handler);
+        MCSymbol *HandlerSym = getMCSymbolForMBB(Asm, HandlerMBB);
+        registerRewriteWinCxxCatchOwner(Asm, HandlerMBB, HandlerSym);
+
+        MCSymbol *RecordBegin = nullptr;
+        MCSymbol *RecordEnd = nullptr;
+        MCAssembler *RewriteAssembler = nullptr;
+        if (HT.RewriteSemantic &&
+            Asm->OutContext.requiresRewriteFunctionProvenance()) {
+          RewriteAssembler = Asm->OutStreamer->getAssemblerPtr();
+          assert(RewriteAssembler &&
+                 "rewrite provenance requires an object streamer");
+          RecordBegin = Asm->OutContext.createTempSymbol(
+              "rewrite_cxx_catch_row_begin", /*AlwaysAddSuffix=*/true);
+          RecordEnd = Asm->OutContext.createTempSymbol(
+              "rewrite_cxx_catch_row_end", /*AlwaysAddSuffix=*/true);
+          OS.emitLabel(RecordBegin);
+        }
 
         AddComment("Adjectives");
         OS.emitInt32(HT.Adjectives);
@@ -879,6 +1329,15 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
           AddComment("ParentFrameOffset");
           OS.emitInt32(ParentFrameOffset);
         }
+
+        if (RecordEnd) {
+          OS.emitLabel(RecordEnd);
+          RewriteAssembler->registerRewriteWinEHSemanticRecord(
+              *HT.RewriteSemantic,
+              mc_rewrite::RewriteWinEHSemanticEncoding::CxxFH3, F.getName(),
+              Asm->CurrentFnSym, TryBlockRow, RecordBegin, RecordEnd,
+              /*Begin=*/nullptr, /*End=*/nullptr, HandlerSym);
+        }
       }
     }
   }
@@ -895,6 +1354,28 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
       AddComment("ToState");
       OS.emitInt32(IPStatePair.second);
     }
+  }
+}
+
+void WinException::computeCXXFrameHandler4IP2StateTable(
+    const MachineFunction *MF, const WinEHFuncInfo &FuncInfo,
+    SmallVectorImpl<std::pair<const MCSymbol *, int>> &IPToStateTable) {
+  MachineFunction::const_iterator RootBegin = MF->begin();
+  MachineFunction::const_iterator RootEnd = RootBegin;
+  while (++RootEnd != MF->end())
+    if (RootEnd->isEHFuncletEntry())
+      break;
+
+  const MCSymbol *FunctionBegin = Asm->getFunctionBegin();
+  assert(FunctionBegin && "need local function start label");
+  IPToStateTable.push_back({FunctionBegin, NullState});
+  for (const InvokeStateChange &StateChange : InvokeStateChangeIterator::range(
+           FuncInfo, RootBegin, RootEnd, NullState)) {
+    const MCSymbol *ChangeLabel = StateChange.NewStartLabel;
+    if (!ChangeLabel)
+      ChangeLabel = StateChange.PreviousEndLabel;
+    assert(ChangeLabel && "root state change needs an exact label");
+    IPToStateTable.push_back({ChangeLabel, StateChange.NewState});
   }
 }
 

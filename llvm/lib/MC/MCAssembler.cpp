@@ -36,6 +36,7 @@
 #include <cassert>
 #include <cstdint>
 #include <limits>
+#include <set>
 #include <tuple>
 #include <utility>
 
@@ -96,7 +97,9 @@ void MCAssembler::reset() {
   Sections.clear();
   Symbols.clear();
   RewriteSourceFunctionOwners.clear();
+  RewriteDerivedFunctionOwners.clear();
   RewriteFunctionRanges.clear();
+  RewriteWinEHSemanticRecords.clear();
   ThumbFuncs.clear();
 
   // reset objects owned by us
@@ -111,8 +114,114 @@ void MCAssembler::reset() {
 void MCAssembler::registerRewriteSourceFunctionOwner(StringRef SourceFunction,
                                                      const MCSymbol *Owner,
                                                      bool IsPrivate) {
-  RewriteSourceFunctionOwners.push_back(
-      {SourceFunction.str(), Owner, IsPrivate});
+  registerRewriteSourceFunctionOwner(
+      SourceFunction, Owner, IsPrivate,
+      mc_rewrite::RewriteSourceFunctionOwnerKind::FunctionEntry, {});
+}
+
+void MCAssembler::registerRewriteSourceFunctionOwner(
+    StringRef SourceFunction, const MCSymbol *Owner, bool IsPrivate,
+    mc_rewrite::RewriteSourceFunctionOwnerKind Kind,
+    StringRef ParentSourceFunction) {
+  MCRewriteSourceFunctionOwner *Match = nullptr;
+  for (MCRewriteSourceFunctionOwner &Candidate : RewriteSourceFunctionOwners) {
+    if (Candidate.SourceFunction != SourceFunction)
+      continue;
+    if (Match) {
+      Match = nullptr;
+      break;
+    }
+    Match = &Candidate;
+  }
+  if (Match && Match->WasExpected && !Match->Owner && Match->Kind == Kind &&
+      Match->ParentSourceFunction == ParentSourceFunction) {
+    Match->Owner = Owner;
+    Match->IsPrivate = IsPrivate;
+    return;
+  }
+
+  RewriteSourceFunctionOwners.push_back({SourceFunction.str(), Owner, IsPrivate,
+                                         Kind, ParentSourceFunction.str(),
+                                         /*WasExpected=*/false});
+}
+
+void MCAssembler::expectRewriteSourceFunctionOwner(
+    StringRef SourceFunction, mc_rewrite::RewriteSourceFunctionOwnerKind Kind,
+    StringRef ParentSourceFunction) {
+  MCRewriteSourceFunctionOwner *Match = nullptr;
+  for (MCRewriteSourceFunctionOwner &Candidate : RewriteSourceFunctionOwners) {
+    if (Candidate.SourceFunction != SourceFunction)
+      continue;
+    if (Match) {
+      Match = nullptr;
+      break;
+    }
+    Match = &Candidate;
+  }
+  if (Match && !Match->WasExpected && Match->Owner && Match->Kind == Kind &&
+      Match->ParentSourceFunction == ParentSourceFunction) {
+    Match->WasExpected = true;
+    return;
+  }
+
+  RewriteSourceFunctionOwners.push_back({SourceFunction.str(), nullptr, false,
+                                         Kind, ParentSourceFunction.str(),
+                                         /*WasExpected=*/true});
+}
+
+bool MCAssembler::validateRewriteSourceFunctionOwnerRegistrations() const {
+  std::set<std::string> SeenSources;
+  SmallPtrSet<const MCSymbol *, 8> SeenOwners;
+  for (const MCRewriteSourceFunctionOwner &Owner :
+       RewriteSourceFunctionOwners) {
+    const bool ExpectationStateIsValid =
+        Owner.Kind == mc_rewrite::RewriteSourceFunctionOwnerKind::FunctionEntry
+            ? !Owner.WasExpected
+            : Owner.Kind == mc_rewrite::RewriteSourceFunctionOwnerKind::
+                                WinCxxCatchFunclet &&
+                  Owner.WasExpected;
+    if (!ExpectationStateIsValid || !Owner.Owner ||
+        Owner.Owner->getName().empty() ||
+        !mc_rewrite::isValidRewriteSourceFunctionOwnerDescriptor(
+            Owner.SourceFunction, Owner.IsPrivate, Owner.Kind,
+            Owner.ParentSourceFunction) ||
+        !SeenSources.insert(Owner.SourceFunction).second ||
+        !SeenOwners.insert(Owner.Owner).second)
+      return false;
+  }
+
+  for (const MCRewriteSourceFunctionOwner &Owner :
+       RewriteSourceFunctionOwners) {
+    if (Owner.Kind !=
+        mc_rewrite::RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet)
+      continue;
+    const auto Parent = llvm::find_if(
+        RewriteSourceFunctionOwners,
+        [&](const MCRewriteSourceFunctionOwner &Candidate) {
+          return Candidate.SourceFunction == Owner.ParentSourceFunction;
+        });
+    if (Parent == RewriteSourceFunctionOwners.end() ||
+        Parent->Kind !=
+            mc_rewrite::RewriteSourceFunctionOwnerKind::FunctionEntry)
+      return false;
+  }
+  return true;
+}
+
+void MCAssembler::registerRewriteDerivedFunctionOwner(
+    const MCSymbol *Owner, const MCSymbol *ParentOwner) {
+  RewriteDerivedFunctionOwners.push_back({Owner, ParentOwner});
+}
+
+void MCAssembler::registerRewriteWinEHSemanticRecord(
+    const mc_rewrite::RewriteWinEHSemanticToken &Token,
+    mc_rewrite::RewriteWinEHSemanticEncoding Encoding, StringRef SourceFunction,
+    const MCSymbol *Owner, const MCSymbol *Container,
+    const MCSymbol *RecordBegin, const MCSymbol *RecordEnd,
+    const MCSymbol *Begin, const MCSymbol *End, const MCSymbol *Handler) {
+  RewriteWinEHSemanticRecords.push_back({Token, Encoding, SourceFunction.str(),
+                                         Owner, Container, RecordBegin,
+                                         RecordEnd, Begin, End, Handler});
 }
 
 void MCAssembler::registerRewriteFunctionRange(const MCSymbol *Owner,
@@ -932,6 +1041,41 @@ void MCAssembler::relaxInstruction(MCFragment &F) {
 }
 
 void MCAssembler::relaxLEB(MCFragment &F) {
+  if (F.isWinEHCompressed()) {
+    int64_t Value = 0;
+    if (!F.getLEBValue().evaluateAsAbsolute(Value, *this) || Value < 0 ||
+        uint64_t(Value) > UINT32_MAX) {
+      reportError(F.getLEBValue().getLoc(),
+                  "Windows EH compressed expression is not an absolute "
+                  "uint32 value");
+      F.setLEBValue(MCConstantExpr::create(0, Context));
+      Value = 0;
+    }
+
+    const uint32_t EncodedValue = static_cast<uint32_t>(Value);
+    char Data[5];
+    unsigned Size = 0;
+    auto EncodeLittleEndian = [&](uint32_t Word, unsigned Width) {
+      for (unsigned I = 0; I != Width; ++I)
+        Data[Size++] = static_cast<char>(Word >> (I * 8));
+    };
+    if (EncodedValue < (1u << 7))
+      EncodeLittleEndian(EncodedValue << 1, 1);
+    else if (EncodedValue < (1u << 14))
+      EncodeLittleEndian((EncodedValue << 2) | 1u, 2);
+    else if (EncodedValue < (1u << 21))
+      EncodeLittleEndian((EncodedValue << 3) | 3u, 3);
+    else if (EncodedValue < (1u << 28))
+      EncodeLittleEndian((EncodedValue << 4) | 7u, 4);
+    else {
+      Data[Size++] = 0x0f;
+      EncodeLittleEndian(EncodedValue, 4);
+    }
+    F.setVarContents({Data, Size});
+    F.clearVarFixups();
+    return;
+  }
+
   unsigned PadTo = F.getVarSize();
   int64_t Value;
   F.clearVarFixups();

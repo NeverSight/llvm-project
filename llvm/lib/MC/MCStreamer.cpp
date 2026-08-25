@@ -816,6 +816,11 @@ void MCStreamer::emitWinCFIStartProc(const MCSymbol *Symbol, SMLoc Loc) {
   CurrentWinFrameInfo = WinFrameInfos.back().get();
   CurrentWinFrameInfo->TextSection = getCurrentSectionOnly();
   CurrentWinFrameInfo->FunctionLoc = Loc;
+  if (Context.requiresRewriteFunctionProvenance()) {
+    MCAssembler *Assembler = getAssemblerPtr();
+    assert(Assembler && "rewrite provenance requires an object streamer");
+    Assembler->registerRewriteFunctionRange(Symbol, StartProc);
+  }
 }
 
 void MCStreamer::emitWinCFIEndProc(SMLoc Loc) {
@@ -826,6 +831,11 @@ void MCStreamer::emitWinCFIEndProc(SMLoc Loc) {
 
   MCSymbol *Label = emitCFILabel();
   CurFrame->End = Label;
+  if (Context.requiresRewriteFunctionProvenance()) {
+    MCAssembler *Assembler = getAssemblerPtr();
+    assert(Assembler && "rewrite provenance requires an object streamer");
+    Assembler->completeRewriteFunctionRange(CurFrame->Begin, CurFrame->End);
+  }
   const MCSymbol **FuncletOrFuncEndPtr =
       CurFrame->ChainedParent ? &CurFrame->ChainedParent->FuncletOrFuncEnd
                               : &CurFrame->FuncletOrFuncEnd;
@@ -873,6 +883,12 @@ void MCStreamer::emitWinCFISplitChained(SMLoc Loc) {
 
   // Complete the current frame before starting a new, chained one.
   CurFrame->End = Label;
+  if (Context.requiresRewriteFunctionProvenance()) {
+    MCAssembler *Assembler = getAssemblerPtr();
+    assert(Assembler && "rewrite provenance requires an object streamer");
+    Assembler->completeRewriteFunctionRange(CurFrame->Begin, CurFrame->End);
+    Assembler->registerRewriteFunctionRange(CurFrame->Function, Label);
+  }
 
   // All chained frames point to the same parent.
   WinEH::FrameInfo *ChainedParent =
@@ -1422,6 +1438,10 @@ void MCStreamer::emitValueImpl(const MCExpr *Value, unsigned Size, SMLoc Loc) {
 }
 void MCStreamer::emitULEB128Value(const MCExpr *Value) {}
 void MCStreamer::emitSLEB128Value(const MCExpr *Value) {}
+void MCStreamer::emitWinEHCompressedValue(const MCExpr *Value) {
+  Context.reportError(Value->getLoc(),
+                      "Windows EH compression is unsupported by this streamer");
+}
 void MCStreamer::emitFill(const MCExpr &NumBytes, uint64_t Value, SMLoc Loc) {}
 void MCStreamer::emitFill(const MCExpr &NumValues, int64_t Size, int64_t Expr,
                           SMLoc Loc) {}

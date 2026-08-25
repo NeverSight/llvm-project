@@ -16,7 +16,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "FinalImageObjectWriter.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/BinaryFormat/COFF.h"
@@ -52,6 +54,21 @@ struct RewriteSectionTraits {
       llvm::mc_rewrite::RewriteSectionKind::Other;
   bool IsAllocated = true;
 };
+
+bool isValidCxxSemanticRecordSize(
+    llvm::mc_rewrite::RewriteWinEHSemanticEncoding Encoding,
+    uint64_t RecordSize) {
+  using EncodingKind = llvm::mc_rewrite::RewriteWinEHSemanticEncoding;
+  if (Encoding == EncodingKind::CxxFH3)
+    return RecordSize == 16 || RecordSize == 20;
+  if (Encoding != EncodingKind::CxxFH4)
+    return false;
+
+  // The bounded EH4 writer emits either a six-byte catch-all row, or a typed
+  // row with no catch-object home and no continuation.  A typed row is one
+  // header byte, an optional canonical 1--5 byte adjective, and two RVA32s.
+  return RecordSize == 6 || (RecordSize >= 9 && RecordSize <= 14);
+}
 
 RewriteSectionTraits classifySection(const MCAssembler &Asm,
                                      const MCSection &Sec) {
@@ -166,6 +183,36 @@ bool checkedAdd(uint64_t Left, uint64_t Right, uint64_t &Result) {
   return true;
 }
 
+bool validateWinCxxCatchOwnerRanges(
+    ArrayRef<llvm::mc_rewrite::RewriteSourceFunctionOwner> SourceOwners,
+    ArrayRef<llvm::mc_rewrite::RewriteFunctionRange> FunctionRanges) {
+  using OwnerKind = llvm::mc_rewrite::RewriteSourceFunctionOwnerKind;
+  for (const llvm::mc_rewrite::RewriteSourceFunctionOwner &Owner :
+       SourceOwners) {
+    if (Owner.Kind != OwnerKind::WinCxxCatchFunclet)
+      continue;
+    const auto Parent = llvm::find_if(
+        SourceOwners,
+        [&](const llvm::mc_rewrite::RewriteSourceFunctionOwner &Candidate) {
+          return Candidate.SourceFunction == Owner.ParentSourceFunction;
+        });
+    if (Parent == SourceOwners.end() ||
+        Parent->Kind != OwnerKind::FunctionEntry ||
+        !llvm::any_of(
+            FunctionRanges,
+            [&](const llvm::mc_rewrite::RewriteFunctionRange &Range) {
+              return Range.OwnerSymbol == Owner.OwnerSymbol &&
+                     Range.OwnerVA == Owner.OwnerVA &&
+                     Range.BeginVA == Owner.OwnerVA &&
+                     Owner.OwnerVA < Range.EndVA &&
+                     Range.ParentOwnerSymbol == Parent->OwnerSymbol &&
+                     Range.ParentOwnerVA == Parent->OwnerVA;
+            }))
+      return false;
+  }
+  return true;
+}
+
 } // namespace
 
 bool llvm::mc_rewrite::validateRewriteFunctionRanges(
@@ -173,18 +220,46 @@ bool llvm::mc_rewrite::validateRewriteFunctionRanges(
     const std::map<std::string, uint64_t> &FunctionOwnerAddrs,
     bool ValidateGlobalOverlap) {
   DenseSet<uint64_t> SeenIds;
+  std::map<std::string, std::pair<std::string, uint64_t>> OwnerParents;
   std::vector<const RewriteFunctionRange *> ByAddress;
   if (ValidateGlobalOverlap)
     ByAddress.reserve(Ranges.size());
   for (const RewriteFunctionRange &Range : Ranges) {
     const auto Owner = FunctionOwnerAddrs.find(Range.OwnerSymbol);
+    const bool HasParent = !Range.ParentOwnerSymbol.empty();
+    const auto Parent = HasParent
+                            ? FunctionOwnerAddrs.find(Range.ParentOwnerSymbol)
+                            : FunctionOwnerAddrs.end();
     if (Range.Id == 0 || !SeenIds.insert(Range.Id).second ||
         Range.OwnerSymbol.empty() || Range.BeginSymbol.empty() ||
         Range.EndSymbol.empty() || Owner == FunctionOwnerAddrs.end() ||
-        Owner->second != Range.OwnerVA || Range.BeginVA >= Range.EndVA)
+        Owner->second != Range.OwnerVA || Range.BeginVA >= Range.EndVA ||
+        (!HasParent && Range.ParentOwnerVA != 0) ||
+        (HasParent && (Range.ParentOwnerSymbol == Range.OwnerSymbol ||
+                       Parent == FunctionOwnerAddrs.end() ||
+                       Parent->second != Range.ParentOwnerVA)))
+      return false;
+    const std::pair<std::string, uint64_t> ParentIdentity{
+        Range.ParentOwnerSymbol, Range.ParentOwnerVA};
+    const auto [ParentIt, ParentInserted] =
+        OwnerParents.try_emplace(Range.OwnerSymbol, ParentIdentity);
+    if (!ParentInserted && ParentIt->second != ParentIdentity)
       return false;
     if (ValidateGlobalOverlap)
       ByAddress.push_back(&Range);
+  }
+
+  // A derived owner always names an ordinary, direct owner which has its own
+  // authenticated range. This rules out cycles, derived-parent chains, and
+  // per-fragment parent changes for one physical owner.
+  for (const auto &[Owner, Parent] : OwnerParents) {
+    (void)Owner;
+    if (Parent.first.empty())
+      continue;
+    const auto DirectParent = OwnerParents.find(Parent.first);
+    if (DirectParent == OwnerParents.end() ||
+        !DirectParent->second.first.empty())
+      return false;
   }
 
   if (!ValidateGlobalOverlap)
@@ -204,14 +279,203 @@ bool llvm::mc_rewrite::validateRewriteFunctionRanges(
   return true;
 }
 
+bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
+    ArrayRef<RewriteWinEHSemanticRecord> Records,
+    ArrayRef<RewriteSourceFunctionOwner> SourceOwners,
+    ArrayRef<RewriteFunctionRange> FunctionRanges,
+    const std::map<std::string, uint64_t> &FunctionOwnerAddrs,
+    bool ValidateGlobalFunctionRangeOverlap) {
+  if (!validateRewriteSourceFunctionOwners(SourceOwners) ||
+      !validateRewriteFunctionRanges(FunctionRanges, FunctionOwnerAddrs,
+                                     ValidateGlobalFunctionRangeOverlap) ||
+      !validateWinCxxCatchOwnerRanges(SourceOwners, FunctionRanges))
+    return false;
+
+  auto findSourceOwner =
+      [&](StringRef SourceFunction) -> const RewriteSourceFunctionOwner * {
+    const auto It = llvm::find_if(
+        SourceOwners, [&](const RewriteSourceFunctionOwner &Owner) {
+          return Owner.SourceFunction == SourceFunction;
+        });
+    return It == SourceOwners.end() ? nullptr : &*It;
+  };
+  auto rangeBelongsToRoot = [](const RewriteFunctionRange &Range,
+                               StringRef RootOwner) {
+    return Range.OwnerSymbol == RootOwner ||
+           Range.ParentOwnerSymbol == RootOwner;
+  };
+  auto containsPoint = [](const RewriteFunctionRange &Range, uint64_t VA) {
+    return Range.BeginVA <= VA && VA < Range.EndVA;
+  };
+  auto findOwnerBySymbol =
+      [&](StringRef OwnerSymbol) -> const RewriteSourceFunctionOwner * {
+    const auto It = llvm::find_if(
+        SourceOwners, [&](const RewriteSourceFunctionOwner &Owner) {
+          return Owner.OwnerSymbol == OwnerSymbol;
+        });
+    return It == SourceOwners.end() ? nullptr : &*It;
+  };
+
+  std::set<std::pair<uint64_t, uint64_t>> RecordIntervals;
+  std::set<std::array<uint64_t, 7>> CxxCatchTokens;
+  std::map<std::string, uint64_t> ContainerAddrs;
+  std::map<std::pair<std::string, std::string>, uint32_t> CxxContainerRegions;
+  for (const RewriteWinEHSemanticRecord &Record : Records) {
+    if (Record.SourceFunction.empty() || Record.OwnerSymbol.empty() ||
+        Record.ContainerSymbol.empty() || Record.HandlerSymbol.empty() ||
+        Record.ContainerVA > Record.RecordVA || Record.RecordSize == 0 ||
+        Record.RecordVA >
+            std::numeric_limits<uint64_t>::max() - Record.RecordSize ||
+        llvm::all_of(Record.Token.Digest,
+                     [](uint64_t Word) { return Word == 0; }))
+      return false;
+
+    const auto [ContainerIt, ContainerInserted] =
+        ContainerAddrs.try_emplace(Record.ContainerSymbol, Record.ContainerVA);
+    if (!ContainerInserted && ContainerIt->second != Record.ContainerVA)
+      return false;
+
+    const RewriteSourceFunctionOwner *SourceOwner =
+        findSourceOwner(Record.SourceFunction);
+    if (!SourceOwner ||
+        SourceOwner->Kind != RewriteSourceFunctionOwnerKind::FunctionEntry ||
+        SourceOwner->OwnerSymbol != Record.OwnerSymbol ||
+        SourceOwner->OwnerVA != Record.OwnerVA)
+      return false;
+
+    const bool HasDirectOwnerRange =
+        llvm::any_of(FunctionRanges, [&](const RewriteFunctionRange &Range) {
+          return Range.OwnerSymbol == Record.OwnerSymbol &&
+                 Range.ParentOwnerSymbol.empty();
+        });
+    if (!HasDirectOwnerRange)
+      return false;
+
+    const uint64_t RecordEnd = Record.RecordVA + Record.RecordSize;
+    if (!RecordIntervals.emplace(Record.RecordVA, RecordEnd).second)
+      return false;
+
+    const bool HasHandlerRange =
+        llvm::any_of(FunctionRanges, [&](const RewriteFunctionRange &Range) {
+          return rangeBelongsToRoot(Range, Record.OwnerSymbol) &&
+                 containsPoint(Range, Record.HandlerVA);
+        });
+    if (!HasHandlerRange)
+      return false;
+
+    if (Record.Token.Kind != RewriteWinEHSemanticKind::SEHScope &&
+        Record.Token.Kind != RewriteWinEHSemanticKind::CxxCatch)
+      return false;
+    switch (Record.Token.Kind) {
+    case RewriteWinEHSemanticKind::SEHScope: {
+      if (Record.BeginSymbol.empty() || Record.EndSymbol.empty() ||
+          Record.Encoding != RewriteWinEHSemanticEncoding::SEH ||
+          Record.RecordSize != 16 || Record.Token.Clause != 0 ||
+          Record.BeginVA >= Record.EndVA ||
+          !llvm::any_of(FunctionRanges, [&](const RewriteFunctionRange &Range) {
+            return rangeBelongsToRoot(Range, Record.OwnerSymbol) &&
+                   Range.BeginVA <= Record.BeginVA &&
+                   Record.EndVA <= Range.EndVA;
+          }))
+        return false;
+      break;
+    }
+    case RewriteWinEHSemanticKind::CxxCatch: {
+      const RewriteSourceFunctionOwner *HandlerOwner =
+          findOwnerBySymbol(Record.HandlerSymbol);
+      // Native WinEH catchpads are compiler-created funclets in the root IR
+      // function and therefore have no independent source-function receipt.
+      // A separated source function may explicitly delegate its owner to the
+      // same funclet; validate that optional receipt when present, but always
+      // bind the semantic row directly to the exact derived range.
+      const bool HasExactHandlerRange =
+          llvm::any_of(FunctionRanges, [&](const RewriteFunctionRange &Range) {
+            return Range.OwnerSymbol == Record.HandlerSymbol &&
+                   Range.OwnerVA == Record.HandlerVA &&
+                   Range.BeginVA == Record.HandlerVA &&
+                   Record.HandlerVA < Range.EndVA &&
+                   Range.ParentOwnerSymbol == Record.OwnerSymbol &&
+                   Range.ParentOwnerVA == Record.OwnerVA;
+          });
+      const bool HasValidDelegatedSource =
+          !HandlerOwner ||
+          (HandlerOwner->Kind ==
+               RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet &&
+           HandlerOwner->OwnerVA == Record.HandlerVA &&
+           HandlerOwner->ParentSourceFunction == Record.SourceFunction);
+      const bool HasValidEncoding =
+          isValidCxxSemanticRecordSize(Record.Encoding, Record.RecordSize);
+      if (!Record.BeginSymbol.empty() || !Record.EndSymbol.empty() ||
+          Record.BeginVA != 0 || Record.EndVA != 0 || !HasValidEncoding ||
+          !HasValidDelegatedSource || !HasExactHandlerRange)
+        return false;
+      const std::pair<std::string, std::string> ContainerIdentity{
+          Record.OwnerSymbol, Record.ContainerSymbol};
+      const auto [RegionIt, RegionInserted] = CxxContainerRegions.try_emplace(
+          ContainerIdentity, Record.Token.Region);
+      if (!RegionInserted && RegionIt->second != Record.Token.Region)
+        return false;
+      std::array<uint64_t, 7> TokenIdentity{
+          static_cast<uint64_t>(Record.Token.Kind),
+          Record.Token.Region,
+          Record.Token.Clause,
+          Record.Token.Digest[0],
+          Record.Token.Digest[1],
+          Record.Token.Digest[2],
+          Record.Token.Digest[3]};
+      if (!CxxCatchTokens.insert(TokenIdentity).second)
+        return false;
+      break;
+    }
+    }
+  }
+
+  std::vector<std::pair<uint64_t, uint64_t>> SortedIntervals(
+      RecordIntervals.begin(), RecordIntervals.end());
+  for (size_t I = 1; I < SortedIntervals.size(); ++I)
+    if (SortedIntervals[I].first < SortedIntervals[I - 1].second)
+      return false;
+  return true;
+}
+
+bool llvm::mc_rewrite::isValidRewriteSourceFunctionOwnerDescriptor(
+    StringRef SourceFunction, bool IsPrivate,
+    RewriteSourceFunctionOwnerKind Kind, StringRef ParentSourceFunction) {
+  if (SourceFunction.empty())
+    return false;
+  switch (Kind) {
+  case RewriteSourceFunctionOwnerKind::FunctionEntry:
+    return ParentSourceFunction.empty();
+  case RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet:
+    return IsPrivate && !ParentSourceFunction.empty() &&
+           ParentSourceFunction != SourceFunction;
+  }
+  return false;
+}
+
 bool llvm::mc_rewrite::validateRewriteSourceFunctionOwners(
     ArrayRef<RewriteSourceFunctionOwner> Owners) {
   std::set<std::string> SeenSources;
   std::set<std::string> SeenOwnerSymbols;
   for (const RewriteSourceFunctionOwner &Owner : Owners) {
-    if (Owner.SourceFunction.empty() || Owner.OwnerSymbol.empty() ||
+    if (Owner.OwnerSymbol.empty() ||
+        !isValidRewriteSourceFunctionOwnerDescriptor(
+            Owner.SourceFunction, Owner.IsPrivate, Owner.Kind,
+            Owner.ParentSourceFunction) ||
         !SeenSources.insert(Owner.SourceFunction).second ||
         !SeenOwnerSymbols.insert(Owner.OwnerSymbol).second)
+      return false;
+  }
+
+  for (const RewriteSourceFunctionOwner &Owner : Owners) {
+    if (Owner.Kind != RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet)
+      continue;
+    const auto Parent =
+        llvm::find_if(Owners, [&](const RewriteSourceFunctionOwner &Candidate) {
+          return Candidate.SourceFunction == Owner.ParentSourceFunction;
+        });
+    if (Parent == Owners.end() ||
+        Parent->Kind != RewriteSourceFunctionOwnerKind::FunctionEntry)
       return false;
   }
   return true;
@@ -369,8 +633,10 @@ uint64_t FinalImageObjectWriter::writeObject() {
   Out.FunctionRanges.clear();
   Out.FunctionOwnerAddrs.clear();
   Out.SourceFunctionOwners.clear();
+  Out.WinEHSemanticRecords.clear();
   Out.ImageValid = true;
   Out.FunctionRangesValid = true;
+  Out.WinEHSemanticsValid = true;
 
   auto failClosed = [&]() -> uint64_t {
     Out.Sections.clear();
@@ -379,7 +645,9 @@ uint64_t FinalImageObjectWriter::writeObject() {
     Out.FunctionRanges.clear();
     Out.FunctionOwnerAddrs.clear();
     Out.SourceFunctionOwners.clear();
+    Out.WinEHSemanticRecords.clear();
     Out.ImageValid = false;
+    Out.WinEHSemanticsValid = false;
     return 0;
   };
   auto reportWriterError = [&](const Twine &Message) {
@@ -751,13 +1019,20 @@ uint64_t FinalImageObjectWriter::writeObject() {
 
     DenseSet<StringRef> SeenSourceFunctions;
     DenseSet<const MCSymbol *> AuthenticatedOwnerSymbols;
+    DenseMap<const MCSymbol *, const MCRewriteSourceFunctionOwner *>
+        SourceOwnersBySymbol;
+    if (!Asm->validateRewriteSourceFunctionOwnerRegistrations())
+      Out.FunctionRangesValid = false;
     for (const MCRewriteSourceFunctionOwner &Input :
          Asm->getRewriteSourceFunctionOwners()) {
+      if (!Out.FunctionRangesValid)
+        break;
       if (Input.SourceFunction.empty() ||
           !SeenSourceFunctions.insert(Input.SourceFunction).second ||
           !Input.Owner || Input.Owner->isVariable() ||
           Input.Owner->getName().empty() ||
-          !AuthenticatedOwnerSymbols.insert(Input.Owner).second) {
+          !AuthenticatedOwnerSymbols.insert(Input.Owner).second ||
+          !SourceOwnersBySymbol.try_emplace(Input.Owner, &Input).second) {
         Out.FunctionRangesValid = false;
         break;
       }
@@ -783,7 +1058,8 @@ uint64_t FinalImageObjectWriter::writeObject() {
       }
 
       Out.SourceFunctionOwners.push_back(
-          {Input.SourceFunction, OwnerName, Owner->VA, Input.IsPrivate});
+          {Input.SourceFunction, OwnerName, Owner->VA, Input.IsPrivate,
+           Input.Kind, Input.ParentSourceFunction});
       if (Input.IsPrivate)
         Out.SymbolAddrs.erase(OwnerName);
     }
@@ -791,6 +1067,45 @@ uint64_t FinalImageObjectWriter::writeObject() {
         !mc_rewrite::validateRewriteSourceFunctionOwners(
             Out.SourceFunctionOwners))
       Out.FunctionRangesValid = false;
+
+    DenseMap<const MCSymbol *, const MCSymbol *> DerivedOwnerParents;
+    for (const MCRewriteDerivedFunctionOwner &Input :
+         Asm->getRewriteDerivedFunctionOwners()) {
+      if (!Out.FunctionRangesValid)
+        break;
+      const auto ParentSource = SourceOwnersBySymbol.find(Input.ParentOwner);
+      const auto ChildSource = SourceOwnersBySymbol.find(Input.Owner);
+      const MCRewriteSourceFunctionOwner *ExpectedParent = nullptr;
+      if (ChildSource != SourceOwnersBySymbol.end() &&
+          ChildSource->second->Kind ==
+              mc_rewrite::RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet) {
+        const auto ParentReceipt =
+            llvm::find_if(Asm->getRewriteSourceFunctionOwners(),
+                          [&](const MCRewriteSourceFunctionOwner &Candidate) {
+                            return Candidate.SourceFunction ==
+                                   ChildSource->second->ParentSourceFunction;
+                          });
+        if (ParentReceipt != Asm->getRewriteSourceFunctionOwners().end())
+          ExpectedParent = &*ParentReceipt;
+      }
+      if (!Input.Owner || !Input.ParentOwner ||
+          Input.Owner == Input.ParentOwner || Input.Owner->isVariable() ||
+          Input.Owner->getName().empty() ||
+          ParentSource == SourceOwnersBySymbol.end() ||
+          ParentSource->second->Kind !=
+              mc_rewrite::RewriteSourceFunctionOwnerKind::FunctionEntry ||
+          (ChildSource != SourceOwnersBySymbol.end() &&
+           (ChildSource->second->Kind !=
+                mc_rewrite::RewriteSourceFunctionOwnerKind::
+                    WinCxxCatchFunclet ||
+            ExpectedParent != ParentSource->second)) ||
+          !DerivedOwnerParents.try_emplace(Input.Owner, Input.ParentOwner)
+               .second) {
+        Out.FunctionRangesValid = false;
+        break;
+      }
+      AuthenticatedOwnerSymbols.insert(Input.Owner);
+    }
 
     struct LocalFunctionRange {
       const MCSection *Section = nullptr;
@@ -852,6 +1167,17 @@ uint64_t FinalImageObjectWriter::writeObject() {
       Range.BeginVA = Begin->VA;
       Range.EndSymbol = Input.End->getName().str();
       Range.EndVA = End->VA;
+      const auto DerivedParent = DerivedOwnerParents.find(Input.Owner);
+      if (DerivedParent != DerivedOwnerParents.end()) {
+        const std::optional<SymbolLocation> Parent =
+            symbolLocation(DerivedParent->second, /*AllowSectionEnd=*/false);
+        if (!Parent) {
+          Out.FunctionRangesValid = false;
+          break;
+        }
+        Range.ParentOwnerSymbol = DerivedParent->second->getName().str();
+        Range.ParentOwnerVA = Parent->VA;
+      }
       Out.FunctionRanges.push_back(std::move(Range));
       LocalRanges.push_back({Begin->Section, Begin->Offset, End->Offset});
     }
@@ -876,10 +1202,156 @@ uint64_t FinalImageObjectWriter::writeObject() {
       Out.FunctionRangesValid = mc_rewrite::validateRewriteFunctionRanges(
           Out.FunctionRanges, Out.FunctionOwnerAddrs,
           !Opts.DeferGlobalFunctionRangeOverlap);
+    if (Out.FunctionRangesValid &&
+        !validateWinCxxCatchOwnerRanges(Out.SourceFunctionOwners,
+                                        Out.FunctionRanges))
+      Out.FunctionRangesValid = false;
+
+    if (Out.FunctionRangesValid) {
+      for (const MCRewriteWinEHSemanticRecord &Input :
+           Asm->getRewriteWinEHSemanticRecords()) {
+        const auto SourceOwner = SourceOwnersBySymbol.find(Input.Owner);
+        if (!Input.Owner || !Input.Container || !Input.RecordBegin ||
+            !Input.RecordEnd ||
+            !Input.Handler || Input.SourceFunction.empty() ||
+            Input.Owner->getName().empty() ||
+            Input.Container->getName().empty() ||
+            Input.RecordBegin->getName().empty() ||
+            Input.RecordEnd->getName().empty() ||
+            Input.Handler->getName().empty() ||
+            SourceOwner == SourceOwnersBySymbol.end() ||
+            SourceOwner->second->Kind !=
+                mc_rewrite::RewriteSourceFunctionOwnerKind::FunctionEntry ||
+            SourceOwner->second->SourceFunction != Input.SourceFunction ||
+            Input.Container->isVariable() || Input.RecordBegin->isVariable() ||
+            Input.RecordEnd->isVariable() || Input.Handler->isVariable() ||
+            !Input.Container->isInSection() ||
+            !Input.RecordBegin->isInSection() ||
+            !Input.RecordEnd->isInSection() || !Input.Handler->isInSection() ||
+            &Input.Container->getSection() !=
+                &Input.RecordBegin->getSection() ||
+            &Input.RecordBegin->getSection() !=
+                &Input.RecordEnd->getSection()) {
+          Out.WinEHSemanticsValid = false;
+          break;
+        }
+
+        const RewriteSectionTraits RecordSection =
+            classifySection(*Asm, Input.RecordBegin->getSection());
+        const RewriteSectionTraits ContainerSection =
+            classifySection(*Asm, Input.Container->getSection());
+        const RewriteSectionTraits HandlerSection =
+            classifySection(*Asm, Input.Handler->getSection());
+        const std::optional<SymbolLocation> Owner =
+            symbolLocation(Input.Owner, /*AllowSectionEnd=*/false);
+        const std::optional<SymbolLocation> Container =
+            symbolLocation(Input.Container, /*AllowSectionEnd=*/false);
+        const std::optional<SymbolLocation> RecordBegin =
+            symbolLocation(Input.RecordBegin, /*AllowSectionEnd=*/false);
+        const std::optional<SymbolLocation> RecordEnd =
+            symbolLocation(Input.RecordEnd, /*AllowSectionEnd=*/true);
+        const std::optional<SymbolLocation> Handler =
+            symbolLocation(Input.Handler, /*AllowSectionEnd=*/false);
+        if (!RecordSection.IsAllocated ||
+            RecordSection.Kind !=
+                mc_rewrite::RewriteSectionKind::ReadOnlyData ||
+            !ContainerSection.IsAllocated ||
+            ContainerSection.Kind !=
+                mc_rewrite::RewriteSectionKind::ReadOnlyData ||
+            !HandlerSection.IsAllocated ||
+            HandlerSection.Kind != mc_rewrite::RewriteSectionKind::Code ||
+            !Owner || !Container || !RecordBegin || !RecordEnd || !Handler ||
+            Container->Offset > RecordBegin->Offset ||
+            RecordBegin->Offset >= RecordEnd->Offset ||
+            RecordEnd->Offset - RecordBegin->Offset >
+                std::numeric_limits<uint32_t>::max()) {
+          Out.WinEHSemanticsValid = false;
+          break;
+        }
+
+        const uint64_t RecordSize = RecordEnd->Offset - RecordBegin->Offset;
+        uint64_t BeginVA = 0;
+        uint64_t EndVA = 0;
+        if (Input.Token.Kind !=
+                mc_rewrite::RewriteWinEHSemanticKind::SEHScope &&
+            Input.Token.Kind !=
+                mc_rewrite::RewriteWinEHSemanticKind::CxxCatch) {
+          Out.WinEHSemanticsValid = false;
+          break;
+        }
+        switch (Input.Token.Kind) {
+        case mc_rewrite::RewriteWinEHSemanticKind::SEHScope: {
+          if (Input.Encoding != mc_rewrite::RewriteWinEHSemanticEncoding::SEH ||
+              !Input.Begin || !Input.End || RecordSize != 16 ||
+              Input.Token.Clause != 0 || Input.Begin->isVariable() ||
+              Input.End->isVariable() || Input.Begin->getName().empty() ||
+              Input.End->getName().empty() || !Input.Begin->isInSection() ||
+              !Input.End->isInSection() ||
+              &Input.Begin->getSection() != &Input.End->getSection()) {
+            Out.WinEHSemanticsValid = false;
+            break;
+          }
+          const RewriteSectionTraits RangeSection =
+              classifySection(*Asm, Input.Begin->getSection());
+          const std::optional<SymbolLocation> Begin =
+              symbolLocation(Input.Begin, /*AllowSectionEnd=*/false);
+          const std::optional<SymbolLocation> End =
+              symbolLocation(Input.End, /*AllowSectionEnd=*/true);
+          if (!RangeSection.IsAllocated ||
+              RangeSection.Kind != mc_rewrite::RewriteSectionKind::Code ||
+              !Begin || !End || Begin->Offset >= End->Offset) {
+            Out.WinEHSemanticsValid = false;
+            break;
+          }
+          BeginVA = Begin->VA;
+          EndVA = End->VA;
+          break;
+        }
+        case mc_rewrite::RewriteWinEHSemanticKind::CxxCatch: {
+          const bool HasValidEncoding =
+              isValidCxxSemanticRecordSize(Input.Encoding, RecordSize);
+          if (Input.Begin || Input.End || !HasValidEncoding)
+            Out.WinEHSemanticsValid = false;
+          break;
+        }
+        }
+        if (!Out.WinEHSemanticsValid)
+          break;
+
+        Out.WinEHSemanticRecords.push_back(
+            {Input.Token, Input.SourceFunction, Input.Owner->getName().str(),
+             Owner->VA, Input.Container->getName().str(), Container->VA,
+             RecordBegin->VA, static_cast<uint32_t>(RecordSize),
+             Input.Begin ? Input.Begin->getName().str() : std::string(),
+             BeginVA, Input.End ? Input.End->getName().str() : std::string(),
+             EndVA, Input.Handler->getName().str(), Handler->VA,
+             Input.Encoding});
+      }
+      if (Out.WinEHSemanticsValid)
+        Out.WinEHSemanticsValid =
+            mc_rewrite::validateRewriteWinEHSemanticRecords(
+                Out.WinEHSemanticRecords, Out.SourceFunctionOwners,
+                Out.FunctionRanges, Out.FunctionOwnerAddrs,
+                !Opts.DeferGlobalFunctionRangeOverlap);
+    } else {
+      Out.WinEHSemanticsValid = false;
+    }
+    if (!Out.WinEHSemanticsValid)
+      Out.WinEHSemanticRecords.clear();
+
     if (!Out.FunctionRangesValid) {
+      // Source-owner provenance is an authorization boundary for every
+      // published symbol identity.  In particular, a backend-created private
+      // funclet may exist even when a delegated-owner expectation has no
+      // matching receipt, so it cannot be identified from the invalid receipt
+      // collection and selectively erased.  Withhold the complete public
+      // symbol namespace whenever the protocol fails instead of exposing a
+      // private owner through a partially valid RewriteResult.
+      Out.SymbolAddrs.clear();
       Out.FunctionRanges.clear();
       Out.FunctionOwnerAddrs.clear();
       Out.SourceFunctionOwners.clear();
+      Out.WinEHSemanticRecords.clear();
     }
   }
 

@@ -53,13 +53,24 @@ class LLVM_LIBRARY_VISIBILITY WinException : public EHStreamer {
 
   void emitCSpecificHandlerTable(const MachineFunction *MF);
 
-  void emitSEHActionsForRange(const WinEHFuncInfo &FuncInfo,
+  void emitSEHActionsForRange(const MachineFunction *MF,
+                              const WinEHFuncInfo &FuncInfo,
+                              const MCSymbol *TableBegin,
                               const MCSymbol *BeginLabel,
                               const MCSymbol *EndLabel, int State);
 
   /// Emit the EH table data for 32-bit and 64-bit functions using
   /// the __CxxFrameHandler3 personality.
   void emitCXXFrameHandler3Table(const MachineFunction *MF);
+
+  /// Emit the bounded rewrite-only C++ EH4 subset after validating that the
+  /// machine state graph has one synchronous catch, no frame home, and no
+  /// lossy features.
+  void emitCXXFrameHandler4Table(const MachineFunction *MF);
+
+  /// Emit the exact unaligned-frame GS handler word for an authenticated
+  /// rewrite-only personality wrapper.
+  void emitRewriteWinGSHandlerData(const MachineFunction *MF);
 
   /// Emit the EH table data for _except_handler3 and _except_handler4
   /// personality functions. These are only used on 32-bit and do not use CFI
@@ -71,6 +82,10 @@ class LLVM_LIBRARY_VISIBILITY WinException : public EHStreamer {
   void computeIP2StateTable(
       const MachineFunction *MF, const WinEHFuncInfo &FuncInfo,
       SmallVectorImpl<std::pair<const MCExpr *, int>> &IPToStateTable);
+
+  void computeCXXFrameHandler4IP2StateTable(
+      const MachineFunction *MF, const WinEHFuncInfo &FuncInfo,
+      SmallVectorImpl<std::pair<const MCSymbol *, int>> &IPToStateTable);
 
   /// Emits the label used with llvm.eh.recoverfp, which is used by
   /// outlined funclets.
@@ -117,4 +132,3 @@ public:
 }
 
 #endif
-

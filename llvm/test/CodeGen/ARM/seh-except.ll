@@ -88,6 +88,13 @@ __except.ret:                                     ; preds = %catch.dispatch
 __except:                                         ; preds = %__except.ret
 ; CHECK: ldr r0, [r6, #4]
 ; CHECK: bl foo
+; CHECK: .seh_handlerdata
+; CHECK: .long {{.*}} @ Number of call sites
+; CHECK-NEXT: $Mlsda_begin{{[0-9]+}}:
+; CHECK-NEXT: .long [[BEGIN:\$Mtmp[0-9]+]]@imgrel+1 @ LabelStart
+; CHECK-NEXT: .long [[END:\$Mtmp[0-9]+]]@imgrel+1 @ LabelEnd
+; CHECK-NEXT: .long {{.*}}@imgrel @ FilterFunction
+; CHECK-NEXT: .long [[HANDLER:\$MBB[0-9]+_[0-9]+]]@imgrel+1 @ ExceptionHandler
   %3 = call i32 @llvm.eh.exceptioncode(token %2)
   store i32 %3, ptr %__exception_code, align 4
   %x1 = getelementptr inbounds nuw %struct.S, ptr %o, i32 0, i32 0

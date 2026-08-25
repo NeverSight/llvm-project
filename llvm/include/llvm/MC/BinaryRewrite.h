@@ -24,6 +24,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Compiler.h"
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -195,7 +196,140 @@ struct RewriteFunctionRange {
   uint64_t BeginVA = 0;
   std::string EndSymbol;
   uint64_t EndVA = 0;
+  /// Non-empty only for a compiler-created private owner (for example, a
+  /// Windows EH funclet) derived from an authenticated source-function owner.
+  std::string ParentOwnerSymbol;
+  uint64_t ParentOwnerVA = 0;
 };
+
+/// Stable semantic record kinds emitted by the Windows EH backend. These are
+/// rewrite-only identities: ordinary object emission does not create them.
+enum class RewriteWinEHSemanticKind : uint8_t {
+  SEHScope = 1,
+  CxxCatch = 2,
+};
+static_assert(static_cast<uint8_t>(RewriteWinEHSemanticKind::SEHScope) == 1 &&
+              static_cast<uint8_t>(RewriteWinEHSemanticKind::CxxCatch) == 2);
+
+/// Exact physical encoding used for one compiler-emitted Windows EH semantic
+/// row.  This is deliberately separate from RewriteWinEHSemanticKind: FH3 and
+/// FH4 carry the same C++ catch semantics in incompatible fixed-width and
+/// compressed wire formats.
+enum class RewriteWinEHSemanticEncoding : uint8_t {
+  SEH = 1,
+  CxxFH3 = 2,
+  CxxFH4 = 3,
+};
+static_assert(static_cast<uint8_t>(RewriteWinEHSemanticEncoding::SEH) == 1 &&
+              static_cast<uint8_t>(RewriteWinEHSemanticEncoding::CxxFH3) == 2 &&
+              static_cast<uint8_t>(RewriteWinEHSemanticEncoding::CxxFH4) == 3);
+
+/// Instruction attachment consumed by WinEH state construction only when the
+/// MC context requests binary-rewrite provenance. The four digest words are an
+/// opaque source-issued identity; LLVM never derives source semantics from
+/// their numeric value.
+inline constexpr StringLiteral
+    RewriteWinEHSemanticAttachment("llvm.rewrite.windows-eh.semantic");
+inline constexpr uint32_t RewriteWinEHSemanticSchemaVersion = 1;
+inline constexpr unsigned RewriteWinEHSemanticOperandCount = 8;
+
+struct RewriteWinEHSemanticToken {
+  RewriteWinEHSemanticKind Kind = RewriteWinEHSemanticKind::SEHScope;
+  uint32_t Region = 0;
+  uint32_t Clause = 0;
+  std::array<uint64_t, 4> Digest{};
+
+  friend bool operator==(const RewriteWinEHSemanticToken &Left,
+                         const RewriteWinEHSemanticToken &Right) {
+    return Left.Kind == Right.Kind && Left.Region == Right.Region &&
+           Left.Clause == Right.Clause && Left.Digest == Right.Digest;
+  }
+  friend bool operator!=(const RewriteWinEHSemanticToken &Left,
+                         const RewriteWinEHSemanticToken &Right) {
+    return !(Left == Right);
+  }
+};
+
+/// One source-token to exact final WinEH language-record association. The
+/// container identifies the physical table row which makes the record
+/// reachable: the SEH scope-table begin or the C++ TryBlockMap row. RecordVA
+/// and RecordSize bind the raw action row. Begin/End bind an SEH protected
+/// range; HandlerVA binds the SEH action or C++ catch funclet.
+struct RewriteWinEHSemanticRecord {
+  RewriteWinEHSemanticToken Token;
+  std::string SourceFunction;
+  std::string OwnerSymbol;
+  uint64_t OwnerVA = 0;
+  std::string ContainerSymbol;
+  uint64_t ContainerVA = 0;
+  uint64_t RecordVA = 0;
+  uint32_t RecordSize = 0;
+  std::string BeginSymbol;
+  uint64_t BeginVA = 0;
+  std::string EndSymbol;
+  uint64_t EndVA = 0;
+  std::string HandlerSymbol;
+  uint64_t HandlerVA = 0;
+  RewriteWinEHSemanticEncoding Encoding = RewriteWinEHSemanticEncoding::SEH;
+
+  friend bool operator==(const RewriteWinEHSemanticRecord &Left,
+                         const RewriteWinEHSemanticRecord &Right) {
+    return Left.Token == Right.Token &&
+           Left.SourceFunction == Right.SourceFunction &&
+           Left.OwnerSymbol == Right.OwnerSymbol &&
+           Left.OwnerVA == Right.OwnerVA &&
+           Left.ContainerSymbol == Right.ContainerSymbol &&
+           Left.ContainerVA == Right.ContainerVA &&
+           Left.RecordVA == Right.RecordVA &&
+           Left.RecordSize == Right.RecordSize &&
+           Left.BeginSymbol == Right.BeginSymbol &&
+           Left.BeginVA == Right.BeginVA && Left.EndSymbol == Right.EndSymbol &&
+           Left.EndVA == Right.EndVA &&
+           Left.HandlerSymbol == Right.HandlerSymbol &&
+           Left.HandlerVA == Right.HandlerVA && Left.Encoding == Right.Encoding;
+  }
+  friend bool operator!=(const RewriteWinEHSemanticRecord &Left,
+                         const RewriteWinEHSemanticRecord &Right) {
+    return !(Left == Right);
+  }
+};
+
+/// Stable role of one rewrite source-owner receipt.  New roles may be appended
+/// without changing the meaning of existing FunctionEntry records.
+enum class RewriteSourceFunctionOwnerKind : uint8_t {
+  FunctionEntry = 0,
+  WinCxxCatchFunclet = 1,
+};
+static_assert(
+    static_cast<uint8_t>(RewriteSourceFunctionOwnerKind::FunctionEntry) == 0 &&
+    static_cast<uint8_t>(RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet) ==
+        1);
+
+/// Rewrite-only IR markers used to delegate one source function's physical
+/// owner to a Windows C++ catch funclet in another IR function.  The source
+/// function attribute carries the exact parent IR name; the catchpad metadata
+/// attachment carries the exact delegated source IR name.  A delegated
+/// source's independently emitted function entry is deliberately not a source
+/// receipt.  A producer which retains that helper body must remove its own
+/// native EH personality and unwind-table requirement before CodeGen; the
+/// authenticated WinCFI owner is the parent function's physical funclet.
+inline constexpr StringLiteral
+    RewriteWinCxxCatchParentAttribute("llvm.rewrite.win-cxx-catch-parent");
+inline constexpr StringLiteral
+    RewriteWinCxxCatchSourceAttachment("llvm.rewrite.win-cxx-catch-source");
+
+/// Opt-in for the rewrite-only, bounded C++ EH4 table writer.  The writer
+/// validates the exact personality and its supported semantic subset before
+/// changing ordinary MSVC C++ emission.
+inline constexpr StringLiteral
+    RewriteWinCxxFH4Attribute("llvm.rewrite.win-cxx-fh4");
+
+/// Opt-in for a compiler-derived GS wrapper whose cookie slot and checks are
+/// regenerated from the final machine frame.  The value names the exact base
+/// language writer; unsupported values fail closed.
+inline constexpr StringLiteral
+    RewriteWinGSHandlerAttribute("llvm.rewrite.win-gs-handler");
+inline constexpr StringLiteral RewriteWinGSHandlerCxxFH4("cxx-fh4");
 
 /// One exact IR-definition to final MC-owner association.  SourceFunction is
 /// the original IR name and OwnerSymbol is the target-selected symbol spelling;
@@ -206,12 +340,24 @@ struct RewriteSourceFunctionOwner {
   std::string OwnerSymbol;
   uint64_t OwnerVA = 0;
   bool IsPrivate = false;
+  RewriteSourceFunctionOwnerKind Kind =
+      RewriteSourceFunctionOwnerKind::FunctionEntry;
+  std::string ParentSourceFunction;
 };
+
+/// Validate one role-specific source-owner descriptor independently of its MC
+/// symbol and collection.  Function entries have no parent.  Windows C++ catch
+/// funclets are private, name a distinct non-empty parent, and are validated
+/// against that parent's FunctionEntry receipt by the collection validator.
+LLVM_ABI bool isValidRewriteSourceFunctionOwnerDescriptor(
+    StringRef SourceFunction, bool IsPrivate,
+    RewriteSourceFunctionOwnerKind Kind, StringRef ParentSourceFunction);
 
 /// Validate the portable identity constraints of source-owner provenance.
 /// Source identities are unique.  Owner addresses need not be unique because
 /// zero-sized or folded entries can legally share an address while retaining
-/// distinct symbol identities.
+/// distinct symbol identities.  A catch-funclet parent must have its own exact
+/// FunctionEntry receipt in the same collection.
 LLVM_ABI bool validateRewriteSourceFunctionOwners(
     ArrayRef<RewriteSourceFunctionOwner> Owners);
 
@@ -224,6 +370,15 @@ LLVM_ABI bool validateRewriteFunctionRanges(
     ArrayRef<RewriteFunctionRange> Ranges,
     const std::map<std::string, uint64_t> &FunctionOwnerAddrs,
     bool ValidateGlobalOverlap = true);
+
+/// Validate portable identity and extent invariants for compiler-emitted WinEH
+/// semantic rows. The exact language payload remains a format consumer's job.
+LLVM_ABI bool validateRewriteWinEHSemanticRecords(
+    ArrayRef<RewriteWinEHSemanticRecord> Records,
+    ArrayRef<RewriteSourceFunctionOwner> SourceOwners,
+    ArrayRef<RewriteFunctionRange> FunctionRanges,
+    const std::map<std::string, uint64_t> &FunctionOwnerAddrs,
+    bool ValidateGlobalFunctionRangeOverlap = true);
 
 /// Per-image hook: called after every fixup is applied, to mutate the final
 /// bytes in place (whole-section checksum / code encryption / ...). Defaults to
@@ -258,6 +413,10 @@ struct RewriteResult {
   std::vector<RewriteFunctionRange> FunctionRanges;
   /// False when any registered range failed identity or bounds validation.
   bool FunctionRangesValid = true;
+  /// Source-issued WinEH semantic tokens joined to exact compiler-emitted
+  /// language table rows.
+  std::vector<RewriteWinEHSemanticRecord> WinEHSemanticRecords;
+  bool WinEHSemanticsValid = true;
   /// External symbols that could not be resolved (should be empty on success).
   std::vector<std::string> Unresolved;
 };

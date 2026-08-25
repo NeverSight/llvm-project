@@ -42,11 +42,13 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/User.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/MC/BinaryRewrite.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include <optional>
 
@@ -62,6 +64,22 @@ static cl::opt<bool> EnableSelectionDAGSP("enable-selectiondag-sp",
                                           cl::init(true), cl::Hidden);
 static cl::opt<bool> DisableCheckNoReturn("disable-check-noreturn-call",
                                           cl::init(false), cl::Hidden);
+
+static bool usesBoundedWinGSStackProtector(const Function &F) {
+  const Triple TT(F.getParent()->getTargetTriple());
+  if (TT.getArch() != Triple::x86_64 || !TT.isOSWindows() ||
+      !F.hasFnAttribute(mc_rewrite::RewriteWinCxxFH4Attribute))
+    return false;
+  const Attribute GS =
+      F.getFnAttribute(mc_rewrite::RewriteWinGSHandlerAttribute);
+  if (!GS.isStringAttribute() ||
+      GS.getValueAsString() != mc_rewrite::RewriteWinGSHandlerCxxFH4 ||
+      !F.hasPersonalityFn())
+    return false;
+  const auto *Personality =
+      dyn_cast<Function>(F.getPersonalityFn()->stripPointerCasts());
+  return Personality && Personality->getName() == "__CxxFrameHandler4";
+}
 
 /// InsertStackProtectors - Insert code into the prologue and epilogue of the
 /// function.
@@ -126,10 +144,13 @@ PreservedAnalyses StackProtectorPass::run(Function &F,
     return PreservedAnalyses::all();
 
   // TODO(etienneb): Functions with funclets are not correctly supported now.
-  // Do nothing if this is funclet-based personality.
+  // Funclet personalities normally own their frame checks in the language
+  // runtime.  The bounded rewrite contract is the one exact exception: LLVM
+  // must derive a fresh cookie from the final machine frame for its GS wrapper.
   if (F.hasPersonalityFn()) {
     EHPersonality Personality = classifyEHPersonality(F.getPersonalityFn());
-    if (isFuncletEHPersonality(Personality))
+    if (isFuncletEHPersonality(Personality) &&
+        !usesBoundedWinGSStackProtector(F))
       return PreservedAnalyses::all();
   }
 
@@ -200,10 +221,13 @@ bool StackProtector::runOnFunction(Function &Fn) {
     return false;
 
   // TODO(etienneb): Functions with funclets are not correctly supported now.
-  // Do nothing if this is funclet-based personality.
+  // Funclet personalities normally own their frame checks in the language
+  // runtime.  The bounded rewrite contract is the one exact exception: LLVM
+  // must derive a fresh cookie from the final machine frame for its GS wrapper.
   if (Fn.hasPersonalityFn()) {
     EHPersonality Personality = classifyEHPersonality(Fn.getPersonalityFn());
-    if (isFuncletEHPersonality(Personality))
+    if (isFuncletEHPersonality(Personality) &&
+        !usesBoundedWinGSStackProtector(Fn))
       return false;
   }
 

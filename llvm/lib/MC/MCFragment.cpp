@@ -123,7 +123,10 @@ LLVM_DUMP_METHOD void MCFragment::dump() const {
     case MCFragment::FT_LEB: {
       OS << " Value:";
       getLEBValue().print(OS, nullptr);
-      OS << " Signed:" << isLEBSigned();
+      if (isWinEHCompressed())
+        OS << " Encoding:WinEHCompressed";
+      else
+        OS << " Signed:" << isLEBSigned();
       break;
     }
     case MCFragment::FT_Dwarf:

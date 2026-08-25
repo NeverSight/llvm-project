@@ -343,6 +343,43 @@ void MCObjectStreamer::emitSLEB128Value(const MCExpr *Value) {
   newFragment();
 }
 
+void MCObjectStreamer::emitWinEHCompressedValue(const MCExpr *Value) {
+  int64_t IntValue;
+  if (!Value->evaluateAsAbsolute(IntValue, getAssembler())) {
+    auto *F = getCurrentFragment();
+    F->makeLEB(MCFragment::LEBEncoding::WinEHCompressed, Value);
+    newFragment();
+    return;
+  }
+  if (IntValue < 0 || uint64_t(IntValue) > UINT32_MAX) {
+    getContext().reportError(
+        Value->getLoc(),
+        "Windows EH compressed value is outside the uint32 range");
+    return;
+  }
+
+  const uint32_t EncodedValue = static_cast<uint32_t>(IntValue);
+  char Bytes[5];
+  unsigned Size = 0;
+  auto EmitLittleEndian = [&](uint32_t Value, unsigned Width) {
+    for (unsigned I = 0; I != Width; ++I)
+      Bytes[Size++] = static_cast<char>(Value >> (I * 8));
+  };
+  if (EncodedValue < (1u << 7)) {
+    EmitLittleEndian(EncodedValue << 1, 1);
+  } else if (EncodedValue < (1u << 14)) {
+    EmitLittleEndian((EncodedValue << 2) | 1u, 2);
+  } else if (EncodedValue < (1u << 21)) {
+    EmitLittleEndian((EncodedValue << 3) | 3u, 3);
+  } else if (EncodedValue < (1u << 28)) {
+    EmitLittleEndian((EncodedValue << 4) | 7u, 4);
+  } else {
+    Bytes[Size++] = 0x0f;
+    EmitLittleEndian(EncodedValue, 4);
+  }
+  emitBytes(StringRef(Bytes, Size));
+}
+
 void MCObjectStreamer::emitWeakReference(MCSymbol *Alias,
                                          const MCSymbol *Target) {
   reportFatalUsageError("this file format doesn't support weak aliases");

@@ -768,6 +768,10 @@ public:
 
   virtual void emitSLEB128Value(const MCExpr *Value);
 
+  /// Emit an unsigned integer using the canonical variable-width encoding used
+  /// by Windows C++ EH4 metadata.
+  virtual void emitWinEHCompressedValue(const MCExpr *Value);
+
   /// Special case of EmitULEB128Value that avoids the client having to
   /// pass in a MCExpr for constant integers.
   unsigned emitULEB128IntValue(uint64_t Value, unsigned PadTo = 0);

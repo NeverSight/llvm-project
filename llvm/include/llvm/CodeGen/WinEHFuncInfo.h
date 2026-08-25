@@ -16,8 +16,10 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/MC/BinaryRewrite.h"
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <utility>
 
 namespace llvm {
@@ -55,6 +57,8 @@ struct SEHUnwindMapEntry {
 
   /// Holds the __except or __finally basic block.
   MBBOrBasicBlock Handler;
+
+  std::optional<mc_rewrite::RewriteWinEHSemanticToken> RewriteSemantic;
 };
 
 struct WinEHHandlerType {
@@ -67,6 +71,7 @@ struct WinEHHandlerType {
   } CatchObj = {};
   GlobalVariable *TypeDescriptor;
   MBBOrBasicBlock Handler;
+  std::optional<mc_rewrite::RewriteWinEHSemanticToken> RewriteSemantic;
 };
 
 struct WinEHTryBlockMapEntry {

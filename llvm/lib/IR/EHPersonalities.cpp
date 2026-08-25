@@ -46,6 +46,7 @@ EHPersonality llvm::classifyEHPersonality(const Value *Pers) {
       .Case("_except_handler4", EHPersonality::MSVC_X86SEH)
       .Case("__C_specific_handler", EHPersonality::MSVC_TableSEH)
       .Case("__CxxFrameHandler3", EHPersonality::MSVC_CXX)
+      .Case("__CxxFrameHandler4", EHPersonality::MSVC_CXX)
       .Case("ProcessCLRException", EHPersonality::CoreCLR)
       // Rust mangles its personality function, so we can't test exact equality.
       .EndsWith("rust_eh_personality", EHPersonality::Rust)
