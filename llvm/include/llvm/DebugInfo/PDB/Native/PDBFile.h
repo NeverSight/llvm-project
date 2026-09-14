@@ -96,6 +96,9 @@ public:
   Error parseFileHeaders();
   Error parseStreamData();
 
+  /// True when the file is a VC6 JG / PDB 2.00 container rather than MSF 7.00.
+  bool isPdb20() const;
+
   Expected<InfoStream &> getPDBInfoStream();
   Expected<DbiStream &> getPDBDbiStream();
   Expected<GlobalsStream &> getPDBGlobalsStream();

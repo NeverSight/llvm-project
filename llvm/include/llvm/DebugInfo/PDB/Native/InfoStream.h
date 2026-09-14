@@ -13,6 +13,7 @@
 #include "llvm/DebugInfo/CodeView/GUID.h"
 #include "llvm/DebugInfo/PDB/Native/NamedStreamMap.h"
 #include "llvm/DebugInfo/PDB/Native/RawConstants.h"
+#include "llvm/DebugInfo/PDB/Native/RawTypes.h"
 #include "llvm/Support/BinaryStream.h"
 #include "llvm/Support/BinaryStreamRef.h"
 #include "llvm/Support/Compiler.h"
@@ -21,7 +22,6 @@
 
 namespace llvm {
 namespace pdb {
-struct InfoStreamHeader;
 class InfoStream {
   friend class InfoStreamBuilder;
 
@@ -55,6 +55,9 @@ private:
   std::unique_ptr<BinaryStream> Stream;
 
   const InfoStreamHeader *Header;
+  // VC6 / PDB 2.00 Info streams are 12 bytes (no GUID).  Copied here so
+  // getGuid() can still return a stable zero GUID.
+  InfoStreamHeader LegacyHeader{};
 
   BinarySubstreamRef SubNamedStreams;
 

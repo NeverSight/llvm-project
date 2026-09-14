@@ -1,5 +1,6 @@
 add_llvm_component_library(LLVMDebugInfoMSF
   MappedBlockStream.cpp
+  MSF2.cpp
   MSFBuilder.cpp
   MSFCommon.cpp
   MSFError.cpp

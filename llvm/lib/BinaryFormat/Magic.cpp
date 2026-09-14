@@ -236,7 +236,8 @@ file_magic llvm::identify_magic(StringRef Magic) {
               StringRef(COFF::PEMagic, sizeof(COFF::PEMagic))))
         return file_magic::pecoff_executable;
     }
-    if (Magic.starts_with("Microsoft C/C++ MSF 7.00\r\n"))
+    if (Magic.starts_with("Microsoft C/C++ MSF 7.00\r\n") ||
+        Magic.starts_with("Microsoft C/C++ program database 2.00\r\n"))
       return file_magic::pdb;
     if (startswith(Magic, "MDMP"))
       return file_magic::minidump;

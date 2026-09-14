@@ -4,6 +4,7 @@ set(LLVM_LINK_COMPONENTS
 
 add_llvm_unittest(DebugInfoMSFTests
   MappedBlockStreamTest.cpp
+  MSF2Test.cpp
   MSFBuilderTest.cpp
   MSFCommonTest.cpp
   )

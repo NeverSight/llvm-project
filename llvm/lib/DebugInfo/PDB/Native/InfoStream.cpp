@@ -23,13 +23,32 @@ InfoStream::InfoStream(std::unique_ptr<BinaryStream> Stream)
 Error InfoStream::reload() {
   BinaryStreamReader Reader(*Stream);
 
-  if (auto EC = Reader.readObject(Header))
+  uint32_t Version = 0;
+  if (auto EC = Reader.readInteger(Version))
     return joinErrors(
         std::move(EC),
         make_error<RawError>(raw_error_code::corrupt_file,
                              "PDB Stream does not contain a header."));
 
-  switch (Header->Version) {
+  switch (Version) {
+  case PdbImplVC2:
+  case PdbImplVC4:
+  case PdbImplVC41:
+  case PdbImplVC50:
+  case PdbImplVC98: {
+    uint32_t Signature = 0;
+    uint32_t Age = 0;
+    if (auto EC = Reader.readInteger(Signature))
+      return EC;
+    if (auto EC = Reader.readInteger(Age))
+      return EC;
+    LegacyHeader = {};
+    LegacyHeader.Version = Version;
+    LegacyHeader.Signature = Signature;
+    LegacyHeader.Age = Age;
+    Header = &LegacyHeader;
+    return Error::success();
+  }
   case PdbImplVC70:
   case PdbImplVC80:
   case PdbImplVC110:
@@ -39,6 +58,13 @@ Error InfoStream::reload() {
     return make_error<RawError>(raw_error_code::corrupt_file,
                                 "Unsupported PDB stream version.");
   }
+
+  Reader.setOffset(0);
+  if (auto EC = Reader.readObject(Header))
+    return joinErrors(
+        std::move(EC),
+        make_error<RawError>(raw_error_code::corrupt_file,
+                             "PDB Stream does not contain a header."));
 
   uint32_t Offset = Reader.getOffset();
   if (auto EC = NamedStreams.load(Reader))

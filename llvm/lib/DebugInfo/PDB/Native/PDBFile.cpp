@@ -8,6 +8,8 @@
 
 #include "llvm/DebugInfo/PDB/Native/PDBFile.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/DebugInfo/MSF/MSF2.h"
 #include "llvm/DebugInfo/MSF/MSFCommon.h"
 #include "llvm/DebugInfo/MSF/MappedBlockStream.h"
 #include "llvm/DebugInfo/PDB/Native/DbiStream.h"
@@ -116,8 +118,25 @@ Error PDBFile::setBlockData(uint32_t BlockIndex, uint32_t Offset,
                               "PDBFile is immutable");
 }
 
+static bool bufferIsJgMsf(BinaryStream &Buffer) {
+  ArrayRef<uint8_t> MagicBytes;
+  if (auto EC = Buffer.readBytes(
+          0, std::min<uint64_t>(Buffer.getLength(), sizeof(MagicJG)),
+          MagicBytes)) {
+    consumeError(std::move(EC));
+    return false;
+  }
+  return isJgMsfMagic(StringRef(
+      reinterpret_cast<const char *>(MagicBytes.data()), MagicBytes.size()));
+}
+
+bool PDBFile::isPdb20() const { return Buffer && bufferIsJgMsf(*Buffer); }
+
 Error PDBFile::parseFileHeaders() {
   BinaryStreamReader Reader(*Buffer);
+
+  if (bufferIsJgMsf(*Buffer))
+    return parseJgMsf(*Buffer, Allocator, ContainerLayout);
 
   // Initialize SB.
   const msf::SuperBlock *SB = nullptr;
@@ -178,6 +197,8 @@ Error PDBFile::parseFileHeaders() {
 
 Error PDBFile::parseStreamData() {
   assert(ContainerLayout.SB);
+  if (isPdb20())
+    return Error::success();
   if (DirectoryStream)
     return Error::success();
 

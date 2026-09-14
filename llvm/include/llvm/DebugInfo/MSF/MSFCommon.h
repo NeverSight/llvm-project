@@ -26,6 +26,13 @@ static const char Magic[] = {'M',  'i',  'c',    'r', 'o', 's',  'o',  'f',
                              'M',  'S',  'F',    ' ', '7', '.',  '0',  '0',
                              '\r', '\n', '\x1a', 'D', 'S', '\0', '\0', '\0'};
 
+/// VC6 / PDB 2.00 JG container.  Block numbers in the directory are 16-bit.
+static const char MagicJG[] = {
+    'M',  'i',  'c',  'r', 'o', 's', 'o',  'f',  't',  ' ', 'C', '/',
+    'C',  '+',  '+',  ' ', 'p', 'r', 'o',  'g',  'r',  'a', 'm', ' ',
+    'd',  'a',  't',  'a', 'b', 'a', 's',  'e',  ' ',  '2', '.', '0',
+    '0',  '\r', '\n', '\x1a', 'J', 'G', '\0', '\0'};
+
 // The superblock is overlaid at the beginning of the file (offset 0).
 // It starts with a magic header and is followed by information which
 // describes the layout of the file system.
