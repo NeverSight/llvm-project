@@ -25,6 +25,12 @@ struct TagRecordHash {
     State = 0;
   }
 
+  explicit TagRecordHash(codeview::Class2Record CR, uint32_t Full,
+                         uint32_t Forward)
+      : FullRecordHash(Full), ForwardDeclHash(Forward), Class2(std::move(CR)) {
+    State = 3;
+  }
+
   explicit TagRecordHash(codeview::EnumRecord ER, uint32_t Full,
                          uint32_t Forward)
       : FullRecordHash(Full), ForwardDeclHash(Forward), Enum(std::move(ER)) {
@@ -40,6 +46,8 @@ struct TagRecordHash {
   uint32_t FullRecordHash;
   uint32_t ForwardDeclHash;
 
+  bool isTag2Record() const { return State == 3; }
+
   codeview::TagRecord &getRecord() {
     switch (State) {
     case 0:
@@ -52,9 +60,18 @@ struct TagRecordHash {
     llvm_unreachable("unreachable!");
   }
 
+  codeview::Tag2Record &getTag2Record() {
+    switch (State) {
+    case 3:
+      return Class2;
+    }
+    llvm_unreachable("unreachable!");
+  }
+
 private:
   union {
     codeview::ClassRecord Class;
+    codeview::Class2Record Class2;
     codeview::EnumRecord Enum;
     codeview::UnionRecord Union;
   };

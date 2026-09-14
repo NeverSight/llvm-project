@@ -92,8 +92,12 @@ static StringRef getRecordName(LazyRandomTypeCollection &Types, TypeIndex TI) {
   };
 
   TypeRecordKind RK = static_cast<TypeRecordKind>(CVReference.kind());
-  if (RK == TypeRecordKind::Class || RK == TypeRecordKind::Struct)
+  if (RK == TypeRecordKind::Class || RK == TypeRecordKind::Struct ||
+      RK == TypeRecordKind::Interface)
     GetName(ClassRecord(RK));
+  else if (RK == TypeRecordKind::Class2 || RK == TypeRecordKind::Struct2 ||
+           RK == TypeRecordKind::Interface2)
+    GetName(Class2Record(RK));
   else if (RK == TypeRecordKind::Union)
     GetName(UnionRecord(RK));
   else if (RK == TypeRecordKind::Enum)
@@ -567,6 +571,21 @@ Error LVTypeVisitor::visitKnownRecord(CVType &Record, ClassRecord &Class) {
                                    CurrentTypeIndex);
 
   // Collect class name for contained scopes deduction.
+  Shared->TypeRecords.add(StreamIdx, CurrentTypeIndex, Class.getName());
+  return Error::success();
+}
+
+// LF_CLASS2, LF_STRUCTURE2, LF_INTERFACE2 (TPI)
+Error LVTypeVisitor::visitKnownRecord(CVType &Record, Class2Record &Class) {
+  LLVM_DEBUG({
+    printTypeIndex("TypeIndex", CurrentTypeIndex, StreamTPI);
+    printTypeIndex("FieldListType", Class.getFieldList(), StreamTPI);
+    W.printString("Name", Class.getName());
+  });
+
+  Shared->NamespaceDeduction.add(Class.getName());
+  Shared->ForwardReferences.record(Class.isForwardRef(), Class.getName(),
+                                   CurrentTypeIndex);
   Shared->TypeRecords.add(StreamIdx, CurrentTypeIndex, Class.getName());
   return Error::success();
 }
@@ -2090,6 +2109,74 @@ Error LVLogicalVisitor::visitKnownRecord(CVType &Record, ClassRecord &Class,
   return Error::success();
 }
 
+// LF_CLASS2, LF_STRUCTURE2, LF_INTERFACE2
+Error LVLogicalVisitor::visitKnownRecord(CVType &Record, Class2Record &Class,
+                                         TypeIndex TI, LVElement *Element) {
+  LLVM_DEBUG({
+    printTypeBegin(Record, TI, Element, StreamTPI);
+    printTypeIndex("FieldList", Class.getFieldList(), StreamTPI);
+    printTypeIndex("DerivedFrom", Class.getDerivationList(), StreamTPI);
+    printTypeIndex("VShape", Class.getVTableShape(), StreamTPI);
+    W.printNumber("Count", Class.getCount());
+    W.printNumber("SizeOf", Class.getSize());
+    W.printString("Name", Class.getName());
+    if (Class.hasUniqueName())
+      W.printString("UniqueName", Class.getUniqueName());
+    printTypeEnd(Record);
+  });
+
+  if (Element->getIsFinalized())
+    return Error::success();
+  Element->setIsFinalized();
+
+  LVScopeAggregate *Scope = static_cast<LVScopeAggregate *>(Element);
+  if (!Scope)
+    return Error::success();
+
+  Scope->setName(Class.getName());
+  if (Class.hasUniqueName())
+    Scope->setLinkageName(Class.getUniqueName());
+  Scope->setBitSize(Class.getSize() * DWARF_CHAR_BIT);
+
+  if (Class.isNested()) {
+    Scope->setIsNested();
+    createParents(Class.getName(), Scope);
+  }
+
+  if (Class.isScoped())
+    Scope->setIsScoped();
+
+  if (!(Class.isNested() || Class.isScoped())) {
+    if (LVScope *Namespace = Shared->NamespaceDeduction.get(Class.getName()))
+      Namespace->addElement(Scope);
+    else
+      Reader->getCompileUnit()->addElement(Scope);
+  }
+
+  LazyRandomTypeCollection &Types = types();
+  TypeIndex TIFieldList = Class.getFieldList();
+  if (TIFieldList.isNoneType()) {
+    TypeIndex ForwardType = Shared->ForwardReferences.find(Class.getName());
+    if (!ForwardType.isNoneType()) {
+      CVType CVReference = Types.getType(ForwardType);
+      TypeRecordKind RK = static_cast<TypeRecordKind>(CVReference.kind());
+      Class2Record ReferenceRecord(RK);
+      if (Error Err = TypeDeserializer::deserializeAs(
+              const_cast<CVType &>(CVReference), ReferenceRecord))
+        return Err;
+      TIFieldList = ReferenceRecord.getFieldList();
+    }
+  }
+
+  if (!TIFieldList.isNoneType()) {
+    CVType CVFieldList = Types.getType(TIFieldList);
+    if (Error Err = finishVisitation(CVFieldList, TI, Scope))
+      return Err;
+  }
+
+  return Error::success();
+}
+
 // LF_ENUM (TPI)
 Error LVLogicalVisitor::visitKnownRecord(CVType &Record, EnumRecord &Enum,
                                          TypeIndex TI, LVElement *Element) {
@@ -3079,6 +3166,9 @@ LVElement *LVLogicalVisitor::createElement(TypeLeafKind Kind) {
     CurrentScope->setTag(dwarf::DW_TAG_array_type);
     return CurrentScope;
   case TypeLeafKind::LF_CLASS:
+  case TypeLeafKind::LF_INTERFACE:
+  case TypeLeafKind::LF_CLASS2:
+  case TypeLeafKind::LF_INTERFACE2:
     CurrentScope = Reader->createScopeAggregate();
     CurrentScope->setTag(dwarf::DW_TAG_class_type);
     CurrentScope->setIsClass();
@@ -3095,6 +3185,7 @@ LVElement *LVLogicalVisitor::createElement(TypeLeafKind Kind) {
     CurrentScope->setTag(dwarf::DW_TAG_subprogram);
     return CurrentScope;
   case TypeLeafKind::LF_STRUCTURE:
+  case TypeLeafKind::LF_STRUCTURE2:
     CurrentScope = Reader->createScopeAggregate();
     CurrentScope->setIsStructure();
     CurrentScope->setTag(dwarf::DW_TAG_structure_type);

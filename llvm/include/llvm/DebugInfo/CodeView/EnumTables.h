@@ -39,6 +39,7 @@ LLVM_ABI ArrayRef<EnumEntry<uint16_t>> getTrampolineNames();
 LLVM_ABI ArrayRef<EnumEntry<COFF::SectionCharacteristics>>
 getImageSectionCharacteristicNames();
 LLVM_ABI ArrayRef<EnumEntry<uint16_t>> getClassOptionNames();
+LLVM_ABI ArrayRef<EnumEntry<uint32_t>> getClassOption2Names();
 LLVM_ABI ArrayRef<EnumEntry<uint8_t>> getMemberAccessNames();
 LLVM_ABI ArrayRef<EnumEntry<uint16_t>> getMethodOptionNames();
 LLVM_ABI ArrayRef<EnumEntry<uint16_t>> getMemberKindNames();
