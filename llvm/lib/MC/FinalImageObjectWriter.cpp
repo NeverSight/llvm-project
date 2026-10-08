@@ -398,9 +398,11 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
             (Record.FilterSymbol.empty() != (Record.FilterVA == 0)))
           return false;
         const auto &Cookies = Record.RegistrationCookieOffsets;
-        if (HeaderSize ? (Cookies[0] >= 0 || Cookies[1] || Cookies[2] >= 0 ||
-                          Cookies[3])
-                       : Cookies != std::array<int32_t, 4>{})
+        if (HeaderSize
+                ? ((Cookies[0] == -2 ? Cookies[1] != 0
+                                     : Cookies[0] % 4 || Cookies[1] % 4) ||
+                   Cookies[2] % 4 || Cookies[3] != 0)
+                : Cookies != std::array<int32_t, 4>{})
           return false;
         if (Record.FilterVA &&
             !llvm::any_of(FunctionRanges, [&](const RewriteFunctionRange &R) {

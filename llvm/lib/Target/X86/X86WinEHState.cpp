@@ -370,13 +370,21 @@ void WinEHStateFnPassImpl::emitExceptionRegistrationRecord(Function *F) {
     }
     Builder.CreateStore(LSDA, Builder.CreateStructGEP(RegNodeTy, RegNode, 3));
 
-    // If using _except_handler4, the EHGuard contains: FramePtr xor Cookie.
+    // The runtime's virtual EBP is immediately after its registration object.
+    // A rewrite can place that object below the actual EBP, so its guard must
+    // use RegNode + sizeof(RegNode), with matching runtime-relative offsets.
     if (UseStackGuard) {
       Value *Val = Builder.CreateLoad(Int32Ty, Cookie);
-      Value *FrameAddr = Builder.CreateIntrinsic(
-          Intrinsic::frameaddress,
-          Builder.getPtrTy(TheModule->getDataLayout().getAllocaAddrSpace()),
-          Builder.getInt32(0), /*FMFSource=*/nullptr, "frameaddr");
+      Value *FrameAddr;
+      if (F->hasFnAttribute(
+              mc_rewrite::RewriteWinX86RegistrationStateAttribute))
+        FrameAddr = Builder.CreateGEP(RegNodeTy, RegNode, Builder.getInt32(1),
+                                      "eh4.runtime.frame");
+      else
+        FrameAddr = Builder.CreateIntrinsic(
+            Intrinsic::frameaddress,
+            Builder.getPtrTy(TheModule->getDataLayout().getAllocaAddrSpace()),
+            Builder.getInt32(0), /*FMFSource=*/nullptr, "frameaddr");
       Value *FrameAddrI32 = Builder.CreatePtrToInt(FrameAddr, Int32Ty);
       FrameAddrI32 = Builder.CreateXor(FrameAddrI32, Val);
       Builder.CreateStore(FrameAddrI32, EHGuardNode);

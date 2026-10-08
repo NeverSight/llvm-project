@@ -20,6 +20,7 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/TargetFrameLowering.h"
 #include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGen/WinEHFuncInfo.h"
 #include "llvm/IR/DataLayout.h"
@@ -1497,7 +1498,8 @@ void WinException::emitExceptHandlerTable(const MachineFunction *MF) {
     //   ScopeTableEntry ScopeRecord[];
     // };
     //
-    // Offsets are %ebp relative.
+    // Offsets are relative to the end of the registration object: the virtual
+    // EBP installed by the runtime before invoking filters and handlers.
     //
     // The GS cookie is present only if the function needs stack protection.
     // GSCookieOffset = -2 means that GS cookie is not used.
@@ -1505,10 +1507,11 @@ void WinException::emitExceptHandlerTable(const MachineFunction *MF) {
     // The EH cookie is always present.
     //
     // Check is done the following way:
-    //    (ebp+CookieXOROffset) ^ [ebp+CookieOffset] == _security_cookie
+    //    (RuntimeFrame+CookieXOROffset) ^ [RuntimeFrame+CookieOffset] == Cookie
 
     // Retrieve the Guard Stack slot.
     int GSCookieOffset = -2;
+    int GSCookieXOROffset = 0;
     const MachineFrameInfo &MFI = MF->getFrameInfo();
     if (MFI.hasStackProtectorIndex()) {
       Register UnusedReg;
@@ -1529,16 +1532,56 @@ void WinException::emitExceptHandlerTable(const MachineFunction *MF) {
           TFI->getFrameIndexReference(*MF, EHGuardIdx, UnusedReg).getFixed();
     }
 
+    if (MF->getFunction().hasFnAttribute(
+            mc_rewrite::RewriteWinX86RegistrationStateAttribute)) {
+      const TargetFrameLowering *TFI = MF->getSubtarget().getFrameLowering();
+      const int NodeIdx = FuncInfo.EHRegNodeFrameIndex;
+      const int GuardIdx = FuncInfo.EHGuardFrameIndex;
+      if (NodeIdx == INT_MAX || GuardIdx == INT_MAX ||
+          MFI.getObjectSize(NodeIdx) != 24)
+        report_fatal_error("rewrite EH4 has no complete registration frame");
+      Register NodeReg, GuardReg;
+      const auto NodeOffset =
+          TFI->getFrameIndexReference(*MF, NodeIdx, NodeReg);
+      const auto GuardOffset =
+          TFI->getFrameIndexReference(*MF, GuardIdx, GuardReg);
+      const int64_t RuntimeOffset = NodeOffset.getFixed() + 24;
+      const int64_t GuardFromRuntime = GuardOffset.getFixed() - RuntimeOffset;
+      if (NodeOffset.getScalable() || GuardOffset.getScalable() ||
+          NodeReg != GuardReg || !isInt<32>(GuardFromRuntime) ||
+          GuardFromRuntime % 4)
+        report_fatal_error("rewrite EH4 guard has no fixed runtime frame base");
+      EHCookieOffset = GuardFromRuntime;
+      if (MFI.hasStackProtectorIndex()) {
+        Register GSReg;
+        const auto GSOffset = TFI->getFrameIndexReference(
+            *MF, MFI.getStackProtectorIndex(), GSReg);
+        const int64_t GSFromRuntime = GSOffset.getFixed() - RuntimeOffset;
+        // LLVM's stack protector encodes the actual frame pointer. Its XOR
+        // address therefore needs the displacement back from the virtual one.
+        if (GSOffset.getScalable() || GSReg != NodeReg ||
+            NodeReg !=
+                MF->getSubtarget().getRegisterInfo()->getFrameRegister(*MF) ||
+            !isInt<32>(GSFromRuntime) || !isInt<32>(-RuntimeOffset) ||
+            GSFromRuntime % 4)
+          report_fatal_error(
+              "rewrite GS cookie has no fixed runtime frame base");
+        GSCookieOffset = GSFromRuntime;
+        GSCookieXOROffset = -RuntimeOffset;
+      }
+    }
+
     AddComment("GSCookieOffset");
     OS.emitInt32(GSCookieOffset);
     AddComment("GSCookieXOROffset");
-    OS.emitInt32(0);
+    OS.emitInt32(GSCookieXOROffset);
     AddComment("EHCookieOffset");
     OS.emitInt32(EHCookieOffset);
     AddComment("EHCookieXOROffset");
     OS.emitInt32(0);
     BaseState = -2;
-    RegistrationCookieOffsets = {GSCookieOffset, 0, EHCookieOffset, 0};
+    RegistrationCookieOffsets = {GSCookieOffset, GSCookieXOROffset,
+                                 EHCookieOffset, 0};
   }
 
   const bool Rewrite = Asm->OutContext.requiresRewriteFunctionProvenance();

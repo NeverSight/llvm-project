@@ -67,6 +67,14 @@ static cl::opt<bool> DisableCheckNoReturn("disable-check-noreturn-call",
 
 static bool usesBoundedWinGSStackProtector(const Function &F) {
   const Triple TT(F.getParent()->getTargetTriple());
+  if (TT.getArch() == Triple::x86 && TT.isWindowsMSVCEnvironment() &&
+      TT.isOSBinFormatCOFF() &&
+      F.hasFnAttribute(mc_rewrite::RewriteWinX86RegistrationStateAttribute) &&
+      F.hasPersonalityFn()) {
+    const auto *Personality =
+        dyn_cast<Function>(F.getPersonalityFn()->stripPointerCasts());
+    return Personality && Personality->getName() == "_except_handler4";
+  }
   if (TT.getArch() != Triple::x86_64 || !TT.isOSWindows() ||
       !F.hasFnAttribute(mc_rewrite::RewriteWinCxxFH4Attribute))
     return false;

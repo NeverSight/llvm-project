@@ -663,6 +663,16 @@ TEST(BinaryRewriteTest, X86SEHRowsCloseTheExactGeneratedStateTable) {
                                                            Addrs);
   };
   EXPECT_TRUE(Check(Rows));
+  auto GSCookies = Rows;
+  for (auto &R : GSCookies)
+    R.RegistrationCookieOffsets = {68, 84, 0, 0};
+  EXPECT_TRUE(Check(GSCookies));
+  for (unsigned Field : {0u, 1u, 2u}) {
+    auto Unaligned = GSCookies;
+    for (auto &R : Unaligned)
+      ++R.RegistrationCookieOffsets[Field];
+    EXPECT_FALSE(Check(Unaligned));
+  }
   auto EH3 = Rows;
   for (auto &R : EH3) {
     R.Encoding = Encoding::X86SEH3;
