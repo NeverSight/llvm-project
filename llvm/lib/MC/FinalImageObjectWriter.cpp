@@ -55,6 +55,12 @@ struct RewriteSectionTraits {
   bool IsAllocated = true;
 };
 
+bool isX86RegistrationEncoding(
+    llvm::mc_rewrite::RewriteWinEHSemanticEncoding Encoding) {
+  return Encoding == llvm::mc_rewrite::RewriteWinEHSemanticEncoding::X86SEH3 ||
+         Encoding == llvm::mc_rewrite::RewriteWinEHSemanticEncoding::X86SEH4;
+}
+
 bool isValidCxxSemanticRecordSize(
     llvm::mc_rewrite::RewriteWinEHSemanticEncoding Encoding,
     uint64_t RecordSize) {
@@ -88,7 +94,8 @@ RewriteSectionTraits classifySection(const MCAssembler &Asm,
     // the image post-processor instead.
     bool IsSymbolIndexMetadata =
         Name.starts_with(".gfids") || Name.starts_with(".gehcont") ||
-        Name.starts_with(".giats") || Name.starts_with(".gljmp");
+        Name.starts_with(".giats") || Name.starts_with(".gljmp") ||
+        Name == ".sxdata";
     Traits.IsAllocated =
         !IsSymbolIndexMetadata &&
         !(Flags & (COFF::IMAGE_SCN_LNK_REMOVE | COFF::IMAGE_SCN_LNK_INFO));
@@ -320,6 +327,9 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
   std::set<std::array<uint64_t, 7>> CxxCatchTokens;
   std::map<std::string, uint64_t> ContainerAddrs;
   std::map<std::pair<std::string, std::string>, uint32_t> CxxContainerRegions;
+  using ContainerKey = std::pair<std::string, std::string>;
+  std::map<ContainerKey, std::vector<const RewriteWinEHSemanticRecord *>>
+      RegistrationTables;
   for (const RewriteWinEHSemanticRecord &Record : Records) {
     if (Record.SourceFunction.empty() || Record.OwnerSymbol.empty() ||
         Record.ContainerSymbol.empty() || Record.HandlerSymbol.empty() ||
@@ -368,6 +378,47 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
       return false;
     switch (Record.Token.Kind) {
     case RewriteWinEHSemanticKind::SEHScope: {
+      if (isX86RegistrationEncoding(Record.Encoding)) {
+        const uint32_t HeaderSize =
+            Record.Encoding == RewriteWinEHSemanticEncoding::X86SEH4 ? 16 : 0;
+        const int32_t BaseState = HeaderSize ? -2 : -1;
+        if (!Record.BeginSymbol.empty() || !Record.EndSymbol.empty() ||
+            Record.BeginVA || Record.EndVA || Record.Token.Clause ||
+            Record.RecordSize != 12 || Record.ContainerEndSymbol.empty() ||
+            Record.ContainerEndVA <= Record.ContainerVA ||
+            Record.ContainerEndVA - Record.ContainerVA < HeaderSize + 12 ||
+            (Record.ContainerEndVA - Record.ContainerVA - HeaderSize) % 12 ||
+            Record.GeneratedState > INT32_MAX ||
+            Record.EnclosingState < BaseState ||
+            (BaseState == -2 && Record.EnclosingState == -1) ||
+            Record.EnclosingState >= int32_t(Record.GeneratedState) ||
+            Record.RecordVA - Record.ContainerVA !=
+                HeaderSize + uint64_t(Record.GeneratedState) * 12 ||
+            Record.RecordVA + 12 > Record.ContainerEndVA ||
+            (Record.FilterSymbol.empty() != (Record.FilterVA == 0)))
+          return false;
+        const auto &Cookies = Record.RegistrationCookieOffsets;
+        if (HeaderSize ? (Cookies[0] >= 0 || Cookies[1] || Cookies[2] >= 0 ||
+                          Cookies[3])
+                       : Cookies != std::array<int32_t, 4>{})
+          return false;
+        if (Record.FilterVA &&
+            !llvm::any_of(FunctionRanges, [&](const RewriteFunctionRange &R) {
+              return R.OwnerSymbol == Record.FilterSymbol &&
+                     R.OwnerVA == Record.FilterVA &&
+                     R.BeginVA == Record.FilterVA && R.BeginVA < R.EndVA &&
+                     R.ParentOwnerSymbol.empty();
+            }))
+          return false;
+        RegistrationTables[{Record.OwnerSymbol, Record.ContainerSymbol}]
+            .push_back(&Record);
+        break;
+      }
+      if (!Record.ContainerEndSymbol.empty() || Record.ContainerEndVA ||
+          Record.GeneratedState != UINT32_MAX || Record.EnclosingState != -1 ||
+          !Record.FilterSymbol.empty() || Record.FilterVA ||
+          Record.RegistrationCookieOffsets != std::array<int32_t, 4>{})
+        return false;
       if (Record.BeginSymbol.empty() || Record.EndSymbol.empty() ||
           Record.Encoding != RewriteWinEHSemanticEncoding::SEH ||
           Record.RecordSize != 16 || Record.Token.Clause != 0 ||
@@ -381,6 +432,11 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
       break;
     }
     case RewriteWinEHSemanticKind::CxxCatch: {
+      if (!Record.ContainerEndSymbol.empty() || Record.ContainerEndVA ||
+          Record.GeneratedState != UINT32_MAX || Record.EnclosingState != -1 ||
+          !Record.FilterSymbol.empty() || Record.FilterVA ||
+          Record.RegistrationCookieOffsets != std::array<int32_t, 4>{})
+        return false;
       const RewriteSourceFunctionOwner *HandlerOwner =
           findOwnerBySymbol(Record.HandlerSymbol);
       // Native WinEH catchpads are compiler-created funclets in the root IR
@@ -428,6 +484,29 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
       break;
     }
     }
+  }
+
+  // Every physical state row must have exactly one source receipt. Neither an
+  // omitted compiler row nor a guessed source-index/generated-state identity
+  // can close this table.
+  for (const auto &[Key, Rows] : RegistrationTables) {
+    const auto &First = *Rows.front();
+    const uint32_t HeaderSize =
+        First.Encoding == RewriteWinEHSemanticEncoding::X86SEH4 ? 16 : 0;
+    if ((First.ContainerEndVA - First.ContainerVA - HeaderSize) / 12 !=
+        Rows.size())
+      return false;
+    std::set<uint32_t> States;
+    std::set<uint32_t> SourceRegions;
+    for (const auto *Row : Rows)
+      if (Row->Encoding != First.Encoding ||
+          Row->ContainerVA != First.ContainerVA ||
+          Row->ContainerEndVA != First.ContainerEndVA ||
+          Row->ContainerEndSymbol != First.ContainerEndSymbol ||
+          Row->RegistrationCookieOffsets != First.RegistrationCookieOffsets ||
+          !States.insert(Row->GeneratedState).second ||
+          !SourceRegions.insert(Row->Token.Region).second)
+        return false;
   }
 
   std::vector<std::pair<uint64_t, uint64_t>> SortedIntervals(
@@ -1272,6 +1351,8 @@ uint64_t FinalImageObjectWriter::writeObject() {
         const uint64_t RecordSize = RecordEnd->Offset - RecordBegin->Offset;
         uint64_t BeginVA = 0;
         uint64_t EndVA = 0;
+        uint64_t ContainerEndVA = 0;
+        uint64_t FilterVA = 0;
         if (Input.Token.Kind !=
                 mc_rewrite::RewriteWinEHSemanticKind::SEHScope &&
             Input.Token.Kind !=
@@ -1281,6 +1362,49 @@ uint64_t FinalImageObjectWriter::writeObject() {
         }
         switch (Input.Token.Kind) {
         case mc_rewrite::RewriteWinEHSemanticKind::SEHScope: {
+          if (isX86RegistrationEncoding(Input.Encoding)) {
+            if (Input.Begin || Input.End || RecordSize != 12 ||
+                Input.Token.Clause || !Input.ContainerEnd ||
+                Input.ContainerEnd->getName().empty() ||
+                Input.ContainerEnd->isVariable() ||
+                !Input.ContainerEnd->isInSection() ||
+                &Input.ContainerEnd->getSection() !=
+                    &Input.Container->getSection()) {
+              Out.WinEHSemanticsValid = false;
+              break;
+            }
+            const auto TableEnd =
+                symbolLocation(Input.ContainerEnd, /*AllowSectionEnd=*/true);
+            if (!TableEnd || TableEnd->Offset < RecordEnd->Offset) {
+              Out.WinEHSemanticsValid = false;
+              break;
+            }
+            ContainerEndVA = TableEnd->VA;
+            if (Input.Filter) {
+              if (Input.Filter->getName().empty() || Input.Filter->isVariable() ||
+                  !Input.Filter->isInSection()) {
+                Out.WinEHSemanticsValid = false;
+                break;
+              }
+              const auto FilterTraits =
+                  classifySection(*Asm, Input.Filter->getSection());
+              const auto Filter =
+                  symbolLocation(Input.Filter, /*AllowSectionEnd=*/false);
+              if (!Filter || !FilterTraits.IsAllocated ||
+                  FilterTraits.Kind != mc_rewrite::RewriteSectionKind::Code) {
+                Out.WinEHSemanticsValid = false;
+                break;
+              }
+              FilterVA = Filter->VA;
+            }
+            break;
+          }
+          if (Input.ContainerEnd || Input.Filter ||
+              Input.GeneratedState != UINT32_MAX || Input.EnclosingState != -1 ||
+              Input.RegistrationCookieOffsets != std::array<int32_t, 4>{}) {
+            Out.WinEHSemanticsValid = false;
+            break;
+          }
           if (Input.Encoding != mc_rewrite::RewriteWinEHSemanticEncoding::SEH ||
               !Input.Begin || !Input.End || RecordSize != 16 ||
               Input.Token.Clause != 0 || Input.Begin->isVariable() ||
@@ -1310,7 +1434,10 @@ uint64_t FinalImageObjectWriter::writeObject() {
         case mc_rewrite::RewriteWinEHSemanticKind::CxxCatch: {
           const bool HasValidEncoding =
               isValidCxxSemanticRecordSize(Input.Encoding, RecordSize);
-          if (Input.Begin || Input.End || !HasValidEncoding)
+          if (Input.Begin || Input.End || !HasValidEncoding ||
+              Input.ContainerEnd || Input.Filter ||
+              Input.GeneratedState != UINT32_MAX || Input.EnclosingState != -1 ||
+              Input.RegistrationCookieOffsets != std::array<int32_t, 4>{})
             Out.WinEHSemanticsValid = false;
           break;
         }
@@ -1326,6 +1453,17 @@ uint64_t FinalImageObjectWriter::writeObject() {
              BeginVA, Input.End ? Input.End->getName().str() : std::string(),
              EndVA, Input.Handler->getName().str(), Handler->VA,
              Input.Encoding});
+        auto &Published = Out.WinEHSemanticRecords.back();
+        Published.ContainerEndSymbol = Input.ContainerEnd
+                                           ? Input.ContainerEnd->getName().str()
+                                           : std::string();
+        Published.ContainerEndVA = ContainerEndVA;
+        Published.GeneratedState = Input.GeneratedState;
+        Published.EnclosingState = Input.EnclosingState;
+        Published.RegistrationCookieOffsets = Input.RegistrationCookieOffsets;
+        Published.FilterSymbol =
+            Input.Filter ? Input.Filter->getName().str() : std::string();
+        Published.FilterVA = FilterVA;
       }
       if (Out.WinEHSemanticsValid)
         Out.WinEHSemanticsValid =

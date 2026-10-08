@@ -23,6 +23,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/MC/BinaryRewrite.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsX86.h"
@@ -673,6 +674,14 @@ bool WinEHStateFnPassImpl::isStateStoreNeeded(EHPersonality Personality,
     return true;
   }
 
+  // A rewrite-owned source block establishes its live state explicitly. LLVM
+  // intrinsics (including lowered memcpy calls and inaccessible-memory
+  // provenance anchors) execute in that state rather than ending the scope.
+  if (Call.getFunction()->hasFnAttribute(
+          mc_rewrite::RewriteWinX86RegistrationStateAttribute) &&
+      isa<IntrinsicInst>(Call))
+    return false;
+
   // If the function touches memory, it needs a state store.
   if (isAsynchronousEHPersonality(Personality))
     return !Call.doesNotAccessMemory();
@@ -840,7 +849,10 @@ void WinEHStateFnPassImpl::insertStateNumberStore(Instruction *IP, int State) {
   IRBuilder<> Builder(IP);
   Value *StateField =
       Builder.CreateStructGEP(RegNodeTy, RegNode, StateFieldIndex);
-  Builder.CreateStore(Builder.getInt32(State), StateField);
+  auto *Store = Builder.CreateStore(Builder.getInt32(State), StateField);
+  if (IP->getFunction()->hasFnAttribute(
+          mc_rewrite::RewriteWinX86RegistrationStateAttribute))
+    Store->setVolatile(true);
 }
 
 void WinEHStateFnPassImpl::updateEspForInAllocas(Function &F) {

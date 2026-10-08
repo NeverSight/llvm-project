@@ -622,3 +622,75 @@ TEST(BinaryRewriteTest, DuplicateDelegatedOwnerReceiptFails) {
 }
 
 } // namespace
+
+TEST(BinaryRewriteTest, X86SEHRowsCloseTheExactGeneratedStateTable) {
+  using Encoding = mc_rewrite::RewriteWinEHSemanticEncoding;
+  using Record = mc_rewrite::RewriteWinEHSemanticRecord;
+  const std::vector<mc_rewrite::RewriteSourceFunctionOwner> Owners = {
+      {"source", "source", 0x1000, false},
+      {"filter", "filter", 0x2000, true}};
+  const std::map<std::string, uint64_t> Addrs = {{"source", 0x1000},
+                                               {"filter", 0x2000}};
+  const std::vector<mc_rewrite::RewriteFunctionRange> Ranges = {
+      {1, "source", 0x1000, "source", 0x1000, "source.end", 0x1100},
+      {2, "filter", 0x2000, "filter", 0x2000, "filter.end", 0x2040}};
+  std::vector<Record> Rows(2);
+  for (unsigned I = 0; I != Rows.size(); ++I) {
+    auto &R = Rows[I];
+    R.Token.Region = I ? 4 : 9; // Source scope order is not generated state.
+    R.Token.Digest = {1, 2, 3, 4};
+    R.SourceFunction = R.OwnerSymbol = "source";
+    R.OwnerVA = 0x1000;
+    R.ContainerSymbol = "table";
+    R.ContainerVA = 0x3000;
+    R.RecordVA = 0x3010 + I * 12;
+    R.RecordSize = 12;
+    R.HandlerSymbol = "handler";
+    R.HandlerVA = 0x1030;
+    R.Encoding = Encoding::X86SEH4;
+    R.ContainerEndSymbol = "table.end";
+    R.ContainerEndVA = 0x3028;
+    R.GeneratedState = I;
+    R.EnclosingState = I ? 0 : -2;
+    R.RegistrationCookieOffsets = {-2, 0, -36, 0};
+    if (I) {
+      R.FilterSymbol = "filter";
+      R.FilterVA = 0x2000;
+    }
+  }
+  auto Check = [&](const std::vector<Record> &R) {
+    return mc_rewrite::validateRewriteWinEHSemanticRecords(R, Owners, Ranges,
+                                                           Addrs);
+  };
+  EXPECT_TRUE(Check(Rows));
+  auto EH3 = Rows;
+  for (auto &R : EH3) {
+    R.Encoding = Encoding::X86SEH3;
+    R.RecordVA -= 16;
+    R.ContainerEndVA -= 16;
+    R.RegistrationCookieOffsets = {};
+    if (R.EnclosingState == -2)
+      R.EnclosingState = -1;
+  }
+  EXPECT_TRUE(Check(EH3));
+  auto Reject = [&](auto Mutate) {
+    auto Changed = Rows;
+    Mutate(Changed);
+    EXPECT_FALSE(Check(Changed));
+  };
+  Reject([](auto &R) { R.pop_back(); });
+  Reject([](auto &R) { R[0].ContainerEndVA += 12; });
+  Reject([](auto &R) { R[0].ContainerEndSymbol.clear(); });
+  Reject([](auto &R) { R[1].GeneratedState = 0; });
+  Reject([](auto &R) { R[1].EnclosingState = 1; });
+  Reject([](auto &R) { R[1].RegistrationCookieOffsets[2] -= 4; });
+  Reject([](auto &R) { R[0].RegistrationCookieOffsets[2] = 9999; });
+  Reject([](auto &R) { R[0].EnclosingState = -1; });
+  Reject([](auto &R) { R[1].RecordVA += 4; });
+  Reject([](auto &R) { R[1].FilterVA += 1; });
+  Reject([](auto &R) { R[1].FilterSymbol.clear(); });
+  Reject([](auto &R) { R[1].HandlerVA = 0x2000; });
+  Reject([](auto &R) { R[1].Token.Region = R[0].Token.Region; });
+  Reject([](auto &R) { R[1].Encoding = Encoding::SEH; });
+  Reject([](auto &R) { R[1].BeginSymbol = "unexpected.range"; });
+}

@@ -77,6 +77,11 @@ struct MCRewriteWinEHSemanticRecord {
   const MCSymbol *Begin = nullptr;
   const MCSymbol *End = nullptr;
   const MCSymbol *Handler = nullptr;
+  const MCSymbol *ContainerEnd = nullptr;
+  uint32_t GeneratedState = UINT32_MAX;
+  int32_t EnclosingState = -1;
+  const MCSymbol *Filter = nullptr;
+  std::array<int32_t, 4> RegistrationCookieOffsets{};
 };
 
 /// Exact rewrite-only association between one IR definition and the MC symbol
@@ -302,7 +307,10 @@ public:
       StringRef SourceFunction, const MCSymbol *Owner,
       const MCSymbol *Container, const MCSymbol *RecordBegin,
       const MCSymbol *RecordEnd, const MCSymbol *Begin, const MCSymbol *End,
-      const MCSymbol *Handler);
+      const MCSymbol *Handler, const MCSymbol *ContainerEnd = nullptr,
+      uint32_t GeneratedState = UINT32_MAX, int32_t EnclosingState = -1,
+      const MCSymbol *Filter = nullptr,
+      std::array<int32_t, 4> RegistrationCookieOffsets = {});
   ArrayRef<MCRewriteWinEHSemanticRecord>
   getRewriteWinEHSemanticRecords() const {
     return RewriteWinEHSemanticRecords;

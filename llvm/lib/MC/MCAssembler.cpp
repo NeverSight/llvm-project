@@ -218,10 +218,14 @@ void MCAssembler::registerRewriteWinEHSemanticRecord(
     mc_rewrite::RewriteWinEHSemanticEncoding Encoding, StringRef SourceFunction,
     const MCSymbol *Owner, const MCSymbol *Container,
     const MCSymbol *RecordBegin, const MCSymbol *RecordEnd,
-    const MCSymbol *Begin, const MCSymbol *End, const MCSymbol *Handler) {
+    const MCSymbol *Begin, const MCSymbol *End, const MCSymbol *Handler,
+    const MCSymbol *ContainerEnd, uint32_t GeneratedState, int32_t EnclosingState,
+    const MCSymbol *Filter, std::array<int32_t, 4> RegistrationCookieOffsets) {
   RewriteWinEHSemanticRecords.push_back({Token, Encoding, SourceFunction.str(),
                                          Owner, Container, RecordBegin,
-                                         RecordEnd, Begin, End, Handler});
+                                         RecordEnd, Begin, End, Handler, ContainerEnd,
+                                         GeneratedState, EnclosingState, Filter,
+                                         RegistrationCookieOffsets});
 }
 
 void MCAssembler::registerRewriteFunctionRange(const MCSymbol *Owner,

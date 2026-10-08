@@ -21,6 +21,8 @@
 #ifndef LLVM_MC_BINARYREWRITE_H
 #define LLVM_MC_BINARYREWRITE_H
 
+#define LLVM_NEVERD_X86_REGISTRATION_EH 1
+
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Compiler.h"
@@ -219,6 +221,8 @@ enum class RewriteWinEHSemanticEncoding : uint8_t {
   SEH = 1,
   CxxFH3 = 2,
   CxxFH4 = 3,
+  X86SEH3 = 4,
+  X86SEH4 = 5,
 };
 static_assert(static_cast<uint8_t>(RewriteWinEHSemanticEncoding::SEH) == 1 &&
               static_cast<uint8_t>(RewriteWinEHSemanticEncoding::CxxFH3) == 2 &&
@@ -272,6 +276,19 @@ struct RewriteWinEHSemanticRecord {
   uint64_t HandlerVA = 0;
   RewriteWinEHSemanticEncoding Encoding = RewriteWinEHSemanticEncoding::SEH;
 
+  /// PE32 registration tables are indexed by generated state, with absolute
+  /// filter/handler pointers. The exact container end closes all state rows;
+  /// it includes the sixteen-byte EH4 cookie header when present.
+  std::string ContainerEndSymbol;
+  uint64_t ContainerEndVA = 0;
+  uint32_t GeneratedState = UINT32_MAX;
+  int32_t EnclosingState = -1;
+  std::string FilterSymbol;
+  uint64_t FilterVA = 0;
+  /// The EH4 header offsets obtained from the final machine-frame layout.
+  /// EH3 and non-registration encodings retain the zero-initialized value.
+  std::array<int32_t, 4> RegistrationCookieOffsets{};
+
   friend bool operator==(const RewriteWinEHSemanticRecord &Left,
                          const RewriteWinEHSemanticRecord &Right) {
     return Left.Token == Right.Token &&
@@ -286,7 +303,14 @@ struct RewriteWinEHSemanticRecord {
            Left.BeginVA == Right.BeginVA && Left.EndSymbol == Right.EndSymbol &&
            Left.EndVA == Right.EndVA &&
            Left.HandlerSymbol == Right.HandlerSymbol &&
-           Left.HandlerVA == Right.HandlerVA && Left.Encoding == Right.Encoding;
+           Left.HandlerVA == Right.HandlerVA && Left.Encoding == Right.Encoding &&
+           Left.ContainerEndSymbol == Right.ContainerEndSymbol &&
+           Left.ContainerEndVA == Right.ContainerEndVA &&
+           Left.GeneratedState == Right.GeneratedState &&
+           Left.EnclosingState == Right.EnclosingState &&
+           Left.FilterSymbol == Right.FilterSymbol &&
+           Left.FilterVA == Right.FilterVA &&
+           Left.RegistrationCookieOffsets == Right.RegistrationCookieOffsets;
   }
   friend bool operator!=(const RewriteWinEHSemanticRecord &Left,
                          const RewriteWinEHSemanticRecord &Right) {
@@ -330,6 +354,12 @@ inline constexpr StringLiteral
 inline constexpr StringLiteral
     RewriteWinGSHandlerAttribute("llvm.rewrite.win-gs-handler");
 inline constexpr StringLiteral RewriteWinGSHandlerCxxFH4("cxx-fh4");
+
+/// Rewrite-only PE32 asynchronous-state protocol. Each source block establishes
+/// its state through seh_scope_begin/end. Intrinsics inherit that live state,
+/// and state stores are volatile to preserve ordering with faulting accesses.
+inline constexpr StringLiteral RewriteWinX86RegistrationStateAttribute(
+    "llvm.rewrite.win-x86-registration-state");
 
 /// One exact IR-definition to final MC-owner association.  SourceFunction is
 /// the original IR name and OwnerSymbol is the target-selected symbol spelling;

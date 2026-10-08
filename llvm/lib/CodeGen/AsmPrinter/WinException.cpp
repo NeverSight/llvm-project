@@ -1484,6 +1484,7 @@ void WinException::emitExceptHandlerTable(const MachineFunction *MF) {
   const auto *Per = cast<Function>(F.getPersonalityFn()->stripPointerCasts());
   StringRef PerName = Per->getName();
   int BaseState = -1;
+  std::array<int32_t, 4> RegistrationCookieOffsets{};
   if (PerName == "_except_handler4") {
     // The LSDA for _except_handler4 starts with this struct, followed by the
     // scope table:
@@ -1537,9 +1538,16 @@ void WinException::emitExceptHandlerTable(const MachineFunction *MF) {
     AddComment("EHCookieXOROffset");
     OS.emitInt32(0);
     BaseState = -2;
+    RegistrationCookieOffsets = {GSCookieOffset, 0, EHCookieOffset, 0};
   }
 
+  const bool Rewrite = Asm->OutContext.requiresRewriteFunctionProvenance();
+  MCSymbol *TableEnd = Rewrite
+                          ? Asm->OutContext.createTempSymbol(
+                                "rewrite_x86_seh_table_end", true)
+                          : nullptr;
   assert(!FuncInfo.SEHUnwindMap.empty());
+  uint32_t State = 0;
   for (const SEHUnwindMapEntry &UME : FuncInfo.SEHUnwindMap) {
     auto *Handler = cast<MachineBasicBlock *>(UME.Handler);
     const MCSymbol *ExceptOrFinally =
@@ -1547,13 +1555,36 @@ void WinException::emitExceptHandlerTable(const MachineFunction *MF) {
     // -1 is usually the base state for "unwind to caller", but for
     // _except_handler4 it's -2. Do that replacement here if necessary.
     int ToState = UME.ToState == -1 ? BaseState : UME.ToState;
+    MCSymbol *RowBegin = nullptr;
+    MCSymbol *RowEnd = nullptr;
+    if (Rewrite && UME.RewriteSemantic) {
+      RowBegin = Asm->OutContext.createTempSymbol("rewrite_x86_seh_row", true);
+      RowEnd = Asm->OutContext.createTempSymbol("rewrite_x86_seh_row_end", true);
+      OS.emitLabel(RowBegin);
+    }
     AddComment("ToState");
     OS.emitInt32(ToState);
     AddComment(UME.IsFinally ? "Null" : "FilterFunction");
     OS.emitValue(create32bitRef(UME.Filter), 4);
     AddComment(UME.IsFinally ? "FinallyFunclet" : "ExceptionHandler");
     OS.emitValue(create32bitRef(ExceptOrFinally), 4);
+    if (RowEnd) {
+      OS.emitLabel(RowEnd);
+      auto *Assembler = Asm->OutStreamer->getAssemblerPtr();
+      assert(Assembler && "rewrite provenance requires an object streamer");
+      Assembler->registerRewriteWinEHSemanticRecord(
+          *UME.RewriteSemantic,
+          BaseState == -2 ? mc_rewrite::RewriteWinEHSemanticEncoding::X86SEH4
+                          : mc_rewrite::RewriteWinEHSemanticEncoding::X86SEH3,
+          F.getName(), Asm->CurrentFnSym, LSDALabel, RowBegin, RowEnd,
+          nullptr, nullptr, ExceptOrFinally, TableEnd, State, ToState,
+          UME.Filter ? Asm->getSymbol(UME.Filter) : nullptr,
+          RegistrationCookieOffsets);
+    }
+    ++State;
   }
+  if (TableEnd)
+    OS.emitLabel(TableEnd);
 }
 
 static int getTryRank(const WinEHFuncInfo &FuncInfo, int State) {

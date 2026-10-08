@@ -2466,11 +2466,17 @@ void AsmPrinter::emitFunctionBody() {
   // Even though wasm supports .type and .size in general, function symbols
   // are automatically sized.
   bool EmitFunctionSize = MAI.hasDotTypeDotSizeDirective() && !TT.isWasm();
+  // PE32 registration EH does not use DWARF or Windows table-unwind CFI.
+  // Still publish an exact compiler range for its root and filter callbacks.
+  const bool RewriteX86Range = OutContext.requiresRewriteFunctionProvenance() &&
+                               TT.getArch() == Triple::x86 &&
+                               TT.isOSBinFormatCOFF();
 
   // SPIR-V supports label instructions only inside a block, not after the
   // function body.
   if (TT.getObjectFormat() != Triple::SPIRV &&
-      (EmitFunctionSize || needFuncLabels(*MF, *this) || CurrentFnEnd)) {
+      (EmitFunctionSize || needFuncLabels(*MF, *this) || CurrentFnEnd ||
+       RewriteX86Range)) {
     // Create a symbol for the end of function, if not already pre-created
     // (e.g. for .prefalign directive).
     if (!CurrentFnEnd)
@@ -2514,6 +2520,18 @@ void AsmPrinter::emitFunctionBody() {
     Handler->endFunction(MF);
   for (auto &Handler : EHHandlers)
     Handler->endFunction(MF);
+
+  if (RewriteX86Range) {
+    MCAssembler *Assembler = OutStreamer->getAssemblerPtr();
+    assert(Assembler && "rewrite provenance requires an object streamer");
+    if (!llvm::any_of(Assembler->getRewriteFunctionRanges(),
+                      [&](const MCRewriteFunctionRange &Range) {
+                        return Range.Owner == CurrentFnSym;
+                      })) {
+      Assembler->registerRewriteFunctionRange(CurrentFnSym, CurrentFnSym);
+      Assembler->completeRewriteFunctionRange(CurrentFnSym, CurrentFnEnd);
+    }
+  }
 
   // Emit section containing BB address offsets and their metadata, when
   // BB labels are requested for this function. Skip empty functions.
