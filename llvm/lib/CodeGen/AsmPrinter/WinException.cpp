@@ -1557,17 +1557,14 @@ void WinException::emitExceptHandlerTable(const MachineFunction *MF) {
         const auto GSOffset = TFI->getFrameIndexReference(
             *MF, MFI.getStackProtectorIndex(), GSReg);
         const int64_t GSFromRuntime = GSOffset.getFixed() - RuntimeOffset;
-        // LLVM's stack protector encodes the actual frame pointer. Its XOR
-        // address therefore needs the displacement back from the virtual one.
+        // Rewrite GS encoding uses the same virtual frame as EH4. This also
+        // remains fixed when the function realigns its physical stack.
         if (GSOffset.getScalable() || GSReg != NodeReg ||
-            NodeReg !=
-                MF->getSubtarget().getRegisterInfo()->getFrameRegister(*MF) ||
-            !isInt<32>(GSFromRuntime) || !isInt<32>(-RuntimeOffset) ||
-            GSFromRuntime % 4)
+            !isInt<32>(GSFromRuntime) || GSFromRuntime % 4)
           report_fatal_error(
               "rewrite GS cookie has no fixed runtime frame base");
         GSCookieOffset = GSFromRuntime;
-        GSCookieXOROffset = -RuntimeOffset;
+        GSCookieXOROffset = 0;
       }
     }
 

@@ -51,6 +51,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/PatternMatch.h"
+#include "llvm/MC/BinaryRewrite.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
@@ -2867,6 +2868,46 @@ bool X86TargetLowering::useStackGuardXorFP() const {
 SDValue X86TargetLowering::emitStackGuardXorFP(SelectionDAG &DAG, SDValue Val,
                                                const SDLoc &DL) const {
   EVT PtrTy = getPointerTy(DAG.getDataLayout());
+  MachineFunction &MF = DAG.getMachineFunction();
+  const Function &F = MF.getFunction();
+  if (!Subtarget.is64Bit() && Subtarget.getTargetTriple().isOSMSVCRT() &&
+      F.hasFnAttribute(mc_rewrite::RewriteWinX86RegistrationStateAttribute) &&
+      F.hasPersonalityFn() &&
+      F.getPersonalityFn()->stripPointerCasts()->getName() ==
+          "_except_handler4" &&
+      classifyEHPersonality(F.getPersonalityFn()) ==
+          EHPersonality::MSVC_X86SEH) {
+    // EH4's dispatcher receives RegNode + 24 as its virtual frame. The
+    // actual EBP can have a dynamic displacement from that address after
+    // stack realignment, so both GS encoding and decoding must use the
+    // compiler-owned registration node instead. Resolve its exact alloca
+    // even when stackprotector precedes the marker in instruction order.
+    const AllocaInst *Node = nullptr;
+    for (const BasicBlock &BB : F)
+      for (const Instruction &I : BB)
+        if (const auto *Call = dyn_cast<IntrinsicInst>(&I);
+            Call && Call->getIntrinsicID() == Intrinsic::x86_seh_ehregnode) {
+          const auto *Candidate =
+              dyn_cast<AllocaInst>(Call->getArgOperand(0)->stripPointerCasts());
+          if (Node || !Candidate)
+            report_fatal_error("rewrite GS has no unique registration node");
+          Node = Candidate;
+        }
+    const MachineFrameInfo &MFI = MF.getFrameInfo();
+    int NodeIndex = INT_MAX;
+    for (int FI = 0, End = MFI.getObjectIndexEnd(); FI != End; ++FI)
+      if (Node && MFI.getObjectAllocation(FI) == Node) {
+        if (NodeIndex != INT_MAX || MFI.getObjectSize(FI) != 24)
+          report_fatal_error("rewrite GS registration allocation is invalid");
+        NodeIndex = FI;
+      }
+    if (NodeIndex == INT_MAX)
+      report_fatal_error("rewrite GS registration has no static frame index");
+    SDValue RuntimeFrame =
+        DAG.getNode(ISD::ADD, DL, PtrTy, DAG.getFrameIndex(NodeIndex, PtrTy),
+                    DAG.getConstant(24, DL, PtrTy));
+    return DAG.getNode(ISD::XOR, DL, PtrTy, Val, RuntimeFrame);
+  }
   unsigned XorOp = Subtarget.is64Bit() ? X86::XOR64_FP : X86::XOR32_FP;
   MachineSDNode *Node = DAG.getMachineNode(XorOp, DL, PtrTy, Val);
   return SDValue(Node, 0);

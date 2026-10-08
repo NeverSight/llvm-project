@@ -23,6 +23,7 @@
 
 #define LLVM_NEVERD_X86_REGISTRATION_EH 1
 #define LLVM_NEVERD_X86_REGISTRATION_COOKIES 1
+#define LLVM_NEVERD_X86_REGISTRATION_GS 1
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"

@@ -11874,6 +11874,19 @@ static void tryToElideArgumentCopy(
   int &AllocaIndex = FuncInfo.StaticAllocaMap[AI];
   int OldIndex = AllocaIndex;
   MachineFrameInfo &MFI = FuncInfo.MF->getFrameInfo();
+  if (FuncInfo.MF->getSubtarget().getRegisterInfo()->hasStackRealignment(
+          *FuncInfo.MF)) {
+    // localrecover uses the parent's recovered local-frame base. With stack
+    // realignment that base need not be the FP which addresses incoming
+    // arguments. Moving an escaped local into a fixed argument slot would
+    // publish an offset relative to the wrong base in LOCAL_ESCAPE.
+    for (const Instruction &I : AI->getFunction()->getEntryBlock())
+      if (const auto *Escape = dyn_cast<IntrinsicInst>(&I);
+          Escape && Escape->getIntrinsicID() == Intrinsic::localescape)
+        for (const Value *Slot : Escape->args())
+          if (Slot->stripPointerCasts() == AI)
+            return;
+  }
   if (MFI.getObjectSize(FixedIndex) != MFI.getObjectSize(OldIndex)) {
     LLVM_DEBUG(
         dbgs() << "  argument copy elision failed due to bad fixed stack "
