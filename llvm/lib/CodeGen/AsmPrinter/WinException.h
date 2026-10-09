@@ -48,6 +48,10 @@ class LLVM_LIBRARY_VISIBILITY WinException : public EHStreamer {
   /// The section of the last funclet start.
   MCSection *CurrentFuncletTextSection = nullptr;
 
+  /// PE32 funclets have no Windows CFI range. Preserve their exact emitted
+  /// extent independently for final-image C++ semantic receipts.
+  const MCSymbol *RewriteX86FuncletRangeBegin = nullptr;
+
   /// The list of symbols to add to the ehcont section
   std::vector<const MCSymbol *> EHContTargets;
 

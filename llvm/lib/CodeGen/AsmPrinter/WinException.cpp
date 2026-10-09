@@ -164,6 +164,10 @@ void WinException::beginFunction(const MachineFunction *MF) {
     }
     shouldEmitLSDA = hasEHFunclets;
     shouldEmitPersonality = false;
+    if (Per == EHPersonality::MSVC_CXX && hasEHFunclets &&
+        Asm->TM.getTargetTriple().getArch() == Triple::x86 &&
+        Asm->OutContext.requiresRewriteFunctionProvenance())
+      beginFunclet(MF->front(), Asm->CurrentFnSym);
     return;
   }
 
@@ -362,6 +366,21 @@ void WinException::beginFunclet(const MachineBasicBlock &MBB,
     }
   }
 
+  if (!Asm->MAI.usesWindowsCFI() &&
+      Asm->TM.getTargetTriple().getArch() == Triple::x86 &&
+      F.hasPersonalityFn() &&
+      classifyEHPersonality(F.getPersonalityFn()->stripPointerCasts()) ==
+          EHPersonality::MSVC_CXX &&
+      Asm->OutContext.requiresRewriteFunctionProvenance()) {
+    MCAssembler *Assembler = Asm->OutStreamer->getAssemblerPtr();
+    assert(Assembler && "rewrite provenance requires an object streamer");
+    assert(!RewriteX86FuncletRangeBegin && "previous funclet range is open");
+    Assembler->registerRewriteFunctionRange(Sym, Sym);
+    if (Sym != Asm->CurrentFnSym)
+      Assembler->registerRewriteDerivedFunctionOwner(Sym, Asm->CurrentFnSym);
+    RewriteX86FuncletRangeBegin = Sym;
+  }
+
   if (shouldEmitPersonality) {
     const TargetLoweringObjectFile &TLOF = Asm->getObjFileLowering();
     const Function *PerFn = nullptr;
@@ -406,6 +425,16 @@ void WinException::endFuncletImpl() {
   // No funclet to process?  Great, we have nothing to do.
   if (!CurrentFuncletEntry)
     return;
+
+  if (RewriteX86FuncletRangeBegin) {
+    MCAssembler *Assembler = Asm->OutStreamer->getAssemblerPtr();
+    assert(Assembler && "rewrite provenance requires an object streamer");
+    MCSymbol *End = Asm->OutContext.createTempSymbol("rewrite_x86_funclet_end",
+                                                     /*AlwaysAddSuffix=*/true);
+    Asm->OutStreamer->emitLabel(End);
+    Assembler->completeRewriteFunctionRange(RewriteX86FuncletRangeBegin, End);
+    RewriteX86FuncletRangeBegin = nullptr;
+  }
 
   const MachineFunction *MF = Asm->MF;
   if (shouldEmitMoves || shouldEmitPersonality) {
