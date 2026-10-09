@@ -65,6 +65,8 @@ struct MCRewriteDerivedFunctionOwner {
 struct MCRewriteWinX86CxxLayout {
   std::array<const MCSymbol *, 8> Tables{};
   std::array<int64_t, 4> Frame{};
+  const MCSymbol *RegistrationHandler = nullptr;
+  std::array<int64_t, 3> RegistrationFrame{};
 };
 
 /// Symbol-backed WinEH semantic row retained until final MC layout. The source

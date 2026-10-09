@@ -1161,6 +1161,59 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
 
   const bool X86Rewrite = Asm->TM.getTargetTriple().getArch() == Triple::x86 &&
                           Asm->OutContext.requiresRewriteFunctionProvenance();
+  MCSymbol *RegistrationHandler = nullptr;
+  std::array<int64_t, 3> RegistrationFrame{};
+  if (X86Rewrite) {
+    const MDNode *Attachment =
+        F.getMetadata(mc_rewrite::RewriteWinX86CxxHandlerAttachment);
+    const auto *Value =
+        Attachment && Attachment->getNumOperands() == 1
+            ? dyn_cast_or_null<ValueAsMetadata>(Attachment->getOperand(0).get())
+            : nullptr;
+    const auto *Handler =
+        Value ? dyn_cast<Function>(Value->getValue()) : nullptr;
+    if (!Handler || Handler->isDeclaration() ||
+        !Handler->hasInternalLinkage() ||
+        Handler->getParent() != F.getParent() ||
+        !Handler->hasFnAttribute("safeseh") ||
+        !Handler->hasFnAttribute(
+            mc_rewrite::RewriteWinX86CxxHandlerParentAttribute) ||
+        Handler->getFnAttribute(
+                   mc_rewrite::RewriteWinX86CxxHandlerParentAttribute)
+                .getValueAsString() != F.getName()) {
+      Asm->OutContext.reportError(
+          SMLoc(), "PE32 C++ registration handler lost compiler ownership");
+      return;
+    }
+    RegistrationHandler = Asm->getSymbol(Handler);
+    MCAssembler *Assembler = Asm->OutStreamer->getAssemblerPtr();
+    assert(Assembler && "rewrite provenance requires an object streamer");
+    Assembler->registerRewriteSourceFunctionOwner(
+        Handler->getName(), RegistrationHandler, /*IsPrivate=*/true,
+        mc_rewrite::RewriteSourceFunctionOwnerKind::
+            WinX86CxxRegistrationHandler,
+        F.getName());
+    Assembler->registerRewriteDerivedFunctionOwner(RegistrationHandler,
+                                                   Asm->CurrentFnSym);
+    const int FI = FuncInfo.EHRegNodeFrameIndex;
+    if (FI == INT_MAX || MF->getFrameInfo().getObjectSize(FI) != 16) {
+      Asm->OutContext.reportError(SMLoc(),
+                                  "PE32 C++ registration node is incomplete");
+      return;
+    }
+    Register NodeRegister;
+    const auto Offset =
+        MF->getSubtarget().getFrameLowering()->getFrameIndexReference(
+            *MF, FI, NodeRegister);
+    if (Offset.getScalable()) {
+      Asm->OutContext.reportError(SMLoc(),
+                                  "PE32 C++ registration node is scalable");
+      return;
+    }
+    RegistrationFrame = {MF->getSubtarget().getRegisterInfo()->getDwarfRegNum(
+                             NodeRegister, true),
+                         Offset.getFixed(), 16};
+  }
   auto RewriteEnd = [&](StringRef Name, const MCSymbol *Begin) -> MCSymbol * {
     return X86Rewrite && Begin ? Asm->OutContext.createTempSymbol(
                                      Name, /*AlwaysAddSuffix=*/true)
@@ -1175,6 +1228,8 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
     Layout.Tables = {FuncInfoXData, FuncInfoEnd,      UnwindMapXData,
                      UnwindMapEnd,  TryBlockMapXData, TryBlockMapEnd,
                      nullptr,       nullptr};
+    Layout.RegistrationHandler = RegistrationHandler;
+    Layout.RegistrationFrame = RegistrationFrame;
     return Layout;
   };
 

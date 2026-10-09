@@ -192,13 +192,13 @@ bool checkedAdd(uint64_t Left, uint64_t Right, uint64_t &Result) {
   return true;
 }
 
-bool validateWinCxxCatchOwnerRanges(
+bool validateWinCxxDerivedOwnerRanges(
     ArrayRef<llvm::mc_rewrite::RewriteSourceFunctionOwner> SourceOwners,
     ArrayRef<llvm::mc_rewrite::RewriteFunctionRange> FunctionRanges) {
   using OwnerKind = llvm::mc_rewrite::RewriteSourceFunctionOwnerKind;
   for (const llvm::mc_rewrite::RewriteSourceFunctionOwner &Owner :
        SourceOwners) {
-    if (Owner.Kind != OwnerKind::WinCxxCatchFunclet)
+    if (!mc_rewrite::isRewriteWinCxxDerivedOwnerKind(Owner.Kind))
       continue;
     const auto Parent = llvm::find_if(
         SourceOwners,
@@ -297,7 +297,7 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
   if (!validateRewriteSourceFunctionOwners(SourceOwners) ||
       !validateRewriteFunctionRanges(FunctionRanges, FunctionOwnerAddrs,
                                      ValidateGlobalFunctionRangeOverlap) ||
-      !validateWinCxxCatchOwnerRanges(SourceOwners, FunctionRanges))
+      !validateWinCxxDerivedOwnerRanges(SourceOwners, FunctionRanges))
     return false;
 
   auto findSourceOwner =
@@ -347,6 +347,24 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
     if (!Record.X86CxxLayout)
       return false;
     const auto &Layout = *Record.X86CxxLayout;
+    const auto *RegistrationOwner =
+        findOwnerBySymbol(Layout.RegistrationHandlerSymbol);
+    if (!RegistrationOwner ||
+        RegistrationOwner->Kind !=
+            RewriteSourceFunctionOwnerKind::WinX86CxxRegistrationHandler ||
+        RegistrationOwner->ParentSourceFunction != Record.SourceFunction ||
+        RegistrationOwner->OwnerVA != Layout.RegistrationHandlerVA ||
+        !Layout.RegistrationHandlerVA ||
+        Layout.RegistrationHandlerVA > UINT32_MAX)
+      return false;
+    if (llvm::count_if(FunctionRanges, [&](const RewriteFunctionRange &Range) {
+          return Range.OwnerSymbol == Layout.RegistrationHandlerSymbol;
+        }) != 1)
+      return false;
+    const auto &Node = Layout.RegistrationFrame;
+    if ((Node[0] != 3 && Node[0] != 5 && Node[0] != 6 && Node[0] != 7) ||
+        !isInt<32>(Node[1]) || !isInt<32>(Node[1] + 16) || Node[2] != 16)
+      return false;
     const bool Cleanup =
         Record.Token.Kind == RewriteWinEHSemanticKind::CxxCleanup;
     for (unsigned I = 0; I != Layout.Tables.size(); ++I) {
@@ -378,6 +396,13 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
     }
     const auto [It, Inserted] =
         CxxLayouts.try_emplace(Record.OwnerSymbol, Layout);
+    if (!Inserted)
+      if (It->second.RegistrationHandlerSymbol !=
+              Layout.RegistrationHandlerSymbol ||
+          It->second.RegistrationHandlerVA != Layout.RegistrationHandlerVA)
+        return false;
+    if (!Inserted && It->second.RegistrationFrame != Layout.RegistrationFrame)
+      return false;
     if (!Inserted)
       for (unsigned I = 0; I != 3; ++I)
         if (!(It->second.Tables[I] == Layout.Tables[I]))
@@ -656,6 +681,7 @@ bool llvm::mc_rewrite::isValidRewriteSourceFunctionOwnerDescriptor(
   case RewriteSourceFunctionOwnerKind::FunctionEntry:
     return ParentSourceFunction.empty();
   case RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet:
+  case RewriteSourceFunctionOwnerKind::WinX86CxxRegistrationHandler:
     return IsPrivate && !ParentSourceFunction.empty() &&
            ParentSourceFunction != SourceFunction;
   }
@@ -677,7 +703,7 @@ bool llvm::mc_rewrite::validateRewriteSourceFunctionOwners(
   }
 
   for (const RewriteSourceFunctionOwner &Owner : Owners) {
-    if (Owner.Kind != RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet)
+    if (!isRewriteWinCxxDerivedOwnerKind(Owner.Kind))
       continue;
     const auto Parent =
         llvm::find_if(Owners, [&](const RewriteSourceFunctionOwner &Candidate) {
@@ -1286,8 +1312,8 @@ uint64_t FinalImageObjectWriter::writeObject() {
       const auto ChildSource = SourceOwnersBySymbol.find(Input.Owner);
       const MCRewriteSourceFunctionOwner *ExpectedParent = nullptr;
       if (ChildSource != SourceOwnersBySymbol.end() &&
-          ChildSource->second->Kind ==
-              mc_rewrite::RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet) {
+          mc_rewrite::isRewriteWinCxxDerivedOwnerKind(
+              ChildSource->second->Kind)) {
         const auto ParentReceipt =
             llvm::find_if(Asm->getRewriteSourceFunctionOwners(),
                           [&](const MCRewriteSourceFunctionOwner &Candidate) {
@@ -1304,9 +1330,8 @@ uint64_t FinalImageObjectWriter::writeObject() {
           ParentSource->second->Kind !=
               mc_rewrite::RewriteSourceFunctionOwnerKind::FunctionEntry ||
           (ChildSource != SourceOwnersBySymbol.end() &&
-           (ChildSource->second->Kind !=
-                mc_rewrite::RewriteSourceFunctionOwnerKind::
-                    WinCxxCatchFunclet ||
+           (!mc_rewrite::isRewriteWinCxxDerivedOwnerKind(
+                ChildSource->second->Kind) ||
             ExpectedParent != ParentSource->second)) ||
           !DerivedOwnerParents.try_emplace(Input.Owner, Input.ParentOwner)
                .second) {
@@ -1412,8 +1437,8 @@ uint64_t FinalImageObjectWriter::writeObject() {
           Out.FunctionRanges, Out.FunctionOwnerAddrs,
           !Opts.DeferGlobalFunctionRangeOverlap);
     if (Out.FunctionRangesValid &&
-        !validateWinCxxCatchOwnerRanges(Out.SourceFunctionOwners,
-                                        Out.FunctionRanges))
+        !validateWinCxxDerivedOwnerRanges(Out.SourceFunctionOwners,
+                                          Out.FunctionRanges))
       Out.FunctionRangesValid = false;
 
     if (Out.FunctionRangesValid) {
@@ -1493,6 +1518,21 @@ uint64_t FinalImageObjectWriter::writeObject() {
         if (Input.X86CxxLayout) {
           X86CxxLayout.emplace();
           X86CxxLayout->Frame = Input.X86CxxLayout->Frame;
+          X86CxxLayout->RegistrationFrame =
+              Input.X86CxxLayout->RegistrationFrame;
+          const auto *Handler = Input.X86CxxLayout->RegistrationHandler;
+          const auto Location =
+              Handler ? symbolLocation(Handler, /*AllowSectionEnd=*/false)
+                      : std::nullopt;
+          if (!Handler || Handler->isVariable() || Handler->getName().empty() ||
+              !Handler->isInSection() || !Location ||
+              classifySection(*Asm, Handler->getSection()).Kind !=
+                  mc_rewrite::RewriteSectionKind::Code) {
+            Out.WinEHSemanticsValid = false;
+            break;
+          }
+          X86CxxLayout->RegistrationHandlerSymbol = Handler->getName().str();
+          X86CxxLayout->RegistrationHandlerVA = Location->VA;
           for (unsigned I = 0; I != 4; ++I) {
             const MCSymbol *Begin = Input.X86CxxLayout->Tables[I * 2];
             const MCSymbol *End = Input.X86CxxLayout->Tables[I * 2 + 1];

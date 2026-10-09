@@ -177,8 +177,7 @@ bool MCAssembler::validateRewriteSourceFunctionOwnerRegistrations() const {
     const bool ExpectationStateIsValid =
         Owner.Kind == mc_rewrite::RewriteSourceFunctionOwnerKind::FunctionEntry
             ? !Owner.WasExpected
-            : Owner.Kind == mc_rewrite::RewriteSourceFunctionOwnerKind::
-                                WinCxxCatchFunclet &&
+            : mc_rewrite::isRewriteWinCxxDerivedOwnerKind(Owner.Kind) &&
                   Owner.WasExpected;
     if (!ExpectationStateIsValid || !Owner.Owner ||
         Owner.Owner->getName().empty() ||
@@ -192,8 +191,7 @@ bool MCAssembler::validateRewriteSourceFunctionOwnerRegistrations() const {
 
   for (const MCRewriteSourceFunctionOwner &Owner :
        RewriteSourceFunctionOwners) {
-    if (Owner.Kind !=
-        mc_rewrite::RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet)
+    if (!mc_rewrite::isRewriteWinCxxDerivedOwnerKind(Owner.Kind))
       continue;
     const auto Parent = llvm::find_if(
         RewriteSourceFunctionOwners,

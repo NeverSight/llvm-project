@@ -26,6 +26,7 @@
 #define LLVM_NEVERD_X86_REGISTRATION_GS 1
 #define LLVM_NEVERD_X86_CXX_CATCH_SUBFIELDS 1
 #define LLVM_NEVERD_X86_CXX_FUNCTION_RECEIPTS 1
+#define LLVM_NEVERD_X86_CXX_HANDLER_RECEIPTS 1
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
@@ -147,6 +148,8 @@ struct FixupCtx {
   bool IsResolved = false;
   /// Width in bits of the value field this fixup writes.
   unsigned BitWidth = 0;
+  /// Stable backend spelling for the exact numeric Kind above.
+  StringRef KindName;
 };
 
 /// Per-fixup hook: called once \p Value is the final absolute value but before
@@ -291,10 +294,20 @@ struct RewriteWinEHDataRange {
 struct RewriteWinX86CxxLayout {
   std::array<RewriteWinEHDataRange, 4> Tables;
   std::array<int64_t, 4> Frame{};
+  /// Actual compiler-created function installed in this parent's FS chain.
+  /// The owner and its exact derived range are independently indexed below.
+  std::string RegistrationHandlerSymbol;
+  uint64_t RegistrationHandlerVA = 0;
+  /// DWARF base register, physical node offset and complete node size.
+  /// The CXX registration is SavedESP, Next, Handler and State (four words).
+  std::array<int64_t, 3> RegistrationFrame{};
 
   friend bool operator==(const RewriteWinX86CxxLayout &L,
                          const RewriteWinX86CxxLayout &R) {
-    return L.Tables == R.Tables && L.Frame == R.Frame;
+    return L.Tables == R.Tables && L.Frame == R.Frame &&
+           L.RegistrationHandlerSymbol == R.RegistrationHandlerSymbol &&
+           L.RegistrationHandlerVA == R.RegistrationHandlerVA &&
+           L.RegistrationFrame == R.RegistrationFrame;
   }
 };
 
@@ -370,11 +383,28 @@ struct RewriteWinEHSemanticRecord {
 enum class RewriteSourceFunctionOwnerKind : uint8_t {
   FunctionEntry = 0,
   WinCxxCatchFunclet = 1,
+  WinX86CxxRegistrationHandler = 2,
 };
 static_assert(
     static_cast<uint8_t>(RewriteSourceFunctionOwnerKind::FunctionEntry) == 0 &&
     static_cast<uint8_t>(RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet) ==
-        1);
+        1 &&
+    static_cast<uint8_t>(
+        RewriteSourceFunctionOwnerKind::WinX86CxxRegistrationHandler) == 2);
+
+inline bool
+isRewriteWinCxxDerivedOwnerKind(RewriteSourceFunctionOwnerKind Kind) {
+  return Kind == RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet ||
+         Kind == RewriteSourceFunctionOwnerKind::WinX86CxxRegistrationHandler;
+}
+
+/// X86WinEHState overwrites the parent's attachment with the actual generated
+/// handler Function and marks that handler's parent. AsmPrinter consumes the
+/// relationship directly; no consumer derives it from thunk naming patterns.
+inline constexpr StringLiteral
+    RewriteWinX86CxxHandlerAttachment("llvm.rewrite.win-x86-cxx-handler");
+inline constexpr StringLiteral RewriteWinX86CxxHandlerParentAttribute(
+    "llvm.rewrite.win-x86-cxx-handler-parent");
 
 /// Rewrite-only IR markers used to delegate one source function's physical
 /// owner to a Windows C++ catch funclet in another IR function.  The source
@@ -423,8 +453,9 @@ struct RewriteSourceFunctionOwner {
 };
 
 /// Validate one role-specific source-owner descriptor independently of its MC
-/// symbol and collection.  Function entries have no parent.  Windows C++ catch
-/// funclets are private, name a distinct non-empty parent, and are validated
+/// symbol and collection. Function entries have no parent. Windows C++ catch
+/// funclets and x86 registration handlers are private, name a distinct
+/// non-empty parent, and are validated
 /// against that parent's FunctionEntry receipt by the collection validator.
 LLVM_ABI bool isValidRewriteSourceFunctionOwnerDescriptor(
     StringRef SourceFunction, bool IsPrivate,
@@ -433,7 +464,7 @@ LLVM_ABI bool isValidRewriteSourceFunctionOwnerDescriptor(
 /// Validate the portable identity constraints of source-owner provenance.
 /// Source identities are unique.  Owner addresses need not be unique because
 /// zero-sized or folded entries can legally share an address while retaining
-/// distinct symbol identities.  A catch-funclet parent must have its own exact
+/// distinct symbol identities. A derived C++ parent must have its own exact
 /// FunctionEntry receipt in the same collection.
 LLVM_ABI bool validateRewriteSourceFunctionOwners(
     ArrayRef<RewriteSourceFunctionOwner> Owners);

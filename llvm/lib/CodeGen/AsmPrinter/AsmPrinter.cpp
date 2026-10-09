@@ -1129,6 +1129,14 @@ void AsmPrinter::emitFunctionHeader() {
           F.getName(),
           mc_rewrite::RewriteSourceFunctionOwnerKind::WinCxxCatchFunclet,
           Delegation.getValueAsString());
+    } else if (F.hasFnAttribute(
+                   mc_rewrite::RewriteWinX86CxxHandlerParentAttribute)) {
+      Assembler->expectRewriteSourceFunctionOwner(
+          F.getName(),
+          mc_rewrite::RewriteSourceFunctionOwnerKind::
+              WinX86CxxRegistrationHandler,
+          F.getFnAttribute(mc_rewrite::RewriteWinX86CxxHandlerParentAttribute)
+              .getValueAsString());
     } else {
       Assembler->registerRewriteSourceFunctionOwner(F.getName(), CurrentFnSym,
                                                     F.hasLocalLinkage());

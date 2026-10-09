@@ -437,6 +437,9 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   if (Opts.onFixup) {
     mc_rewrite::FixupCtx Ctx;
     Ctx.Kind = Fixup.getKind();
+    Ctx.KindName =
+        Wrapped->getFixupKindInfo(static_cast<MCFixupKind>(Fixup.getKind()))
+            .Name;
     const MCSection &Section = *F.getParent();
     Ctx.SectionName = Section.getName();
     const uint64_t SecVA = getSectionImageVA(Section);

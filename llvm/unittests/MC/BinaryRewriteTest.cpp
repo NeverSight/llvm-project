@@ -263,6 +263,14 @@ TEST(BinaryRewriteTest, WinEHSemanticRowsRequireExactSourceAndRangeClosure) {
 
   // PE32 has absolute pointers and no ParentFrameOffset word. Its receipt
   // cannot be relabelled as the twenty-byte relative-pointer encoding.
+  auto X86Owners = Owners;
+  X86Owners.push_back({"compiler.handler", "registration.handler", 0x1200, true,
+                       OwnerKind::WinX86CxxRegistrationHandler, "source"});
+  auto X86Ranges = Ranges;
+  X86Ranges.push_back({9, "registration.handler", 0x1200, "reg.begin", 0x1200,
+                       "reg.end", 0x120a, "source$entry", 0x1000});
+  auto X86Addrs = OwnerAddrs;
+  X86Addrs.emplace("registration.handler", 0x1200);
   auto ValidX86 = Valid;
   ValidX86[1].Encoding = Encoding::X86CxxFH3;
   ValidX86[1].RecordSize = 16;
@@ -273,6 +281,9 @@ TEST(BinaryRewriteTest, WinEHSemanticRowsRequireExactSourceAndRangeClosure) {
   X86.RecordVA = 0x4048;
   X86.GeneratedState = 0;
   X86.X86CxxLayout.emplace();
+  X86.X86CxxLayout->RegistrationHandlerSymbol = "registration.handler";
+  X86.X86CxxLayout->RegistrationHandlerVA = 0x1200;
+  X86.X86CxxLayout->RegistrationFrame = {5, -16, 16};
   X86.X86CxxLayout->Tables = {
       mc_rewrite::RewriteWinEHDataRange{"funcinfo", 0x4000, "funcinfo.end",
                                         0x4024},
@@ -281,32 +292,32 @@ TEST(BinaryRewriteTest, WinEHSemanticRowsRequireExactSourceAndRangeClosure) {
       mc_rewrite::RewriteWinEHDataRange{"handlers", 0x4048, "handlers.end",
                                         0x4058}};
   EXPECT_TRUE(mc_rewrite::validateRewriteWinEHSemanticRecords(
-      ValidX86, Owners, Ranges, OwnerAddrs));
+      ValidX86, X86Owners, X86Ranges, X86Addrs));
   auto WrongX86Size = ValidX86;
   WrongX86Size[1].RecordSize = 20;
   EXPECT_FALSE(mc_rewrite::validateRewriteWinEHSemanticRecords(
-      WrongX86Size, Owners, Ranges, OwnerAddrs));
+      WrongX86Size, X86Owners, X86Ranges, X86Addrs));
   auto WrongRelativeSize = Valid;
   WrongRelativeSize[1].RecordSize = 16;
   EXPECT_FALSE(mc_rewrite::validateRewriteWinEHSemanticRecords(
-      WrongRelativeSize, Owners, Ranges, OwnerAddrs));
+      WrongRelativeSize, X86Owners, X86Ranges, X86Addrs));
 
   auto ValidFH4 = Valid;
   ValidFH4[1].RecordSize = 6;
   ValidFH4[1].Encoding = Encoding::CxxFH4;
   EXPECT_TRUE(mc_rewrite::validateRewriteWinEHSemanticRecords(
-      ValidFH4, Owners, Ranges, OwnerAddrs));
+      ValidFH4, X86Owners, X86Ranges, X86Addrs));
 
   auto ValidTypedFH4 = ValidFH4;
   ValidTypedFH4[1].RecordSize = 10;
   EXPECT_TRUE(mc_rewrite::validateRewriteWinEHSemanticRecords(
-      ValidTypedFH4, Owners, Ranges, OwnerAddrs));
+      ValidTypedFH4, X86Owners, X86Ranges, X86Addrs));
 
   for (uint32_t InvalidSize : {7u, 8u, 15u}) {
     auto InvalidFH4Size = ValidFH4;
     InvalidFH4Size[1].RecordSize = InvalidSize;
     EXPECT_FALSE(mc_rewrite::validateRewriteWinEHSemanticRecords(
-        InvalidFH4Size, Owners, Ranges, OwnerAddrs));
+        InvalidFH4Size, X86Owners, X86Ranges, X86Addrs));
   }
 
   auto InvalidEncoding = ValidFH4;
@@ -743,15 +754,22 @@ TEST(BinaryRewriteTest, X86CxxRowsCloseFuncInfoTablesAndPhysicalFrame) {
        0x1000,
        false,
        RewriteSourceFunctionOwnerKind::FunctionEntry,
-       {}}};
+       {}},
+      {"compiler.handler", "registration.handler", 0x1120, true,
+       RewriteSourceFunctionOwnerKind::WinX86CxxRegistrationHandler, "source"}};
   const std::map<std::string, uint64_t> OwnerAddrs = {
-      {"entry", 0x1000}, {"catch", 0x1080}, {"cleanup", 0x1100}};
+      {"entry", 0x1000},
+      {"catch", 0x1080},
+      {"cleanup", 0x1100},
+      {"registration.handler", 0x1120}};
   const std::vector<RewriteFunctionRange> Ranges = {
       {1, "entry", 0x1000, "entry.begin", 0x1000, "entry.end", 0x1080, {}, 0},
       {2, "catch", 0x1080, "catch.begin", 0x1080, "catch.end", 0x1100, "entry",
        0x1000},
       {3, "cleanup", 0x1100, "cleanup.begin", 0x1100, "cleanup.end", 0x1120,
-       "entry", 0x1000}};
+       "entry", 0x1000},
+      {4, "registration.handler", 0x1120, "reg.begin", 0x1120, "reg.end",
+       0x112a, "entry", 0x1000}};
   RewriteWinEHSemanticRecord Catch;
   Catch.Token = {RewriteWinEHSemanticKind::CxxCatch, 0, 0, {1, 2, 3, 4}};
   Catch.SourceFunction = "source";
@@ -768,6 +786,9 @@ TEST(BinaryRewriteTest, X86CxxRowsCloseFuncInfoTablesAndPhysicalFrame) {
   Catch.HandlerVA = 0x1080;
   Catch.GeneratedState = 0;
   Catch.X86CxxLayout.emplace();
+  Catch.X86CxxLayout->RegistrationHandlerSymbol = "registration.handler";
+  Catch.X86CxxLayout->RegistrationHandlerVA = 0x1120;
+  Catch.X86CxxLayout->RegistrationFrame = {5, -16, 16};
   Catch.X86CxxLayout->Tables = {
       RewriteWinEHDataRange{"funcinfo", 0x4000, "funcinfo.end", 0x4024},
       RewriteWinEHDataRange{"unwind", 0x4024, "unwind.end", 0x4034},
@@ -800,6 +821,17 @@ TEST(BinaryRewriteTest, X86CxxRowsCloseFuncInfoTablesAndPhysicalFrame) {
     EXPECT_FALSE(Check(Changed));
   };
   Reject([](auto &R) { R[0].X86CxxLayout.reset(); });
+  Reject([](auto &R) { R[0].X86CxxLayout->RegistrationHandlerSymbol.clear(); });
+  Reject([](auto &R) { R[0].X86CxxLayout->RegistrationHandlerVA++; });
+  Reject([](auto &R) {
+    R[0].X86CxxLayout->RegistrationHandlerSymbol = "catch";
+    R[0].X86CxxLayout->RegistrationHandlerVA = 0x1080;
+  });
+  Reject([](auto &R) { R[1].X86CxxLayout->RegistrationHandlerVA++; });
+  Reject([](auto &R) { R[0].X86CxxLayout->RegistrationFrame[0] = 0; });
+  Reject([](auto &R) { R[0].X86CxxLayout->RegistrationFrame[1] = INT64_MAX; });
+  Reject([](auto &R) { R[0].X86CxxLayout->RegistrationFrame[2] = 12; });
+  Reject([](auto &R) { R[1].X86CxxLayout->RegistrationFrame[1]--; });
   Reject([](auto &R) { R[0].X86CxxLayout->Tables[0].EndVA += 4; });
   Reject([](auto &R) { R[0].X86CxxLayout->Tables[1].EndVA += 4; });
   Reject([](auto &R) { R[0].X86CxxLayout->Tables[2].EndVA += 4; });

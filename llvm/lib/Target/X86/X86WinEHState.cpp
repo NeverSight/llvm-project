@@ -23,11 +23,12 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/MC/BinaryRewrite.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsX86.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
+#include "llvm/MC/BinaryRewrite.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include <deque>
@@ -447,6 +448,11 @@ Function *WinEHStateFnPassImpl::generateLSDAInEAXThunk(Function *ParentFunc) {
       Twine("__ehhandler$") +
           GlobalValue::dropLLVMManglingEscape(ParentFunc->getName()),
       TheModule);
+  Trampoline->addFnAttr(mc_rewrite::RewriteWinX86CxxHandlerParentAttribute,
+                        ParentFunc->getName());
+  ParentFunc->setMetadata(
+      mc_rewrite::RewriteWinX86CxxHandlerAttachment,
+      MDNode::get(Context, ValueAsMetadata::get(Trampoline)));
   if (auto *C = ParentFunc->getComdat())
     Trampoline->setComdat(C);
   BasicBlock *EntryBB = BasicBlock::Create(Context, "entry", Trampoline);
