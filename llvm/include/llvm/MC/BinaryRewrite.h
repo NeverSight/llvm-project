@@ -25,6 +25,7 @@
 #define LLVM_NEVERD_X86_REGISTRATION_COOKIES 1
 #define LLVM_NEVERD_X86_REGISTRATION_GS 1
 #define LLVM_NEVERD_X86_CXX_CATCH_SUBFIELDS 1
+#define LLVM_NEVERD_X86_CXX_FUNCTION_RECEIPTS 1
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
@@ -212,9 +213,11 @@ struct RewriteFunctionRange {
 enum class RewriteWinEHSemanticKind : uint8_t {
   SEHScope = 1,
   CxxCatch = 2,
+  CxxCleanup = 3,
 };
 static_assert(static_cast<uint8_t>(RewriteWinEHSemanticKind::SEHScope) == 1 &&
-              static_cast<uint8_t>(RewriteWinEHSemanticKind::CxxCatch) == 2);
+              static_cast<uint8_t>(RewriteWinEHSemanticKind::CxxCatch) == 2 &&
+              static_cast<uint8_t>(RewriteWinEHSemanticKind::CxxCleanup) == 3);
 
 /// Exact physical encoding used for one compiler-emitted Windows EH semantic
 /// row.  This is deliberately separate from RewriteWinEHSemanticKind: FH3 and
@@ -263,6 +266,38 @@ struct RewriteWinEHSemanticToken {
   }
 };
 
+/// Exact compiler-emitted, half-open language table extent. Temporary labels
+/// remain indexed provenance and are never discovered through name patterns.
+struct RewriteWinEHDataRange {
+  std::string BeginSymbol;
+  uint64_t BeginVA = 0;
+  std::string EndSymbol;
+  uint64_t EndVA = 0;
+
+  friend bool operator==(const RewriteWinEHDataRange &L,
+                         const RewriteWinEHDataRange &R) {
+    return L.BeginSymbol == R.BeginSymbol && L.BeginVA == R.BeginVA &&
+           L.EndSymbol == R.EndSymbol && L.EndVA == R.EndVA;
+  }
+};
+
+/// Complete PE32 FH3 table closure for an indexed catch or cleanup row.
+/// Tables are FuncInfo, UnwindMap, TryBlockMap and the catch's HandlerArray.
+/// Cleanup receipts have no HandlerArray. Frame is the physical
+/// frame-allocation offset, allocation size, catch subfield offset and subfield
+/// size; an ordinary catch object or a cleanup retains zeros. These are
+/// compiler facts, not source authentication or permission to install the
+/// emitted bytes.
+struct RewriteWinX86CxxLayout {
+  std::array<RewriteWinEHDataRange, 4> Tables;
+  std::array<int64_t, 4> Frame{};
+
+  friend bool operator==(const RewriteWinX86CxxLayout &L,
+                         const RewriteWinX86CxxLayout &R) {
+    return L.Tables == R.Tables && L.Frame == R.Frame;
+  }
+};
+
 /// One source-token to exact final WinEH language-record association. The
 /// container identifies the physical table row which makes the record
 /// reachable: the SEH scope-table begin or the C++ TryBlockMap row. RecordVA
@@ -297,6 +332,7 @@ struct RewriteWinEHSemanticRecord {
   /// The EH4 header offsets obtained from the final machine-frame layout.
   /// EH3 and non-registration encodings retain the zero-initialized value.
   std::array<int32_t, 4> RegistrationCookieOffsets{};
+  std::optional<RewriteWinX86CxxLayout> X86CxxLayout;
 
   friend bool operator==(const RewriteWinEHSemanticRecord &Left,
                          const RewriteWinEHSemanticRecord &Right) {
@@ -312,14 +348,16 @@ struct RewriteWinEHSemanticRecord {
            Left.BeginVA == Right.BeginVA && Left.EndSymbol == Right.EndSymbol &&
            Left.EndVA == Right.EndVA &&
            Left.HandlerSymbol == Right.HandlerSymbol &&
-           Left.HandlerVA == Right.HandlerVA && Left.Encoding == Right.Encoding &&
+           Left.HandlerVA == Right.HandlerVA &&
+           Left.Encoding == Right.Encoding &&
            Left.ContainerEndSymbol == Right.ContainerEndSymbol &&
            Left.ContainerEndVA == Right.ContainerEndVA &&
            Left.GeneratedState == Right.GeneratedState &&
            Left.EnclosingState == Right.EnclosingState &&
            Left.FilterSymbol == Right.FilterSymbol &&
            Left.FilterVA == Right.FilterVA &&
-           Left.RegistrationCookieOffsets == Right.RegistrationCookieOffsets;
+           Left.RegistrationCookieOffsets == Right.RegistrationCookieOffsets &&
+           Left.X86CxxLayout == Right.X86CxxLayout;
   }
   friend bool operator!=(const RewriteWinEHSemanticRecord &Left,
                          const RewriteWinEHSemanticRecord &Right) {

@@ -332,6 +332,96 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
   using ContainerKey = std::pair<std::string, std::string>;
   std::map<ContainerKey, std::vector<const RewriteWinEHSemanticRecord *>>
       RegistrationTables;
+  std::map<std::string, RewriteWinX86CxxLayout> CxxLayouts;
+  std::map<ContainerKey, std::vector<const RewriteWinEHSemanticRecord *>>
+      X86CxxHandlers;
+  std::map<std::pair<uint64_t, uint64_t>, RewriteWinEHDataRange> CxxDataRanges;
+  std::map<std::string, uint64_t> CxxDataAddrs;
+  auto emptyDataRange = [](const RewriteWinEHDataRange &R) {
+    return R.BeginSymbol.empty() && R.EndSymbol.empty() && !R.BeginVA &&
+           !R.EndVA;
+  };
+  auto checkX86CxxLayout = [&](const RewriteWinEHSemanticRecord &Record) {
+    if (Record.Encoding != RewriteWinEHSemanticEncoding::X86CxxFH3)
+      return !Record.X86CxxLayout;
+    if (!Record.X86CxxLayout)
+      return false;
+    const auto &Layout = *Record.X86CxxLayout;
+    const bool Cleanup =
+        Record.Token.Kind == RewriteWinEHSemanticKind::CxxCleanup;
+    for (unsigned I = 0; I != Layout.Tables.size(); ++I) {
+      const auto &R = Layout.Tables[I];
+      if (emptyDataRange(R)) {
+        if (Cleanup && I >= 2)
+          continue;
+        return false;
+      }
+      if ((Cleanup && I == 3) || R.BeginSymbol.empty() || R.EndSymbol.empty() ||
+          !R.BeginVA || R.BeginVA >= R.EndVA || R.EndVA > UINT32_MAX ||
+          R.BeginVA % 4 || R.EndVA % 4 || R.EndVA - R.BeginVA > (1u << 20))
+        return false;
+      const uint64_t Stride = I == 0 ? 36 : I == 1 ? 8 : I == 2 ? 20 : 16;
+      if ((R.EndVA - R.BeginVA) % Stride ||
+          (I == 0 && R.EndVA - R.BeginVA != Stride))
+        return false;
+      for (const auto &[Name, VA] : {std::make_pair(R.BeginSymbol, R.BeginVA),
+                                     std::make_pair(R.EndSymbol, R.EndVA)}) {
+        const auto [It, Inserted] = CxxDataAddrs.try_emplace(Name, VA);
+        if (!Inserted && It->second != VA)
+          return false;
+      }
+      for (const auto &[Interval, Existing] : CxxDataRanges)
+        if (R.BeginVA < Interval.second && Interval.first < R.EndVA &&
+            !(R == Existing))
+          return false;
+      CxxDataRanges.emplace(std::make_pair(R.BeginVA, R.EndVA), R);
+    }
+    const auto [It, Inserted] =
+        CxxLayouts.try_emplace(Record.OwnerSymbol, Layout);
+    if (!Inserted)
+      for (unsigned I = 0; I != 3; ++I)
+        if (!(It->second.Tables[I] == Layout.Tables[I]))
+          return false;
+    const auto &Frame = Layout.Frame;
+    if (Frame != std::array<int64_t, 4>{}) {
+      if (Cleanup || !isInt<32>(Frame[0]) || Frame[1] <= 0 ||
+          Frame[1] > UINT32_MAX || Frame[2] < 0 || Frame[3] <= 0 ||
+          Frame[2] > Frame[1] || Frame[3] > Frame[1] - Frame[2] ||
+          !isInt<32>(Frame[0] + Frame[2]) || Frame[0] + Frame[2] == 0)
+        return false;
+    }
+    if (Cleanup) {
+      const auto &Map = Layout.Tables[1];
+      return Record.Token.Clause == 0 && Record.RecordSize == 8 &&
+             Record.ContainerSymbol == Map.BeginSymbol &&
+             Record.ContainerVA == Map.BeginVA &&
+             Record.ContainerEndSymbol == Map.EndSymbol &&
+             Record.ContainerEndVA == Map.EndVA &&
+             Record.GeneratedState <= INT32_MAX &&
+             Record.EnclosingState >= -1 &&
+             Record.EnclosingState < int32_t(Record.GeneratedState) &&
+             Record.RecordVA - Map.BeginVA ==
+                 uint64_t(Record.GeneratedState) * 8 &&
+             Record.RecordVA + 8 <= Map.EndVA;
+    }
+    const auto &TryMap = Layout.Tables[2];
+    const auto &Handlers = Layout.Tables[3];
+    if (Record.Token.Kind != RewriteWinEHSemanticKind::CxxCatch ||
+        Record.GeneratedState > INT32_MAX || Record.EnclosingState != -1 ||
+        Record.ContainerVA < TryMap.BeginVA ||
+        Record.ContainerVA - TryMap.BeginVA !=
+            uint64_t(Record.GeneratedState) * 20 ||
+        Record.ContainerEndSymbol.empty() ||
+        Record.ContainerEndVA != Record.ContainerVA + 20 ||
+        Record.ContainerEndVA > TryMap.EndVA ||
+        Record.RecordVA < Handlers.BeginVA ||
+        (Record.RecordVA - Handlers.BeginVA) % 16 ||
+        Record.RecordVA + 16 > Handlers.EndVA)
+      return false;
+    X86CxxHandlers[{Record.OwnerSymbol, Record.ContainerSymbol}].push_back(
+        &Record);
+    return true;
+  };
   for (const RewriteWinEHSemanticRecord &Record : Records) {
     if (Record.SourceFunction.empty() || Record.OwnerSymbol.empty() ||
         Record.ContainerSymbol.empty() || Record.HandlerSymbol.empty() ||
@@ -340,6 +430,9 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
             std::numeric_limits<uint64_t>::max() - Record.RecordSize ||
         llvm::all_of(Record.Token.Digest,
                      [](uint64_t Word) { return Word == 0; }))
+      return false;
+
+    if (!checkX86CxxLayout(Record))
       return false;
 
     const auto [ContainerIt, ContainerInserted] =
@@ -376,7 +469,8 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
       return false;
 
     if (Record.Token.Kind != RewriteWinEHSemanticKind::SEHScope &&
-        Record.Token.Kind != RewriteWinEHSemanticKind::CxxCatch)
+        Record.Token.Kind != RewriteWinEHSemanticKind::CxxCatch &&
+        Record.Token.Kind != RewriteWinEHSemanticKind::CxxCleanup)
       return false;
     switch (Record.Token.Kind) {
     case RewriteWinEHSemanticKind::SEHScope: {
@@ -435,9 +529,17 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
         return false;
       break;
     }
+    case RewriteWinEHSemanticKind::CxxCleanup:
     case RewriteWinEHSemanticKind::CxxCatch: {
-      if (!Record.ContainerEndSymbol.empty() || Record.ContainerEndVA ||
-          Record.GeneratedState != UINT32_MAX || Record.EnclosingState != -1 ||
+      const bool Cleanup =
+          Record.Token.Kind == RewriteWinEHSemanticKind::CxxCleanup;
+      const bool X86 =
+          Record.Encoding == RewriteWinEHSemanticEncoding::X86CxxFH3;
+      if ((Cleanup && !X86) ||
+          (!X86 &&
+           (!Record.ContainerEndSymbol.empty() || Record.ContainerEndVA ||
+            Record.GeneratedState != UINT32_MAX ||
+            Record.EnclosingState != -1)) ||
           !Record.FilterSymbol.empty() || Record.FilterVA ||
           Record.RegistrationCookieOffsets != std::array<int32_t, 4>{})
         return false;
@@ -464,17 +566,21 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
            HandlerOwner->OwnerVA == Record.HandlerVA &&
            HandlerOwner->ParentSourceFunction == Record.SourceFunction);
       const bool HasValidEncoding =
-          isValidCxxSemanticRecordSize(Record.Encoding, Record.RecordSize);
+          Cleanup ? Record.RecordSize == 8
+                  : isValidCxxSemanticRecordSize(Record.Encoding,
+                                                 Record.RecordSize);
       if (!Record.BeginSymbol.empty() || !Record.EndSymbol.empty() ||
           Record.BeginVA != 0 || Record.EndVA != 0 || !HasValidEncoding ||
           !HasValidDelegatedSource || !HasExactHandlerRange)
         return false;
       const std::pair<std::string, std::string> ContainerIdentity{
           Record.OwnerSymbol, Record.ContainerSymbol};
-      const auto [RegionIt, RegionInserted] = CxxContainerRegions.try_emplace(
-          ContainerIdentity, Record.Token.Region);
-      if (!RegionInserted && RegionIt->second != Record.Token.Region)
-        return false;
+      if (!Cleanup) {
+        const auto [RegionIt, RegionInserted] = CxxContainerRegions.try_emplace(
+            ContainerIdentity, Record.Token.Region);
+        if (!RegionInserted && RegionIt->second != Record.Token.Region)
+          return false;
+      }
       std::array<uint64_t, 7> TokenIdentity{
           static_cast<uint64_t>(Record.Token.Kind),
           Record.Token.Region,
@@ -488,6 +594,26 @@ bool llvm::mc_rewrite::validateRewriteWinEHSemanticRecords(
       break;
     }
     }
+  }
+
+  std::map<std::string, size_t> X86TryCounts;
+  for (const auto &[Key, Rows] : X86CxxHandlers) {
+    const auto &Layout = *Rows.front()->X86CxxLayout;
+    const auto &Map = Layout.Tables[3];
+    if ((Map.EndVA - Map.BeginVA) / 16 != Rows.size())
+      return false;
+    for (const auto *Row : Rows)
+      if (!(Row->X86CxxLayout->Tables[3] == Map) ||
+          Row->GeneratedState != Rows.front()->GeneratedState ||
+          Row->ContainerVA != Rows.front()->ContainerVA ||
+          Row->ContainerEndVA != Rows.front()->ContainerEndVA)
+        return false;
+    ++X86TryCounts[Key.first];
+  }
+  for (const auto &[Owner, Layout] : CxxLayouts) {
+    const auto &Map = Layout.Tables[2];
+    if ((Map.EndVA - Map.BeginVA) / 20 != X86TryCounts[Owner])
+      return false;
   }
 
   // Every physical state row must have exactly one source receipt. Neither an
@@ -1357,10 +1483,48 @@ uint64_t FinalImageObjectWriter::writeObject() {
         uint64_t EndVA = 0;
         uint64_t ContainerEndVA = 0;
         uint64_t FilterVA = 0;
+        std::optional<mc_rewrite::RewriteWinX86CxxLayout> X86CxxLayout;
+        const bool X86Cxx = Input.Encoding ==
+                            mc_rewrite::RewriteWinEHSemanticEncoding::X86CxxFH3;
+        if (bool(Input.X86CxxLayout) != X86Cxx) {
+          Out.WinEHSemanticsValid = false;
+          break;
+        }
+        if (Input.X86CxxLayout) {
+          X86CxxLayout.emplace();
+          X86CxxLayout->Frame = Input.X86CxxLayout->Frame;
+          for (unsigned I = 0; I != 4; ++I) {
+            const MCSymbol *Begin = Input.X86CxxLayout->Tables[I * 2];
+            const MCSymbol *End = Input.X86CxxLayout->Tables[I * 2 + 1];
+            if (!Begin && !End)
+              continue;
+            if (!Begin || !End || Begin->getName().empty() ||
+                End->getName().empty() || Begin->isVariable() ||
+                End->isVariable() || !Begin->isInSection() ||
+                !End->isInSection() ||
+                &Begin->getSection() != &Input.RecordBegin->getSection() ||
+                &Begin->getSection() != &End->getSection()) {
+              Out.WinEHSemanticsValid = false;
+              break;
+            }
+            const auto Start = symbolLocation(Begin, /*AllowSectionEnd=*/false);
+            const auto Finish = symbolLocation(End, /*AllowSectionEnd=*/true);
+            if (!Start || !Finish || Start->Offset >= Finish->Offset) {
+              Out.WinEHSemanticsValid = false;
+              break;
+            }
+            X86CxxLayout->Tables[I] = {Begin->getName().str(), Start->VA,
+                                       End->getName().str(), Finish->VA};
+          }
+          if (!Out.WinEHSemanticsValid)
+            break;
+        }
         if (Input.Token.Kind !=
                 mc_rewrite::RewriteWinEHSemanticKind::SEHScope &&
             Input.Token.Kind !=
-                mc_rewrite::RewriteWinEHSemanticKind::CxxCatch) {
+                mc_rewrite::RewriteWinEHSemanticKind::CxxCatch &&
+            Input.Token.Kind !=
+                mc_rewrite::RewriteWinEHSemanticKind::CxxCleanup) {
           Out.WinEHSemanticsValid = false;
           break;
         }
@@ -1435,14 +1599,38 @@ uint64_t FinalImageObjectWriter::writeObject() {
           EndVA = End->VA;
           break;
         }
+        case mc_rewrite::RewriteWinEHSemanticKind::CxxCleanup:
         case mc_rewrite::RewriteWinEHSemanticKind::CxxCatch: {
+          const bool Cleanup = Input.Token.Kind ==
+                               mc_rewrite::RewriteWinEHSemanticKind::CxxCleanup;
           const bool HasValidEncoding =
-              isValidCxxSemanticRecordSize(Input.Encoding, RecordSize);
+              Cleanup
+                  ? X86Cxx && RecordSize == 8
+                  : isValidCxxSemanticRecordSize(Input.Encoding, RecordSize);
           if (Input.Begin || Input.End || !HasValidEncoding ||
-              Input.ContainerEnd || Input.Filter ||
-              Input.GeneratedState != UINT32_MAX || Input.EnclosingState != -1 ||
+              (!X86Cxx &&
+               (Input.ContainerEnd || Input.GeneratedState != UINT32_MAX ||
+                Input.EnclosingState != -1)) ||
+              Input.Filter ||
               Input.RegistrationCookieOffsets != std::array<int32_t, 4>{})
             Out.WinEHSemanticsValid = false;
+          if (X86Cxx) {
+            if (!Input.ContainerEnd || Input.ContainerEnd->getName().empty() ||
+                Input.ContainerEnd->isVariable() ||
+                !Input.ContainerEnd->isInSection() ||
+                &Input.ContainerEnd->getSection() !=
+                    &Input.Container->getSection()) {
+              Out.WinEHSemanticsValid = false;
+              break;
+            }
+            const auto Finish = symbolLocation(Input.ContainerEnd,
+                                               /*AllowSectionEnd=*/true);
+            if (!Finish || Finish->Offset <= Container->Offset) {
+              Out.WinEHSemanticsValid = false;
+              break;
+            }
+            ContainerEndVA = Finish->VA;
+          }
           break;
         }
         }
@@ -1468,6 +1656,7 @@ uint64_t FinalImageObjectWriter::writeObject() {
         Published.FilterSymbol =
             Input.Filter ? Input.Filter->getName().str() : std::string();
         Published.FilterVA = FilterVA;
+        Published.X86CxxLayout = std::move(X86CxxLayout);
       }
       if (Out.WinEHSemanticsValid)
         Out.WinEHSemanticsValid =

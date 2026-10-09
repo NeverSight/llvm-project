@@ -62,6 +62,11 @@ struct MCRewriteDerivedFunctionOwner {
   const MCSymbol *ParentOwner = nullptr;
 };
 
+struct MCRewriteWinX86CxxLayout {
+  std::array<const MCSymbol *, 8> Tables{};
+  std::array<int64_t, 4> Frame{};
+};
+
 /// Symbol-backed WinEH semantic row retained until final MC layout. The source
 /// token is opaque to MC; kind-specific symbol requirements are validated by
 /// the final-image writer before any record is published.
@@ -82,6 +87,7 @@ struct MCRewriteWinEHSemanticRecord {
   int32_t EnclosingState = -1;
   const MCSymbol *Filter = nullptr;
   std::array<int32_t, 4> RegistrationCookieOffsets{};
+  std::optional<MCRewriteWinX86CxxLayout> X86CxxLayout;
 };
 
 /// Exact rewrite-only association between one IR definition and the MC symbol
@@ -310,7 +316,8 @@ public:
       const MCSymbol *Handler, const MCSymbol *ContainerEnd = nullptr,
       uint32_t GeneratedState = UINT32_MAX, int32_t EnclosingState = -1,
       const MCSymbol *Filter = nullptr,
-      std::array<int32_t, 4> RegistrationCookieOffsets = {});
+      std::array<int32_t, 4> RegistrationCookieOffsets = {},
+      std::optional<MCRewriteWinX86CxxLayout> X86CxxLayout = std::nullopt);
   ArrayRef<MCRewriteWinEHSemanticRecord>
   getRewriteWinEHSemanticRecords() const {
     return RewriteWinEHSemanticRecords;

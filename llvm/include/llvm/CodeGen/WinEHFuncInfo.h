@@ -42,6 +42,7 @@ using MBBOrBasicBlock = PointerUnion<const BasicBlock *, MachineBasicBlock *>;
 struct CxxUnwindMapEntry {
   int ToState;
   MBBOrBasicBlock Cleanup;
+  std::optional<mc_rewrite::RewriteWinEHSemanticToken> RewriteSemantic;
 };
 
 /// Similar to CxxUnwindMapEntry, but supports SEH filters.
@@ -72,6 +73,7 @@ struct WinEHHandlerType {
   /// Checked byte displacement within CatchObj's allocation. Ordinary frontend
   /// catch objects use zero; rewrite-only PE32 frames can share one allocation.
   int64_t CatchObjOffset = 0;
+  uint32_t CatchObjSize = 0;
   GlobalVariable *TypeDescriptor;
   MBBOrBasicBlock Handler;
   std::optional<mc_rewrite::RewriteWinEHSemanticToken> RewriteSemantic;

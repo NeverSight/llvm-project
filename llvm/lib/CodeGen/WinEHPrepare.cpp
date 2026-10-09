@@ -219,6 +219,7 @@ static void addTryBlockMapEntry(WinEHFuncInfo &FuncInfo, int TryLow,
         report_fatal_error(Twine(toString(Object.takeError())));
       HT.CatchObj.Alloca = Object->Frame;
       HT.CatchObjOffset = Object->Offset;
+      HT.CatchObjSize = Object->Size;
     }
     Constant *TypeInfo = cast<Constant>(CPI->getArgOperand(0));
     if (TypeInfo->isNullValue())
@@ -515,6 +516,8 @@ static void calculateCXXStateNumbers(WinEHFuncInfo &FuncInfo,
       return;
 
     int CleanupState = addUnwindMapEntry(FuncInfo, ParentState, BB);
+    FuncInfo.CxxUnwindMap.back().RewriteSemantic = getRewriteWinEHSemanticToken(
+        *CleanupPad, mc_rewrite::RewriteWinEHSemanticKind::CxxCleanup);
     It->second = CleanupState;
     LLVM_DEBUG(dbgs() << "Assigning state #" << CleanupState << " to BB "
                       << BB->getName() << '\n');

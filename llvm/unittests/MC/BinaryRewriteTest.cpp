@@ -266,6 +266,20 @@ TEST(BinaryRewriteTest, WinEHSemanticRowsRequireExactSourceAndRangeClosure) {
   auto ValidX86 = Valid;
   ValidX86[1].Encoding = Encoding::X86CxxFH3;
   ValidX86[1].RecordSize = 16;
+  auto &X86 = ValidX86[1];
+  X86.ContainerVA = 0x4034;
+  X86.ContainerEndSymbol = "try$row.end";
+  X86.ContainerEndVA = 0x4048;
+  X86.RecordVA = 0x4048;
+  X86.GeneratedState = 0;
+  X86.X86CxxLayout.emplace();
+  X86.X86CxxLayout->Tables = {
+      mc_rewrite::RewriteWinEHDataRange{"funcinfo", 0x4000, "funcinfo.end",
+                                        0x4024},
+      mc_rewrite::RewriteWinEHDataRange{"unwind", 0x4024, "unwind.end", 0x4034},
+      mc_rewrite::RewriteWinEHDataRange{"try", 0x4034, "try.end", 0x4048},
+      mc_rewrite::RewriteWinEHDataRange{"handlers", 0x4048, "handlers.end",
+                                        0x4058}};
   EXPECT_TRUE(mc_rewrite::validateRewriteWinEHSemanticRecords(
       ValidX86, Owners, Ranges, OwnerAddrs));
   auto WrongX86Size = ValidX86;
@@ -719,4 +733,100 @@ TEST(BinaryRewriteTest, X86SEHRowsCloseTheExactGeneratedStateTable) {
   Reject([](auto &R) { R[1].Token.Region = R[0].Token.Region; });
   Reject([](auto &R) { R[1].Encoding = Encoding::SEH; });
   Reject([](auto &R) { R[1].BeginSymbol = "unexpected.range"; });
+}
+
+TEST(BinaryRewriteTest, X86CxxRowsCloseFuncInfoTablesAndPhysicalFrame) {
+  using namespace mc_rewrite;
+  const std::vector<RewriteSourceFunctionOwner> Owners = {
+      {"source",
+       "entry",
+       0x1000,
+       false,
+       RewriteSourceFunctionOwnerKind::FunctionEntry,
+       {}}};
+  const std::map<std::string, uint64_t> OwnerAddrs = {
+      {"entry", 0x1000}, {"catch", 0x1080}, {"cleanup", 0x1100}};
+  const std::vector<RewriteFunctionRange> Ranges = {
+      {1, "entry", 0x1000, "entry.begin", 0x1000, "entry.end", 0x1080, {}, 0},
+      {2, "catch", 0x1080, "catch.begin", 0x1080, "catch.end", 0x1100, "entry",
+       0x1000},
+      {3, "cleanup", 0x1100, "cleanup.begin", 0x1100, "cleanup.end", 0x1120,
+       "entry", 0x1000}};
+  RewriteWinEHSemanticRecord Catch;
+  Catch.Token = {RewriteWinEHSemanticKind::CxxCatch, 0, 0, {1, 2, 3, 4}};
+  Catch.SourceFunction = "source";
+  Catch.OwnerSymbol = "entry";
+  Catch.OwnerVA = 0x1000;
+  Catch.Encoding = RewriteWinEHSemanticEncoding::X86CxxFH3;
+  Catch.ContainerSymbol = "try.row";
+  Catch.ContainerVA = 0x4034;
+  Catch.ContainerEndSymbol = "try.row.end";
+  Catch.ContainerEndVA = 0x4048;
+  Catch.RecordVA = 0x4048;
+  Catch.RecordSize = 16;
+  Catch.HandlerSymbol = "catch";
+  Catch.HandlerVA = 0x1080;
+  Catch.GeneratedState = 0;
+  Catch.X86CxxLayout.emplace();
+  Catch.X86CxxLayout->Tables = {
+      RewriteWinEHDataRange{"funcinfo", 0x4000, "funcinfo.end", 0x4024},
+      RewriteWinEHDataRange{"unwind", 0x4024, "unwind.end", 0x4034},
+      RewriteWinEHDataRange{"try", 0x4034, "try.end", 0x4048},
+      RewriteWinEHDataRange{"handlers", 0x4048, "handlers.end", 0x4058}};
+  Catch.X86CxxLayout->Frame = {-64, 48, 16, 4};
+  auto Cleanup = Catch;
+  Cleanup.Token = {RewriteWinEHSemanticKind::CxxCleanup, 1, 0, {5, 6, 7, 8}};
+  Cleanup.ContainerSymbol = "unwind";
+  Cleanup.ContainerVA = 0x4024;
+  Cleanup.ContainerEndSymbol = "unwind.end";
+  Cleanup.ContainerEndVA = 0x4034;
+  Cleanup.RecordVA = 0x402c;
+  Cleanup.RecordSize = 8;
+  Cleanup.HandlerSymbol = "cleanup";
+  Cleanup.HandlerVA = 0x1100;
+  Cleanup.GeneratedState = 1;
+  Cleanup.EnclosingState = 0;
+  Cleanup.X86CxxLayout->Tables[3] = {};
+  Cleanup.X86CxxLayout->Frame = {};
+  const std::vector<RewriteWinEHSemanticRecord> Rows = {Catch, Cleanup};
+  auto Check = [&](const auto &Records) {
+    return validateRewriteWinEHSemanticRecords(Records, Owners, Ranges,
+                                               OwnerAddrs);
+  };
+  ASSERT_TRUE(Check(Rows));
+  auto Reject = [&](auto Mutate) {
+    auto Changed = Rows;
+    Mutate(Changed);
+    EXPECT_FALSE(Check(Changed));
+  };
+  Reject([](auto &R) { R[0].X86CxxLayout.reset(); });
+  Reject([](auto &R) { R[0].X86CxxLayout->Tables[0].EndVA += 4; });
+  Reject([](auto &R) { R[0].X86CxxLayout->Tables[1].EndVA += 4; });
+  Reject([](auto &R) { R[0].X86CxxLayout->Tables[2].EndVA += 4; });
+  Reject([](auto &R) { R[0].X86CxxLayout->Tables[3].EndVA += 16; });
+  Reject([](auto &R) { R[0].X86CxxLayout->Tables[3].BeginSymbol.clear(); });
+  Reject([](auto &R) {
+    R[0].X86CxxLayout->Tables[0] = R[0].X86CxxLayout->Tables[1];
+  });
+  Reject([](auto &R) { R[0].ContainerEndVA += 4; });
+  Reject([](auto &R) { R[0].ContainerEndSymbol.clear(); });
+  Reject([](auto &R) { R[0].GeneratedState = 1; });
+  Reject([](auto &R) { R[0].X86CxxLayout->Frame[1] = 19; });
+  Reject([](auto &R) { R[0].X86CxxLayout->Frame[0] = -16; });
+  Reject([](auto &R) { R[0].X86CxxLayout->Frame[2] = -1; });
+  Reject([](auto &R) { R[0].X86CxxLayout->Frame[3] = 0; });
+  Reject(
+      [](auto &R) { R[0].X86CxxLayout->Frame[1] = int64_t(UINT32_MAX) + 1; });
+  Reject([](auto &R) {
+    R[1].X86CxxLayout->Tables[3] = R[0].X86CxxLayout->Tables[3];
+  });
+  Reject([](auto &R) { R[1].X86CxxLayout->Frame = R[0].X86CxxLayout->Frame; });
+  Reject([](auto &R) { R[1].Token.Clause = 1; });
+  Reject([](auto &R) { R[1].EnclosingState = 1; });
+  Reject([](auto &R) { R[1].EnclosingState = -2; });
+  Reject([](auto &R) { R[1].GeneratedState = 0; });
+  Reject([](auto &R) { R[1].RecordSize = 16; });
+  Reject([](auto &R) { R[1].HandlerVA = R[0].HandlerVA; });
+  Reject([](auto &R) { R.erase(R.begin()); });
+  Reject([](auto &R) { R[0].Encoding = RewriteWinEHSemanticEncoding::CxxFH3; });
 }

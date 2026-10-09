@@ -27,6 +27,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/WinEHFrame.h"
 #include "llvm/MC/BinaryRewrite.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCAssembler.h"
@@ -1158,6 +1159,25 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
     IPToStateXData =
         Asm->OutContext.getOrCreateSymbol(Twine("$ip2state$", FuncLinkageName));
 
+  const bool X86Rewrite = Asm->TM.getTargetTriple().getArch() == Triple::x86 &&
+                          Asm->OutContext.requiresRewriteFunctionProvenance();
+  auto RewriteEnd = [&](StringRef Name, const MCSymbol *Begin) -> MCSymbol * {
+    return X86Rewrite && Begin ? Asm->OutContext.createTempSymbol(
+                                     Name, /*AlwaysAddSuffix=*/true)
+                               : nullptr;
+  };
+  MCSymbol *FuncInfoEnd = RewriteEnd("rewrite_cxx_funcinfo_end", FuncInfoXData);
+  MCSymbol *UnwindMapEnd = RewriteEnd("rewrite_cxx_unwind_end", UnwindMapXData);
+  MCSymbol *TryBlockMapEnd =
+      RewriteEnd("rewrite_cxx_try_end", TryBlockMapXData);
+  auto X86Layout = [&]() {
+    MCRewriteWinX86CxxLayout Layout;
+    Layout.Tables = {FuncInfoXData, FuncInfoEnd,      UnwindMapXData,
+                     UnwindMapEnd,  TryBlockMapXData, TryBlockMapEnd,
+                     nullptr,       nullptr};
+    return Layout;
+  };
+
   bool VerboseAsm = OS.isVerboseAsm();
   auto AddComment = [&](const Twine &Comment) {
     if (VerboseAsm)
@@ -1218,6 +1238,8 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
   } else {
     OS.emitInt32(1);
   }
+  if (FuncInfoEnd)
+    OS.emitLabel(FuncInfoEnd);
 
   // UnwindMapEntry {
   //   int32_t ToState;
@@ -1225,15 +1247,39 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
   // };
   if (UnwindMapXData) {
     OS.emitLabel(UnwindMapXData);
+    uint32_t GeneratedState = 0;
     for (const CxxUnwindMapEntry &UME : FuncInfo.CxxUnwindMap) {
       MCSymbol *CleanupSym = getMCSymbolForMBB(
           Asm, dyn_cast_if_present<MachineBasicBlock *>(UME.Cleanup));
+      MCSymbol *RecordBegin = nullptr;
+      MCSymbol *RecordEnd = nullptr;
+      if (X86Rewrite && UME.RewriteSemantic) {
+        if (!CleanupSym)
+          report_fatal_error("C++ cleanup receipt has no generated funclet");
+        RecordBegin = Asm->OutContext.createTempSymbol(
+            "rewrite_cxx_cleanup_begin", /*AlwaysAddSuffix=*/true);
+        RecordEnd = Asm->OutContext.createTempSymbol("rewrite_cxx_cleanup_end",
+                                                     /*AlwaysAddSuffix=*/true);
+        OS.emitLabel(RecordBegin);
+      }
       AddComment("ToState");
       OS.emitInt32(UME.ToState);
 
       AddComment("Action");
       OS.emitValue(create32bitRef(CleanupSym), 4);
+      if (RecordEnd) {
+        OS.emitLabel(RecordEnd);
+        Asm->OutStreamer->getAssemblerPtr()->registerRewriteWinEHSemanticRecord(
+            *UME.RewriteSemantic,
+            mc_rewrite::RewriteWinEHSemanticEncoding::X86CxxFH3, F.getName(),
+            Asm->CurrentFnSym, UnwindMapXData, RecordBegin, RecordEnd,
+            /*Begin=*/nullptr, /*End=*/nullptr, CleanupSym, UnwindMapEnd,
+            GeneratedState, UME.ToState, /*Filter=*/nullptr, {}, X86Layout());
+      }
+      ++GeneratedState;
     }
+    if (UnwindMapEnd)
+      OS.emitLabel(UnwindMapEnd);
   }
 
   // TryBlockMap {
@@ -1246,7 +1292,9 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
   if (TryBlockMapXData) {
     OS.emitLabel(TryBlockMapXData);
     SmallVector<MCSymbol *, 1> HandlerMaps;
+    SmallVector<MCSymbol *, 1> HandlerMapEnds;
     SmallVector<MCSymbol *, 1> TryBlockRows;
+    SmallVector<MCSymbol *, 1> TryBlockRowEnds;
     for (size_t I = 0, E = FuncInfo.TryBlockMap.size(); I != E; ++I) {
       const WinEHTryBlockMapEntry &TBME = FuncInfo.TryBlockMap[I];
 
@@ -1258,6 +1306,8 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
                                                   .concat("$")
                                                   .concat(FuncLinkageName));
       HandlerMaps.push_back(HandlerMapXData);
+      HandlerMapEnds.push_back(
+          RewriteEnd("rewrite_cxx_handler_end", HandlerMapXData));
 
       MCSymbol *TryBlockRow = nullptr;
       if (Asm->OutContext.requiresRewriteFunctionProvenance()) {
@@ -1266,6 +1316,9 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
         OS.emitLabel(TryBlockRow);
       }
       TryBlockRows.push_back(TryBlockRow);
+      MCSymbol *TryBlockRowEnd =
+          RewriteEnd("rewrite_cxx_try_row_end", TryBlockRow);
+      TryBlockRowEnds.push_back(TryBlockRowEnd);
 
       // TBMEs should form intervals.
       assert(0 <= TBME.TryLow && "bad trymap interval");
@@ -1288,7 +1341,11 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
 
       AddComment("HandlerArray");
       OS.emitValue(create32bitRef(HandlerMapXData), 4);
+      if (TryBlockRowEnd)
+        OS.emitLabel(TryBlockRowEnd);
     }
+    if (TryBlockMapEnd)
+      OS.emitLabel(TryBlockMapEnd);
 
     // All funclets use the same parent frame offset currently.
     unsigned ParentFrameOffset = 0;
@@ -1367,6 +1424,19 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
 
         if (RecordEnd) {
           OS.emitLabel(RecordEnd);
+          std::optional<MCRewriteWinX86CxxLayout> Layout;
+          if (X86Rewrite) {
+            Layout = X86Layout();
+            Layout->Tables[6] = HandlerMapXData;
+            Layout->Tables[7] = HandlerMapEnds[I];
+            if (F.hasFnAttribute(RewriteWinX86CxxFrameAttribute) &&
+                HT.CatchObj.FrameIndex != INT_MAX) {
+              Layout->Frame = {
+                  getFrameIndexOffset(HT.CatchObj.FrameIndex, FuncInfo),
+                  MF->getFrameInfo().getObjectSize(HT.CatchObj.FrameIndex),
+                  HT.CatchObjOffset, HT.CatchObjSize};
+            }
+          }
           RewriteAssembler->registerRewriteWinEHSemanticRecord(
               *HT.RewriteSemantic,
               Asm->TM.getTargetTriple().getArch() == Triple::x86
@@ -1374,9 +1444,14 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
                   : mc_rewrite::RewriteWinEHSemanticEncoding::CxxFH3,
               F.getName(), Asm->CurrentFnSym, TryBlockRow, RecordBegin,
               RecordEnd,
-              /*Begin=*/nullptr, /*End=*/nullptr, HandlerSym);
+              /*Begin=*/nullptr, /*End=*/nullptr, HandlerSym,
+              X86Rewrite ? TryBlockRowEnds[I] : nullptr,
+              X86Rewrite ? uint32_t(I) : UINT32_MAX, -1, /*Filter=*/nullptr, {},
+              Layout);
         }
       }
+      if (HandlerMapEnds[I])
+        OS.emitLabel(HandlerMapEnds[I]);
     }
   }
 
