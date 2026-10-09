@@ -111,6 +111,7 @@
 #include "llvm/IR/User.h"
 #include "llvm/IR/VFABIDemangler.h"
 #include "llvm/IR/Value.h"
+#include "llvm/IR/WinEHFrame.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/ProfileData/InstrProf.h"
@@ -3111,6 +3112,12 @@ void Verifier::verifySiblingFuncletUnwinds() {
 // visitFunction - Verify that a function is ok.
 //
 void Verifier::visitFunction(const Function &F) {
+  if (F.hasFnAttribute(RewriteWinX86CxxFrameAttribute))
+    if (Error E = validateRewriteWinX86CxxFrame(F)) {
+      CheckFailed(toString(std::move(E)), &F);
+      return;
+    }
+
   visitGlobalValue(F);
 
   // Check function arguments.
@@ -5040,6 +5047,14 @@ void Verifier::visitCatchPadInst(CatchPadInst &CPI) {
   Check(&*BB->getFirstNonPHIIt() == &CPI,
         "CatchPadInst not the first non-PHI instruction in the block.", &CPI);
 
+  if (CPI.getFunction()->hasFnAttribute(RewriteWinX86CxxFrameAttribute) ||
+      CPI.getMetadata(RewriteWinX86CxxCatchObjectAttachment)) {
+    auto Object = getRewriteWinX86CxxCatchFrameObject(CPI);
+    if (!Object) {
+      CheckFailed(toString(Object.takeError()), &CPI);
+      return;
+    }
+  }
   Check(llvm::all_of(CPI.arg_operands(),
                      [](Use &U) {
                        auto *V = U.get();

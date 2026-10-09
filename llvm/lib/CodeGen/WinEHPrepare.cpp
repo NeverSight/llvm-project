@@ -28,6 +28,7 @@
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/IR/WinEHFrame.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
@@ -130,6 +131,9 @@ FunctionPass *llvm::createWinEHPass(bool DemoteCatchSwitchPHIOnly) {
 }
 
 bool WinEHPrepareImpl::runOnFunction(Function &Fn) {
+  if (Fn.hasFnAttribute(RewriteWinX86CxxFrameAttribute))
+    if (Error E = validateRewriteWinX86CxxFrame(Fn))
+      report_fatal_error(Twine(toString(std::move(E))));
   if (!Fn.hasPersonalityFn())
     return false;
 
@@ -206,6 +210,16 @@ static void addTryBlockMapEntry(WinEHFuncInfo &FuncInfo, int TryLow,
   assert(TBME.TryLow <= TBME.TryHigh);
   for (const CatchPadInst *CPI : Handlers) {
     WinEHHandlerType HT;
+    const bool RewriteFrame =
+        CPI->getFunction()->hasFnAttribute(RewriteWinX86CxxFrameAttribute) ||
+        CPI->getMetadata(RewriteWinX86CxxCatchObjectAttachment);
+    if (RewriteFrame) {
+      auto Object = getRewriteWinX86CxxCatchFrameObject(*CPI);
+      if (!Object)
+        report_fatal_error(Twine(toString(Object.takeError())));
+      HT.CatchObj.Alloca = Object->Frame;
+      HT.CatchObjOffset = Object->Offset;
+    }
     Constant *TypeInfo = cast<Constant>(CPI->getArgOperand(0));
     if (TypeInfo->isNullValue())
       HT.TypeDescriptor = nullptr;
@@ -213,11 +227,13 @@ static void addTryBlockMapEntry(WinEHFuncInfo &FuncInfo, int TryLow,
       HT.TypeDescriptor = cast<GlobalVariable>(TypeInfo->stripPointerCasts());
     HT.Adjectives = cast<ConstantInt>(CPI->getArgOperand(1))->getZExtValue();
     HT.Handler = CPI->getParent();
-    if (auto *AI =
-            dyn_cast<AllocaInst>(CPI->getArgOperand(2)->stripPointerCasts()))
-      HT.CatchObj.Alloca = AI;
-    else
-      HT.CatchObj.Alloca = nullptr;
+    if (!RewriteFrame) {
+      if (auto *AI =
+              dyn_cast<AllocaInst>(CPI->getArgOperand(2)->stripPointerCasts()))
+        HT.CatchObj.Alloca = AI;
+      else
+        HT.CatchObj.Alloca = nullptr;
+    }
     HT.RewriteSemantic = getRewriteWinEHSemanticToken(
         *CPI, mc_rewrite::RewriteWinEHSemanticKind::CxxCatch);
     TBME.HandlerArray.push_back(HT);

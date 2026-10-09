@@ -66,7 +66,9 @@ bool isValidCxxSemanticRecordSize(
     uint64_t RecordSize) {
   using EncodingKind = llvm::mc_rewrite::RewriteWinEHSemanticEncoding;
   if (Encoding == EncodingKind::CxxFH3)
-    return RecordSize == 16 || RecordSize == 20;
+    return RecordSize == 20;
+  if (Encoding == EncodingKind::X86CxxFH3)
+    return RecordSize == 16;
   if (Encoding != EncodingKind::CxxFH4)
     return false;
 

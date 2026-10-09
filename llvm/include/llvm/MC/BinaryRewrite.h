@@ -24,6 +24,7 @@
 #define LLVM_NEVERD_X86_REGISTRATION_EH 1
 #define LLVM_NEVERD_X86_REGISTRATION_COOKIES 1
 #define LLVM_NEVERD_X86_REGISTRATION_GS 1
+#define LLVM_NEVERD_X86_CXX_CATCH_SUBFIELDS 1
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
@@ -225,10 +226,16 @@ enum class RewriteWinEHSemanticEncoding : uint8_t {
   CxxFH4 = 3,
   X86SEH3 = 4,
   X86SEH4 = 5,
+  /// Absolute-pointer PE32 FuncInfo with sixteen-byte HandlerType rows.
+  X86CxxFH3 = 6,
 };
-static_assert(static_cast<uint8_t>(RewriteWinEHSemanticEncoding::SEH) == 1 &&
-              static_cast<uint8_t>(RewriteWinEHSemanticEncoding::CxxFH3) == 2 &&
-              static_cast<uint8_t>(RewriteWinEHSemanticEncoding::CxxFH4) == 3);
+static_assert(
+    static_cast<uint8_t>(RewriteWinEHSemanticEncoding::SEH) == 1 &&
+    static_cast<uint8_t>(RewriteWinEHSemanticEncoding::CxxFH3) == 2 &&
+    static_cast<uint8_t>(RewriteWinEHSemanticEncoding::CxxFH4) == 3 &&
+    static_cast<uint8_t>(RewriteWinEHSemanticEncoding::X86SEH3) == 4 &&
+    static_cast<uint8_t>(RewriteWinEHSemanticEncoding::X86SEH4) == 5 &&
+    static_cast<uint8_t>(RewriteWinEHSemanticEncoding::X86CxxFH3) == 6);
 
 /// Instruction attachment consumed by WinEH state construction only when the
 /// MC context requests binary-rewrite provenance. The four digest words are an

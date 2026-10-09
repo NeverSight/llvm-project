@@ -261,6 +261,22 @@ TEST(BinaryRewriteTest, WinEHSemanticRowsRequireExactSourceAndRangeClosure) {
   EXPECT_TRUE(mc_rewrite::validateRewriteWinEHSemanticRecords(
       Valid, Owners, Ranges, OwnerAddrs));
 
+  // PE32 has absolute pointers and no ParentFrameOffset word. Its receipt
+  // cannot be relabelled as the twenty-byte relative-pointer encoding.
+  auto ValidX86 = Valid;
+  ValidX86[1].Encoding = Encoding::X86CxxFH3;
+  ValidX86[1].RecordSize = 16;
+  EXPECT_TRUE(mc_rewrite::validateRewriteWinEHSemanticRecords(
+      ValidX86, Owners, Ranges, OwnerAddrs));
+  auto WrongX86Size = ValidX86;
+  WrongX86Size[1].RecordSize = 20;
+  EXPECT_FALSE(mc_rewrite::validateRewriteWinEHSemanticRecords(
+      WrongX86Size, Owners, Ranges, OwnerAddrs));
+  auto WrongRelativeSize = Valid;
+  WrongRelativeSize[1].RecordSize = 16;
+  EXPECT_FALSE(mc_rewrite::validateRewriteWinEHSemanticRecords(
+      WrongRelativeSize, Owners, Ranges, OwnerAddrs));
+
   auto ValidFH4 = Valid;
   ValidFH4[1].RecordSize = 6;
   ValidFH4[1].Encoding = Encoding::CxxFH4;

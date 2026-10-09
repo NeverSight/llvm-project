@@ -1288,7 +1288,12 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
         // emit an offset of zero, indicating that no copy will occur.
         const MCExpr *FrameAllocOffsetRef = nullptr;
         if (HT.CatchObj.FrameIndex != INT_MAX) {
-          int Offset = getFrameIndexOffset(HT.CatchObj.FrameIndex, FuncInfo);
+          int64_t Offset =
+              int64_t(getFrameIndexOffset(HT.CatchObj.FrameIndex, FuncInfo)) +
+              HT.CatchObjOffset;
+          if (!isInt<32>(Offset) || Offset == 0)
+            report_fatal_error(
+                "C++ catch object has no representable frame offset");
           assert(Offset != 0 && "Illegal offset for catch object!");
           FrameAllocOffsetRef = MCConstantExpr::create(Offset, Asm->OutContext);
         } else {
@@ -1335,8 +1340,11 @@ void WinException::emitCXXFrameHandler3Table(const MachineFunction *MF) {
           OS.emitLabel(RecordEnd);
           RewriteAssembler->registerRewriteWinEHSemanticRecord(
               *HT.RewriteSemantic,
-              mc_rewrite::RewriteWinEHSemanticEncoding::CxxFH3, F.getName(),
-              Asm->CurrentFnSym, TryBlockRow, RecordBegin, RecordEnd,
+              Asm->TM.getTargetTriple().getArch() == Triple::x86
+                  ? mc_rewrite::RewriteWinEHSemanticEncoding::X86CxxFH3
+                  : mc_rewrite::RewriteWinEHSemanticEncoding::CxxFH3,
+              F.getName(), Asm->CurrentFnSym, TryBlockRow, RecordBegin,
+              RecordEnd,
               /*Begin=*/nullptr, /*End=*/nullptr, HandlerSym);
         }
       }
