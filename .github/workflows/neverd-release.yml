@@ -45,6 +45,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Check release admission policy
+        run: python3 .github/workflows/test-neverd-release.py
+
       - name: Resolve and validate release
         id: release
         shell: bash
@@ -72,7 +75,7 @@ jobs:
             overwrite="$DISPATCH_OVERWRITE"
           else
             requested_tag="$REF_NAME"
-            overwrite=true
+            overwrite=false
           fi
 
           publish=false
@@ -103,7 +106,7 @@ jobs:
                   echo "Release '$requested_tag' is immutable; publish a new -rN tag." >&2
                   exit 1
                 fi
-                if [[ "$EVENT_NAME" == 'workflow_dispatch' && "$overwrite" != 'true' ]]; then
+                if [[ "$overwrite" != 'true' ]]; then
                   echo "Release '$requested_tag' already exists." >&2
                   echo "Re-run with overwrite_existing_assets enabled, or use a new -rN tag." >&2
                   exit 1
