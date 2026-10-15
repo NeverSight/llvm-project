@@ -25,6 +25,7 @@
 #define LLVM_NEVERD_X86_REGISTRATION_COOKIES 1
 #define LLVM_NEVERD_X86_REGISTRATION_GS 1
 #define LLVM_NEVERD_X86_REGISTRATION_SEH_STATE_WRITES 1
+#define LLVM_NEVERD_X86_REGISTRATION_SEH_DYNAMIC_CALLS 1
 #define LLVM_NEVERD_X86_CXX_CATCH_SUBFIELDS 1
 #define LLVM_NEVERD_X86_CXX_FUNCTION_RECEIPTS 1
 #define LLVM_NEVERD_X86_CXX_HANDLER_RECEIPTS 1
@@ -481,6 +482,14 @@ inline constexpr StringLiteral RewriteWinGSHandlerCxxFH4("cxx-fh4");
 /// and state stores are volatile to preserve ordering with faulting accesses.
 inline constexpr StringLiteral RewriteWinX86RegistrationStateAttribute(
     "llvm.rewrite.win-x86-registration-state");
+
+/// Call-site opt-in for a shared PE32 SEH parent body whose incoming scope
+/// boundaries select the physical state. Such a call inherits that live state;
+/// setjmp also captures it. The call must be noinline and cannot be an invoke,
+/// tail call, intrinsic, inline assembly, or a funclet call. This attribute is
+/// never inherited from a callee declaration.
+inline constexpr StringLiteral RewriteWinX86SEHInheritStateAttribute(
+    "llvm.rewrite.win-x86-seh-inherit-state");
 
 /// One exact IR-definition to final MC-owner association.  SourceFunction is
 /// the original IR name and OwnerSymbol is the target-selected symbol spelling;

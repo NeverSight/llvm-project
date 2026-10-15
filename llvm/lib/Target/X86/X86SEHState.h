@@ -10,6 +10,7 @@
 #define LLVM_LIB_TARGET_X86_X86SEHSTATE_H
 
 namespace llvm {
+class CallBase;
 class Module;
 class SDValue;
 class SelectionDAG;
@@ -17,6 +18,9 @@ class X86Subtarget;
 
 /// Check the complete source contract before any parent's EH pads are lowered.
 void validateX86SEHStateWrites(const Module &M);
+/// Validate call sites which inherit a rewrite parent's live physical state.
+void validateX86SEHStateCalls(Module &M);
+bool inheritsX86SEHState(const CallBase &Call);
 SDValue lowerX86SEHStateWrite(SDValue Op, SelectionDAG &DAG,
                               const X86Subtarget &Subtarget);
 } // namespace llvm

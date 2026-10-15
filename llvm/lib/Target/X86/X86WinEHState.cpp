@@ -166,6 +166,7 @@ INITIALIZE_PASS(WinEHStateLegacy, "x86-winehstate",
 
 bool WinEHStateFnPassImpl::initialize(Module &M) {
   validateX86SEHStateWrites(M);
+  validateX86SEHStateCalls(M);
   TheModule = &M;
   return false;
 }
@@ -690,6 +691,11 @@ bool WinEHStateFnPassImpl::isStateStoreNeeded(EHPersonality Personality,
     return true;
   }
 
+  // Multiple incoming scope boundaries can select different live states for
+  // one source call. A checked call-site contract preserves that selection.
+  if (inheritsX86SEHState(Call))
+    return false;
+
   // A rewrite-owned source block establishes its live state explicitly. LLVM
   // intrinsics (including lowered memcpy calls and inaccessible-memory
   // provenance anchors) execute in that state rather than ending the scope.
@@ -742,10 +748,14 @@ void WinEHStateFnPassImpl::addStateStores(Function &F,
   for (BasicBlock *BB : RPOT) {
     int InitialState = OverdefinedState;
     int FinalState;
+    bool HasStateStore = &F.getEntryBlock() == BB;
+    bool InheritsInitialState = false;
     if (&F.getEntryBlock() == BB)
       InitialState = FinalState = ParentBaseState;
     for (Instruction &I : *BB) {
       auto *Call = dyn_cast<CallBase>(&I);
+      if (Call && inheritsX86SEHState(*Call) && !HasStateStore)
+        InheritsInitialState = true;
       if (!Call || !isStateStoreNeeded(Personality, *Call))
         continue;
 
@@ -753,10 +763,17 @@ void WinEHStateFnPassImpl::addStateStores(Function &F,
       if (InitialState == OverdefinedState)
         InitialState = State;
       FinalState = State;
+      HasStateStore = true;
     }
     // No call-sites in this basic block? That's OK, we will come back to these
     // in a later pass.
-    if (InitialState == OverdefinedState) {
+    if (InitialState == OverdefinedState || InheritsInitialState) {
+      // A later call's state cannot describe the entry to an inherited call.
+      // Otherwise predecessor hoisting would overwrite the incoming choice
+      // before that call. Retain the known final state, but infer the initial
+      // state only from predecessors, just as for a block without stores.
+      if (HasStateStore)
+        FinalStates.insert({BB, FinalState});
       Worklist.push_back(BB);
       continue;
     }
@@ -850,10 +867,12 @@ void WinEHStateFnPassImpl::addStateStores(Function &F,
 
     IRBuilder<> Builder(Call);
     Value *State;
-    if (InCleanup) {
+    if (InCleanup || inheritsX86SEHState(*Call)) {
       Value *StateField =
           Builder.CreateStructGEP(RegNodeTy, RegNode, StateFieldIndex);
-      State = Builder.CreateLoad(Builder.getInt32Ty(), StateField);
+      auto *Load = Builder.CreateLoad(Builder.getInt32Ty(), StateField);
+      Load->setVolatile(inheritsX86SEHState(*Call));
+      State = Load;
     } else {
       State = Builder.getInt32(getStateForCall(BlockColors, FuncInfo, *Call));
     }

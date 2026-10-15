@@ -90,6 +90,7 @@ set(sources
   X86TargetTransformInfo.cpp
   X86WinEHState.cpp
   X86SEHState.cpp
+  X86SEHStateCalls.cpp
   X86SEHStateAsm.cpp
   X86WinEHUnwindV2.cpp
   GISel/X86CallLowering.cpp

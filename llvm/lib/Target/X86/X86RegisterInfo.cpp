@@ -27,8 +27,10 @@
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TileShapeInfo.h"
 #include "llvm/CodeGen/VirtRegMap.h"
+#include "llvm/IR/EHPersonalities.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Type.h"
+#include "llvm/MC/BinaryRewrite.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -492,6 +494,22 @@ X86RegisterInfo::getCallPreservedMask(const MachineFunction &MF,
 
 const uint32_t*
 X86RegisterInfo::getNoPreservedMask() const {
+  return CSR_NoRegs_RegMask;
+}
+
+const uint32_t *
+X86RegisterInfo::getCustomEHPadPreservedMask(const MachineFunction &MF) const {
+  const Function &F = MF.getFunction();
+  if (Is64Bit || !F.hasPersonalityFn() ||
+      !F.hasFnAttribute(mc_rewrite::RewriteWinX86RegistrationStateAttribute) ||
+      !isAsynchronousEHPersonality(classifyEHPersonality(F.getPersonalityFn())))
+    return nullptr;
+
+  // SEH handlers can be entered from a dynamic call or an asynchronous fault,
+  // without an invoke at that operation. The x86 runtime does not restore CSRs.
+  // Model the clobber at the handler so even values used only on the
+  // exceptional path are spilled; a call mask alone cannot account for those
+  // live ranges.
   return CSR_NoRegs_RegMask;
 }
 
