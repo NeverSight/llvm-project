@@ -69,6 +69,31 @@ struct MCRewriteWinX86CxxLayout {
   std::array<int64_t, 3> RegistrationFrame{};
 };
 
+/// Parent layout symbols remain compiler-owned until final frame layout.
+/// RegistrationOffset and GeneratedState below must be absolute definitions;
+/// the final-image writer never resolves these through an external resolver.
+struct MCRewriteWinX86SEHFrame {
+  std::string SourceFunction;
+  const MCSymbol *Owner = nullptr;
+  const MCSymbol *RegistrationOffset = nullptr;
+  uint32_t RegistrationSize = 24;
+  uint32_t StateOffset = 20;
+  mc_rewrite::RewriteWinEHSemanticEncoding Encoding =
+      mc_rewrite::RewriteWinEHSemanticEncoding::X86SEH3;
+};
+
+struct MCRewriteWinX86SEHStateWrite {
+  uint64_t WriteID = 0;
+  std::string SourceFunction;
+  const MCSymbol *Owner = nullptr;
+  MCRewriteWinX86SEHFrame ParentFrame;
+  std::optional<mc_rewrite::RewriteWinEHSemanticToken> Semantic;
+  const MCSymbol *GeneratedState = nullptr;
+  uint8_t AddressRegister = 0;
+  const MCSymbol *Begin = nullptr;
+  const MCSymbol *End = nullptr;
+};
+
 /// Symbol-backed WinEH semantic row retained until final MC layout. The source
 /// token is opaque to MC; kind-specific symbol requirements are validated by
 /// the final-image writer before any record is published.
@@ -158,6 +183,8 @@ private:
   SmallVector<MCRewriteDerivedFunctionOwner, 0> RewriteDerivedFunctionOwners;
   SmallVector<MCRewriteFunctionRange, 0> RewriteFunctionRanges;
   SmallVector<MCRewriteWinEHSemanticRecord, 0> RewriteWinEHSemanticRecords;
+  SmallVector<MCRewriteWinX86SEHFrame, 0> RewriteWinX86SEHFrames;
+  SmallVector<MCRewriteWinX86SEHStateWrite, 0> RewriteWinX86SEHStateWrites;
 
   /// Evaluate a fixup to a relocatable expression and the value which should be
   /// placed into the fixup.
@@ -323,6 +350,17 @@ public:
   ArrayRef<MCRewriteWinEHSemanticRecord>
   getRewriteWinEHSemanticRecords() const {
     return RewriteWinEHSemanticRecords;
+  }
+  LLVM_ABI void
+  registerRewriteWinX86SEHFrame(const MCRewriteWinX86SEHFrame &Frame);
+  ArrayRef<MCRewriteWinX86SEHFrame> getRewriteWinX86SEHFrames() const {
+    return RewriteWinX86SEHFrames;
+  }
+  LLVM_ABI void
+  registerRewriteWinX86SEHStateWrite(const MCRewriteWinX86SEHStateWrite &Write);
+  ArrayRef<MCRewriteWinX86SEHStateWrite>
+  getRewriteWinX86SEHStateWrites() const {
+    return RewriteWinX86SEHStateWrites;
   }
   LLVM_ABI void registerRewriteFunctionRange(const MCSymbol *Owner,
                                              const MCSymbol *Begin);

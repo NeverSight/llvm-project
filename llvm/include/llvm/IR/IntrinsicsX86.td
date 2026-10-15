@@ -21,6 +21,15 @@ let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
 let TargetPrefix = "x86" in {
   def int_x86_seh_lsda : Intrinsic<[llvm_ptr_ty], [llvm_ptr_ty], [IntrNoMem]>;
 
+  // Update the compiler-owned parent registration state from an outlined SEH
+  // callback. The source scope token is resolved after parent state numbering.
+  def int_x86_seh_setstate : Intrinsic<[],
+      [llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i64_ty, llvm_i64_ty,
+       llvm_i64_ty, llvm_i64_ty, llvm_i64_ty],
+      [IntrHasSideEffects, IntrNoDuplicate, IntrNoMerge,
+       ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>,
+       ImmArg<ArgIndex<5>>, ImmArg<ArgIndex<6>>, ImmArg<ArgIndex<7>>]>;
+
   // Marks the EH registration node created in LLVM IR prior to code generation.
   def int_x86_seh_ehregnode : Intrinsic<[], [llvm_ptr_ty], []>;
 

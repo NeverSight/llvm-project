@@ -100,6 +100,8 @@ void MCAssembler::reset() {
   RewriteDerivedFunctionOwners.clear();
   RewriteFunctionRanges.clear();
   RewriteWinEHSemanticRecords.clear();
+  RewriteWinX86SEHFrames.clear();
+  RewriteWinX86SEHStateWrites.clear();
   ThumbFuncs.clear();
 
   // reset objects owned by us
@@ -225,6 +227,16 @@ void MCAssembler::registerRewriteWinEHSemanticRecord(
       {Token, Encoding, SourceFunction.str(), Owner, Container, RecordBegin,
        RecordEnd, Begin, End, Handler, ContainerEnd, GeneratedState,
        EnclosingState, Filter, RegistrationCookieOffsets, X86CxxLayout});
+}
+
+void MCAssembler::registerRewriteWinX86SEHFrame(
+    const MCRewriteWinX86SEHFrame &Frame) {
+  RewriteWinX86SEHFrames.push_back(Frame);
+}
+
+void MCAssembler::registerRewriteWinX86SEHStateWrite(
+    const MCRewriteWinX86SEHStateWrite &Write) {
+  RewriteWinX86SEHStateWrites.push_back(Write);
 }
 
 void MCAssembler::registerRewriteFunctionRange(const MCSymbol *Owner,

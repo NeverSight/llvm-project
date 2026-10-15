@@ -175,6 +175,14 @@ let Constraints = "$src = $dst", isMoveImm = 1, isPseudo = 1, Defs = [EFLAGS] in
 //===----------------------------------------------------------------------===//
 // EH Pseudo Instructions
 //
+// The operands stay symbolic until both callback and parent have been emitted.
+let hasSideEffects = 1, mayStore = 1, isNotDuplicable = 1,
+    SchedRW = [WriteStore] in
+  def SEH_SetState : I<0, Pseudo, (outs),
+      (ins GR32:$frame, i32imm:$parent, i32imm:$source,
+           i64imm:$digest0, i64imm:$digest1, i64imm:$digest2,
+           i64imm:$digest3, i64imm:$writeid), "", []>;
+
 let SchedRW = [WriteSystem] in {
 let isTerminator = 1, isReturn = 1, isBarrier = 1,
     hasCtrlDep = 1, isCodeGenOnly = 1 in {

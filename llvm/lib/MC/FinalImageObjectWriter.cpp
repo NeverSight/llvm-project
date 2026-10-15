@@ -28,6 +28,7 @@
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSectionCOFF.h"
@@ -869,6 +870,9 @@ uint64_t FinalImageObjectWriter::writeObject() {
   Out.FunctionOwnerAddrs.clear();
   Out.SourceFunctionOwners.clear();
   Out.WinEHSemanticRecords.clear();
+  Out.WinX86SEHFrames.clear();
+  Out.WinX86SEHStateWrites.clear();
+  Out.WinX86SEHStateWritesValid = true;
   Out.ImageValid = true;
   Out.FunctionRangesValid = true;
   Out.WinEHSemanticsValid = true;
@@ -881,6 +885,9 @@ uint64_t FinalImageObjectWriter::writeObject() {
     Out.FunctionOwnerAddrs.clear();
     Out.SourceFunctionOwners.clear();
     Out.WinEHSemanticRecords.clear();
+    Out.WinX86SEHFrames.clear();
+    Out.WinX86SEHStateWrites.clear();
+    Out.WinX86SEHStateWritesValid = false;
     Out.ImageValid = false;
     Out.WinEHSemanticsValid = false;
     return 0;
@@ -1707,6 +1714,110 @@ uint64_t FinalImageObjectWriter::writeObject() {
     } else {
       Out.WinEHSemanticsValid = false;
     }
+    // The state and frame offsets are compiler-owned absolute assignments.
+    // Never pass them to the address-model resolver: accepting an external
+    // address here would sever the link to the generated parent frame/table.
+    auto AbsoluteI32 = [&](const MCSymbol *Symbol) -> std::optional<int32_t> {
+      int64_t Value = 0;
+      if (!Symbol || !Symbol->isVariable() ||
+          !Symbol->getVariableValue()->evaluateAsAbsolute(Value, *Asm) ||
+          !isInt<32>(Value))
+        return std::nullopt;
+      return int32_t(Value);
+    };
+    auto ResolveFrame = [&](const MCRewriteWinX86SEHFrame &Input)
+        -> std::optional<mc_rewrite::RewriteWinX86SEHFrame> {
+      const auto SourceOwner = SourceOwnersBySymbol.find(Input.Owner);
+      const auto Owner = symbolLocation(Input.Owner, /*AllowSectionEnd=*/false);
+      const auto Offset = AbsoluteI32(Input.RegistrationOffset);
+      if (!Input.Owner || Input.Owner->getName().empty() || !Owner || !Offset ||
+          SourceOwner == SourceOwnersBySymbol.end() ||
+          SourceOwner->second->SourceFunction != Input.SourceFunction ||
+          SourceOwner->second->Kind !=
+              mc_rewrite::RewriteSourceFunctionOwnerKind::FunctionEntry)
+        return std::nullopt;
+      return mc_rewrite::RewriteWinX86SEHFrame{Input.SourceFunction,
+                                               Input.Owner->getName().str(),
+                                               Owner->VA,
+                                               *Offset,
+                                               Input.RegistrationSize,
+                                               Input.StateOffset,
+                                               Input.Encoding};
+    };
+    if (Out.FunctionRangesValid && Out.WinEHSemanticsValid) {
+      for (const auto &Input : Asm->getRewriteWinX86SEHFrames()) {
+        auto Frame = ResolveFrame(Input);
+        if (!Frame) {
+          Out.WinX86SEHStateWritesValid = false;
+          break;
+        }
+        Out.WinX86SEHFrames.push_back(std::move(*Frame));
+      }
+      for (const auto &Input : Asm->getRewriteWinX86SEHStateWrites()) {
+        if (!Out.WinX86SEHStateWritesValid)
+          break;
+        const auto SourceOwner = SourceOwnersBySymbol.find(Input.Owner);
+        const auto Owner =
+            symbolLocation(Input.Owner, /*AllowSectionEnd=*/false);
+        const auto Begin =
+            symbolLocation(Input.Begin, /*AllowSectionEnd=*/false);
+        const auto End = symbolLocation(Input.End, /*AllowSectionEnd=*/true);
+        const auto Frame = ResolveFrame(Input.ParentFrame);
+        const auto State = AbsoluteI32(Input.GeneratedState);
+        if (!Input.Owner || !Owner || !Begin || !End || !Frame || !State ||
+            Input.Owner->getName().empty() || Input.Begin->getName().empty() ||
+            Input.End->getName().empty() || Begin->Section != End->Section ||
+            Begin->Offset >= End->Offset ||
+            SourceOwner == SourceOwnersBySymbol.end() ||
+            SourceOwner->second->SourceFunction != Input.SourceFunction ||
+            SourceOwner->second->Kind !=
+                mc_rewrite::RewriteSourceFunctionOwnerKind::FunctionEntry) {
+          Out.WinX86SEHStateWritesValid = false;
+          break;
+        }
+        const RewriteSectionTraits Traits =
+            classifySection(*Asm, *Begin->Section);
+        const bool HasOwnerRange = llvm::any_of(
+            Asm->getRewriteFunctionRanges(), [&](const auto &Range) {
+              if (Range.Owner != Input.Owner)
+                return false;
+              const auto Start =
+                  symbolLocation(Range.Begin, /*AllowSectionEnd=*/false);
+              const auto Finish =
+                  symbolLocation(Range.End, /*AllowSectionEnd=*/true);
+              return Start && Finish && Start->Section == Begin->Section &&
+                     Finish->Section == End->Section &&
+                     Start->Offset <= Begin->Offset &&
+                     End->Offset <= Finish->Offset;
+            });
+        if (!Traits.IsAllocated ||
+            Traits.Kind != mc_rewrite::RewriteSectionKind::Code ||
+            !HasOwnerRange) {
+          Out.WinX86SEHStateWritesValid = false;
+          break;
+        }
+        Out.WinX86SEHStateWrites.push_back(
+            {Input.WriteID, Input.SourceFunction, Input.Owner->getName().str(),
+             Owner->VA, *Frame, Input.Semantic, *State, Input.AddressRegister,
+             Input.Begin->getName().str(), Begin->VA,
+             Input.End->getName().str(), End->VA});
+      }
+      if (Out.WinX86SEHStateWritesValid)
+        Out.WinX86SEHStateWritesValid =
+            mc_rewrite::validateRewriteWinX86SEHStateWrites(
+                Out.WinX86SEHFrames, Out.WinX86SEHStateWrites,
+                Out.WinEHSemanticRecords, Out.SourceFunctionOwners,
+                Out.FunctionRanges, Out.FunctionOwnerAddrs,
+                !Opts.DeferGlobalFunctionRangeOverlap);
+    } else if (!Asm->getRewriteWinX86SEHFrames().empty() ||
+               !Asm->getRewriteWinX86SEHStateWrites().empty()) {
+      Out.WinX86SEHStateWritesValid = false;
+    }
+    if (!Out.WinX86SEHStateWritesValid) {
+      Out.WinX86SEHFrames.clear();
+      Out.WinX86SEHStateWrites.clear();
+      Out.WinEHSemanticsValid = false;
+    }
     if (!Out.WinEHSemanticsValid)
       Out.WinEHSemanticRecords.clear();
 
@@ -1723,6 +1834,8 @@ uint64_t FinalImageObjectWriter::writeObject() {
       Out.FunctionOwnerAddrs.clear();
       Out.SourceFunctionOwners.clear();
       Out.WinEHSemanticRecords.clear();
+      Out.WinX86SEHFrames.clear();
+      Out.WinX86SEHStateWrites.clear();
     }
   }
 

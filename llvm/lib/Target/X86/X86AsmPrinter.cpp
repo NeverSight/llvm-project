@@ -1049,6 +1049,11 @@ static bool usesMSVCFloatingPoint(const Triple &TT, const Module &M) {
 }
 
 void X86AsmPrinter::emitEndOfAsmFile(Module &M) {
+  for (const MCSymbol *Symbol : SEHStateWriteSymbols)
+    if (!Symbol->isVariable())
+      report_fatal_error("SEH callback state write has no emitted parent state "
+                         "or registration frame");
+
   const Triple &TT = TM.getTargetTriple();
 
   if (TT.isOSBinFormatMachO()) {

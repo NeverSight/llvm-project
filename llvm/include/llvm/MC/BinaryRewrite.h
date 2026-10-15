@@ -24,6 +24,7 @@
 #define LLVM_NEVERD_X86_REGISTRATION_EH 1
 #define LLVM_NEVERD_X86_REGISTRATION_COOKIES 1
 #define LLVM_NEVERD_X86_REGISTRATION_GS 1
+#define LLVM_NEVERD_X86_REGISTRATION_SEH_STATE_WRITES 1
 #define LLVM_NEVERD_X86_CXX_CATCH_SUBFIELDS 1
 #define LLVM_NEVERD_X86_CXX_FUNCTION_RECEIPTS 1
 #define LLVM_NEVERD_X86_CXX_HANDLER_RECEIPTS 1
@@ -311,6 +312,49 @@ struct RewriteWinX86CxxLayout {
   }
 };
 
+/// Compiler-created PE32 SEH registration storage. RegistrationOffset is
+/// relative to llvm.localaddress in the parent, including stack realignment;
+/// it is not a source EBP displacement or the runtime's registration pointer.
+struct RewriteWinX86SEHFrame {
+  std::string SourceFunction;
+  std::string OwnerSymbol;
+  uint64_t OwnerVA = 0;
+  int32_t RegistrationOffset = 0;
+  uint32_t RegistrationSize = 24;
+  uint32_t StateOffset = 20;
+  RewriteWinEHSemanticEncoding Encoding = RewriteWinEHSemanticEncoding::X86SEH3;
+
+  friend bool operator==(const RewriteWinX86SEHFrame &L,
+                         const RewriteWinX86SEHFrame &R) {
+    return L.SourceFunction == R.SourceFunction &&
+           L.OwnerSymbol == R.OwnerSymbol && L.OwnerVA == R.OwnerVA &&
+           L.RegistrationOffset == R.RegistrationOffset &&
+           L.RegistrationSize == R.RegistrationSize &&
+           L.StateOffset == R.StateOffset && L.Encoding == R.Encoding;
+  }
+};
+
+/// One volatile callback write to the compiler-owned parent's TryLevel.
+/// Semantic identifies the complete parent scope token, not its generated
+/// state. A missing token represents the personality's inactive sentinel.
+/// WriteID is source-issued and unique within the callback owner. The exact
+/// half-open instruction extent and physical frame are compiler facts.
+struct RewriteWinX86SEHStateWrite {
+  uint64_t WriteID = 0;
+  std::string SourceFunction;
+  std::string OwnerSymbol;
+  uint64_t OwnerVA = 0;
+  RewriteWinX86SEHFrame ParentFrame;
+  std::optional<RewriteWinEHSemanticToken> Semantic;
+  int32_t GeneratedState = -1;
+  /// Architectural x86 encoding (0..7) of the physical parent address register.
+  uint8_t AddressRegister = 0;
+  std::string BeginSymbol;
+  uint64_t BeginVA = 0;
+  std::string EndSymbol;
+  uint64_t EndVA = 0;
+};
+
 /// One source-token to exact final WinEH language-record association. The
 /// container identifies the physical table row which makes the record
 /// reachable: the SEH scope-table begin or the C++ TryBlockMap row. RecordVA
@@ -488,6 +532,18 @@ LLVM_ABI bool validateRewriteWinEHSemanticRecords(
     const std::map<std::string, uint64_t> &FunctionOwnerAddrs,
     bool ValidateGlobalFunctionRangeOverlap = true);
 
+/// Validate source/owner identity, physical parent layout, scope-to-state
+/// mapping and exact callback instruction extents. The final-image writer also
+/// requires the instruction labels to lie in one allocated code section.
+LLVM_ABI bool validateRewriteWinX86SEHStateWrites(
+    ArrayRef<RewriteWinX86SEHFrame> Frames,
+    ArrayRef<RewriteWinX86SEHStateWrite> Writes,
+    ArrayRef<RewriteWinEHSemanticRecord> Records,
+    ArrayRef<RewriteSourceFunctionOwner> SourceOwners,
+    ArrayRef<RewriteFunctionRange> FunctionRanges,
+    const std::map<std::string, uint64_t> &FunctionOwnerAddrs,
+    bool ValidateGlobalFunctionRangeOverlap = true);
+
 /// Per-image hook: called after every fixup is applied, to mutate the final
 /// bytes in place (whole-section checksum / code encryption / ...). Defaults to
 /// a no-op when unset.
@@ -525,6 +581,10 @@ struct RewriteResult {
   /// language table rows.
   std::vector<RewriteWinEHSemanticRecord> WinEHSemanticRecords;
   bool WinEHSemanticsValid = true;
+  /// Parent layouts and exact callback stores for native PE32 SEH state.
+  std::vector<RewriteWinX86SEHFrame> WinX86SEHFrames;
+  std::vector<RewriteWinX86SEHStateWrite> WinX86SEHStateWrites;
+  bool WinX86SEHStateWritesValid = true;
   /// External symbols that could not be resolved (should be empty on success).
   std::vector<std::string> Unresolved;
 };
