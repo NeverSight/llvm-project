@@ -16,6 +16,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/WinEHPrepare.h"
+#include "WinEHX86State.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -672,6 +673,7 @@ void llvm::calculateSEHStateNumbers(const Function *Fn,
     ::calculateSEHStateNumbers(FuncInfo, FirstNonPHI, -1);
   }
 
+  orderWinX86SEHRewriteStates(*Fn, FuncInfo);
   calculateStateNumbersForInvokes(Fn, FuncInfo);
 
   bool IsEHa = Fn->getParent()->getModuleFlag("eh-asynch");
