@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "X86.h"
+#include "X86SEHState.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
@@ -164,6 +165,7 @@ INITIALIZE_PASS(WinEHStateLegacy, "x86-winehstate",
                 "Insert stores for EH state numbers", false, false)
 
 bool WinEHStateFnPassImpl::initialize(Module &M) {
+  validateX86SEHStateWrites(M);
   TheModule = &M;
   return false;
 }

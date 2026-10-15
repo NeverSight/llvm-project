@@ -89,6 +89,8 @@ set(sources
   X86TargetObjectFile.cpp
   X86TargetTransformInfo.cpp
   X86WinEHState.cpp
+  X86SEHState.cpp
+  X86SEHStateAsm.cpp
   X86WinEHUnwindV2.cpp
   GISel/X86CallLowering.cpp
   GISel/X86InstructionSelector.cpp

@@ -2300,6 +2300,10 @@ void X86AsmPrinter::emitInstruction(const MachineInstr *MI) {
   bool IsTailJump = false;
 
   switch (MI->getOpcode()) {
+  case X86::SEH_SetState:
+    emitSEHStateWrite(*MI);
+    return;
+
   case TargetOpcode::DBG_VALUE:
     llvm_unreachable("Should be handled target independently");
 

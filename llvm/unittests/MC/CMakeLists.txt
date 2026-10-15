@@ -24,5 +24,6 @@ add_llvm_unittest(MCTests
   StringTableBuilderTest.cpp
   TargetRegistry.cpp
   WinEHCompressedTest.cpp
+  WinX86SEHStateWriteTest.cpp
   MCDisassemblerTest.cpp
   )

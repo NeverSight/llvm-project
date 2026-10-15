@@ -536,6 +536,59 @@ expressions, and frontends must outline them ahead of time. Local variables of
 the parent function can be escaped and accessed using the ``llvm.localescape``
 and ``llvm.localrecover`` intrinsics.
 
+Checked x86 SEH callback state writes
+-------------------------------------
+
+The NeverD rewrite extension supports a callback which changes the active
+scope of a 32-bit MSVC SEH registration owned by another function:
+
+.. code-block:: llvm
+
+   declare void @llvm.x86.seh.setstate(
+       ptr %parent, ptr %parent.localaddress, i32 immarg %source.level,
+       i64 immarg %digest0, i64 immarg %digest1,
+       i64 immarg %digest2, i64 immarg %digest3, i64 immarg %write.id)
+
+``parent`` must name a definition in the same module with the
+``llvm.rewrite.win-x86-registration-state`` attribute and the
+``_except_handler3`` or ``_except_handler4`` personality. For a nonnegative
+source level, the complete semantic token (kind ``SEHScope``, region equal to
+that level, clause zero, and all four digest words) must uniquely match an
+EH pad in the parent. The digest must not be all zero. A sentinel uses level
+``-1`` for EH3 or ``-2`` for EH4, and an all-zero digest. Source levels are
+identities, not generated table indices. The parent must retain its semantic
+EH pads through optimization, including scopes used only by callbacks.
+
+The frame operand uses the compiler's ``llvm.localaddress`` coordinate. A
+local ``void (i8, ptr)`` finally callback receives this value as its second
+argument. Every caller must be the parent supplying ``llvm.localaddress``,
+a checked parent filter supplying ``llvm.eh.recoverfp``, or another local
+finally forwarding the same second argument. The finite caller graph must
+reach the parent; unchecked address escapes and unrooted cycles are rejected.
+A local ``i32 ()`` filter must occur in the parent's catchpad and obtain the
+frame with ``llvm.eh.recoverfp(parent, llvm.frameaddress(1))``. These shapes
+must remain intact until code generation, with the C calling convention.
+Producers should list outlined finally functions in ``llvm.compiler.used``
+to preserve their runtime ABI through interprocedural optimization. Checked
+``llvm.used`` and ``llvm.compiler.used`` references are not runtime callers.
+
+Each call performs one ordered volatile 32-bit write to the actual parent
+registration's ``TryLevel`` field. LLVM resolves the state from its final
+scope table and the displacement from its final frame layout, including
+stack realignment. Existing ``llvm.localescape`` indices are unchanged.
+``write.id`` must be nonzero and unique within its callback; it identifies a
+source occurrence and does not affect the generated value. The intrinsic
+cannot be invoked or duplicated. Malformed contracts produce a code-generation
+diagnostic.
+
+When final-image rewrite provenance is enabled, LLVM emits parent-frame and
+state-write receipts containing the complete token, generated state, layout,
+callback owner, source write identity, architectural address-register encoding,
+and exact instruction extent. The
+``LLVM_NEVERD_X86_REGISTRATION_SEH_STATE_WRITES`` capability macro has version
+``1``. Consumers must check ``WinX86SEHStateWritesValid`` together with the
+function and EH semantic receipt validity before installing the image.
+
 New exception handling instructions
 ------------------------------------
 

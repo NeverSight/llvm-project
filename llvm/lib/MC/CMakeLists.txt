@@ -73,6 +73,7 @@ add_llvm_component_library(LLVMMC
   TargetRegistry.cpp
   WasmObjectWriter.cpp
   WinCOFFObjectWriter.cpp
+  WinX86SEHStateWrite.cpp
   XCOFFObjectWriter.cpp
 
   ADDITIONAL_HEADER_DIRS

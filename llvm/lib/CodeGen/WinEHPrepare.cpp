@@ -157,8 +157,8 @@ static int addUnwindMapEntry(WinEHFuncInfo &FuncInfo, int ToState,
   return FuncInfo.getLastStateNumber();
 }
 
-static std::optional<mc_rewrite::RewriteWinEHSemanticToken>
-getRewriteWinEHSemanticToken(
+std::optional<mc_rewrite::RewriteWinEHSemanticToken>
+llvm::getRewriteWinEHSemanticToken(
     const Instruction &Pad, mc_rewrite::RewriteWinEHSemanticKind ExpectedKind) {
   const MDNode *Metadata =
       Pad.getMetadata(mc_rewrite::RewriteWinEHSemanticAttachment);

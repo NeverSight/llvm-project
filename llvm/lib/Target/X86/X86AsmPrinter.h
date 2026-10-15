@@ -105,6 +105,8 @@ private:
   // outputting it to the OutStream. This allows the shadow tracker to minimise
   // the number of NOPs used for stackmap padding.
   void EmitAndCountInstruction(MCInst &Inst);
+  void emitSEHStateWrite(const MachineInstr &MI);
+  SmallVector<const MCSymbol *, 8> SEHStateWriteSymbols;
   void LowerSTACKMAP(const MachineInstr &MI);
   void LowerPATCHPOINT(const MachineInstr &MI, X86MCInstLower &MCIL);
   void LowerSTATEPOINT(const MachineInstr &MI, X86MCInstLower &MCIL);
@@ -186,6 +188,7 @@ public:
                              const char *ExtraCode, raw_ostream &O) override;
 
   bool doInitialization(Module &M) override {
+    SEHStateWriteSymbols.clear();
     SMShadowTracker.reset(0);
     SM.reset();
     FM.reset();

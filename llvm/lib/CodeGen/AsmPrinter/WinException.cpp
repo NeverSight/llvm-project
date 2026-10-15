@@ -1749,13 +1749,58 @@ void WinException::emitExceptHandlerTable(const MachineFunction *MF) {
   }
 
   const bool Rewrite = Asm->OutContext.requiresRewriteFunctionProvenance();
-  MCSymbol *TableEnd = Rewrite
-                          ? Asm->OutContext.createTempSymbol(
-                                "rewrite_x86_seh_table_end", true)
-                          : nullptr;
+  // Resolve callback requests only from the final compiler-owned state map.
+  // These absolute assignments also support a callback emitted before its
+  // parent, without making either source levels or frame offsets ABI guesses.
+  MCContext &Context = Asm->OutContext;
+  const bool HasStateWrites = hasWinX86SEHStateWriteRequests(F);
+  if (HasStateWrites) {
+    OS.emitAssignment(
+        getWinX86SEHStateSymbol(Context, FLinkageName, std::nullopt),
+        MCConstantExpr::create(BaseState, Context));
+    const int NodeIndex = FuncInfo.EHRegNodeFrameIndex;
+    if (NodeIndex == INT_MAX ||
+        MF->getFrameInfo().getObjectSize(NodeIndex) != 24)
+      report_fatal_error(
+          "rewrite SEH parent has no complete registration frame");
+    const StackOffset Offset =
+        MF->getSubtarget().getFrameLowering()->getNonLocalFrameIndexReference(
+            *MF, NodeIndex);
+    if (Offset.getScalable() || !isInt<32>(Offset.getFixed()) ||
+        Offset.getFixed() % 4)
+      report_fatal_error("rewrite SEH parent has no fixed localaddress frame");
+    if (Rewrite) {
+      MCRewriteWinX86SEHFrame Frame;
+      Frame.SourceFunction = F.getName().str();
+      Frame.Owner = Asm->CurrentFnSym;
+      Frame.RegistrationOffset =
+          Context.getOrCreateParentFrameOffsetSymbol(FLinkageName);
+      Frame.Encoding = BaseState == -2
+                           ? mc_rewrite::RewriteWinEHSemanticEncoding::X86SEH4
+                           : mc_rewrite::RewriteWinEHSemanticEncoding::X86SEH3;
+      auto *Assembler = OS.getAssemblerPtr();
+      assert(Assembler && "rewrite provenance requires an object streamer");
+      Assembler->registerRewriteWinX86SEHFrame(Frame);
+    }
+  }
+  MCSymbol *TableEnd =
+      Rewrite
+          ? Asm->OutContext.createTempSymbol("rewrite_x86_seh_table_end", true)
+          : nullptr;
   assert(!FuncInfo.SEHUnwindMap.empty());
   uint32_t State = 0;
   for (const SEHUnwindMapEntry &UME : FuncInfo.SEHUnwindMap) {
+    if (HasStateWrites && UME.RewriteSemantic) {
+      const auto &Token = *UME.RewriteSemantic;
+      if (Token.Kind != mc_rewrite::RewriteWinEHSemanticKind::SEHScope ||
+          Token.Clause != 0)
+        report_fatal_error("invalid SEH source state token");
+      MCSymbol *StateSymbol =
+          getWinX86SEHStateSymbol(Context, FLinkageName, Token);
+      if (StateSymbol->isVariable())
+        report_fatal_error("duplicate SEH source state token");
+      OS.emitAssignment(StateSymbol, MCConstantExpr::create(State, Context));
+    }
     auto *Handler = cast<MachineBasicBlock *>(UME.Handler);
     const MCSymbol *ExceptOrFinally =
         UME.IsFinally ? getMCSymbolForMBB(Asm, Handler) : Handler->getSymbol();

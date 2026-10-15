@@ -32,6 +32,7 @@ class GlobalVariable;
 class Instruction;
 class InvokeInst;
 class MachineBasicBlock;
+class MCContext;
 class MCSymbol;
 
 // The following structs respresent the .xdata tables for various
@@ -124,6 +125,20 @@ struct WinEHFuncInfo {
 
   WinEHFuncInfo();
 };
+
+/// Read the common checked source-semantic attachment on an EH pad.
+std::optional<mc_rewrite::RewriteWinEHSemanticToken>
+getRewriteWinEHSemanticToken(const Instruction &Pad,
+                             mc_rewrite::RewriteWinEHSemanticKind ExpectedKind);
+
+/// Whether an outlined callback requests a write to this parent's SEH state.
+bool hasWinX86SEHStateWriteRequests(const Function &Parent);
+
+/// An absolute symbol defined after final parent SEH state numbering. A missing
+/// token denotes the personality's unwind-to-caller state.
+MCSymbol *getWinX86SEHStateSymbol(
+    MCContext &Context, StringRef ParentName,
+    const std::optional<mc_rewrite::RewriteWinEHSemanticToken> &Token);
 
 /// Analyze the IR in ParentFn and it's handlers to build WinEHFuncInfo, which
 /// describes the state numbers and tables used by __CxxFrameHandler3. This
