@@ -23,6 +23,16 @@ def GetLo32XForm : SDNodeXForm<imm, [{
 //===----------------------------------------------------------------------===//
 // Random Pseudo Instructions.
 
+// Expand to a real MOV-to-CR/DR before machine optimization. An ordinary COPY
+// does not describe the instruction's ordered effects or undefined flags.
+let hasSideEffects = 1, mayLoad = 0, mayStore = 0,
+    usesCustomInserter = 1, Defs = [EFLAGS], SchedRW = [WriteSystem] in {
+  def WRITE_SYSREG32 : PseudoI<(outs), (ins i32imm:$reg, GR32:$value), []>,
+                      Requires<[Not64BitMode]>;
+  def WRITE_SYSREG64 : PseudoI<(outs), (ins i32imm:$reg, GR64:$value), []>,
+                      Requires<[In64BitMode]>;
+}
+
 // PIC base construction.  This expands to code that looks like this:
 //     call  $next_inst
 //     popl %destreg"

@@ -130,7 +130,7 @@ def OUT32ir : Ii8<0xE7, RawFrm, (outs), (ins u8imm:$port),
 //===----------------------------------------------------------------------===//
 // Moves to and from debug registers
 
-let SchedRW = [WriteSystem] in {
+let SchedRW = [WriteSystem], hasSideEffects = 1, Defs = [EFLAGS] in {
 def MOV32rd : I<0x21, MRMDestReg, (outs GR32:$dst), (ins DEBUG_REG:$src),
                 "mov{l}\t{$src, $dst|$dst, $src}", []>, TB,
                 Requires<[Not64BitMode]>;
@@ -149,7 +149,7 @@ def MOV64dr : I<0x23, MRMSrcReg, (outs DEBUG_REG:$dst), (ins GR64:$src),
 //===----------------------------------------------------------------------===//
 // Moves to and from control registers
 
-let SchedRW = [WriteSystem] in {
+let SchedRW = [WriteSystem], hasSideEffects = 1, Defs = [EFLAGS] in {
 def MOV32rc : I<0x20, MRMDestReg, (outs GR32:$dst), (ins CONTROL_REG:$src),
                 "mov{l}\t{$src, $dst|$dst, $src}", []>, TB,
                 Requires<[Not64BitMode]>;

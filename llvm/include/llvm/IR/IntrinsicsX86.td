@@ -144,6 +144,29 @@ let TargetPrefix = "x86" in {
   def int_x86_cpuidex : Intrinsic<[], [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty], []>;
 }
 
+// Control/debug register accesses are ordered, potentially trapping operations.
+// The index is an encoding-time constant. Unsuffixed APIs require 64-bit mode;
+// the 32-suffixed APIs require 32-bit mode. DR4/DR5 retain their architectural
+// alias/fault behavior, and are not rewritten to DR6/DR7 by the compiler.
+let TargetPrefix = "x86" in {
+  def int_x86_readcr : Intrinsic<[llvm_i64_ty], [llvm_i32_ty],
+                                 [ImmArg<ArgIndex<0>>]>;
+  def int_x86_readcr32 : Intrinsic<[llvm_i32_ty], [llvm_i32_ty],
+                                   [ImmArg<ArgIndex<0>>]>;
+  def int_x86_readdr : Intrinsic<[llvm_i64_ty], [llvm_i32_ty],
+                                 [ImmArg<ArgIndex<0>>]>;
+  def int_x86_readdr32 : Intrinsic<[llvm_i32_ty], [llvm_i32_ty],
+                                   [ImmArg<ArgIndex<0>>]>;
+  def int_x86_writecr : Intrinsic<[], [llvm_i32_ty, llvm_i64_ty],
+                                  [ImmArg<ArgIndex<0>>]>;
+  def int_x86_writecr32 : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty],
+                                    [ImmArg<ArgIndex<0>>]>;
+  def int_x86_writedr : Intrinsic<[], [llvm_i32_ty, llvm_i64_ty],
+                                  [ImmArg<ArgIndex<0>>]>;
+  def int_x86_writedr32 : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty],
+                                    [ImmArg<ArgIndex<0>>]>;
+}
+
 // Read processor ID.
 let TargetPrefix = "x86" in {
   def int_x86_rdpid : ClangBuiltin<"__builtin_ia32_rdpid">,

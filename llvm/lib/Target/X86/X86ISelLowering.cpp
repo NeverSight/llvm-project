@@ -28451,6 +28451,77 @@ static SDValue lowerVMXInvalidation(SDValue Op, const X86Subtarget &Subtarget,
   return getVMXCompletion(Access, DL, DAG);
 }
 
+static SDValue lowerSystemRegisterAccess(SDValue Op,
+                                         const X86Subtarget &Subtarget,
+                                         SelectionDAG &DAG) {
+  const unsigned ID = Op.getConstantOperandVal(1);
+  const bool Is64 = ID == Intrinsic::x86_readcr ||
+                    ID == Intrinsic::x86_writecr ||
+                    ID == Intrinsic::x86_readdr || ID == Intrinsic::x86_writedr;
+  if (Is64 != Subtarget.is64Bit())
+    report_fatal_error("CR/DR intrinsic does not match the target code mode");
+  const bool Read =
+      ID == Intrinsic::x86_readcr || ID == Intrinsic::x86_readcr32 ||
+      ID == Intrinsic::x86_readdr || ID == Intrinsic::x86_readdr32;
+  const bool Control =
+      ID == Intrinsic::x86_readcr || ID == Intrinsic::x86_readcr32 ||
+      ID == Intrinsic::x86_writecr || ID == Intrinsic::x86_writecr32;
+  const auto *Index = dyn_cast<ConstantSDNode>(Op.getOperand(2));
+  if (!Index)
+    report_fatal_error("CR/DR intrinsic requires a constant register index");
+  const uint64_t Number = Index->getZExtValue();
+  unsigned Register;
+  if (Control) {
+    switch (Number) {
+    case 0:
+      Register = X86::CR0;
+      break;
+    case 2:
+      Register = X86::CR2;
+      break;
+    case 3:
+      Register = X86::CR3;
+      break;
+    case 4:
+      Register = X86::CR4;
+      break;
+    case 8:
+      if (!Is64)
+        report_fatal_error("CR8 intrinsic requires 64-bit mode");
+      Register = X86::CR8;
+      break;
+    default:
+      report_fatal_error("invalid control register index");
+    }
+  } else {
+    static const unsigned Registers[] = {X86::DR0, X86::DR1, X86::DR2,
+                                         X86::DR3, X86::DR4, X86::DR5,
+                                         X86::DR6, X86::DR7};
+    if (Number >= std::size(Registers))
+      report_fatal_error("invalid debug register index");
+    Register = Registers[Number];
+  }
+
+  const SDLoc DL(Op);
+  if (!Read)
+    return SDValue(
+        DAG.getMachineNode(Is64 ? X86::WRITE_SYSREG64 : X86::WRITE_SYSREG32, DL,
+                           MVT::Other,
+                           {DAG.getTargetConstant(Register, DL, MVT::i32),
+                            Op.getOperand(3), Op.getOperand(0)}),
+        0);
+
+  // A CopyFromReg is not an instruction-owned read: dead copies disappear and
+  // repeated copies can be merged. Keep a real, chained MOV with side effects.
+  const MVT VT = Is64 ? MVT::i64 : MVT::i32;
+  const unsigned Opcode = Control ? (Is64 ? X86::MOV64rc : X86::MOV32rc)
+                                  : (Is64 ? X86::MOV64rd : X86::MOV32rd);
+  auto *Access =
+      DAG.getMachineNode(Opcode, DL, DAG.getVTList(VT, MVT::Other),
+                         {DAG.getRegister(Register, VT), Op.getOperand(0)});
+  return DAG.getMergeValues({SDValue(Access, 0), SDValue(Access, 1)}, DL);
+}
+
 static SDValue lowerPortIO(SDValue Op, SelectionDAG &DAG) {
   const unsigned ID = Op.getConstantOperandVal(1);
   const bool Read = ID == Intrinsic::x86_inbyte ||
@@ -28557,6 +28628,16 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
   const IntrinsicData *IntrData = getIntrinsicWithChain(IntNo);
   if (!IntrData) {
     switch (IntNo) {
+
+    case Intrinsic::x86_readcr:
+    case Intrinsic::x86_readcr32:
+    case Intrinsic::x86_writecr:
+    case Intrinsic::x86_writecr32:
+    case Intrinsic::x86_readdr:
+    case Intrinsic::x86_readdr32:
+    case Intrinsic::x86_writedr:
+    case Intrinsic::x86_writedr32:
+      return lowerSystemRegisterAccess(Op, Subtarget, DAG);
 
     case Intrinsic::x86_inbyte:
     case Intrinsic::x86_inword:
@@ -36284,6 +36365,9 @@ void X86TargetLowering::ReplaceNodeResults(SDNode *N,
     case Intrinsic::x86_rdmsrlist:
     case Intrinsic::x86_wrmsrlist:
       report_fatal_error("MSRLIST intrinsic requires 64-bit mode");
+    case Intrinsic::x86_readcr:
+    case Intrinsic::x86_readdr:
+      report_fatal_error("CR/DR intrinsic does not match the target code mode");
     case Intrinsic::x86_rdpru:
       expandIntrinsicWChainHelper(N, dl, DAG, X86::RDPRU, X86::ECX, Subtarget,
         Results);
@@ -38961,6 +39045,19 @@ X86TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   switch (MI.getOpcode()) {
   default:
     llvm_unreachable("Unexpected instr type to insert");
+  case X86::WRITE_SYSREG32:
+  case X86::WRITE_SYSREG64: {
+    const unsigned Register = MI.getOperand(0).getImm();
+    const bool Is64 = MI.getOpcode() == X86::WRITE_SYSREG64;
+    const bool Control = X86::CONTROL_REGRegClass.contains(Register);
+    assert((Control || X86::DEBUG_REGRegClass.contains(Register)) &&
+           "invalid system register");
+    const unsigned Opcode = Control ? (Is64 ? X86::MOV64cr : X86::MOV32cr)
+                                    : (Is64 ? X86::MOV64dr : X86::MOV32dr);
+    BuildMI(*BB, MI, MIMD, TII->get(Opcode), Register).add(MI.getOperand(1));
+    MI.eraseFromParent();
+    return BB;
+  }
   case X86::INDIRECT_THUNK_CALL32:
   case X86::INDIRECT_THUNK_CALL64:
   case X86::INDIRECT_THUNK_TCRETURN32:
