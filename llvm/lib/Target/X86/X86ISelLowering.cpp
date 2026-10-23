@@ -2662,6 +2662,9 @@ X86TargetLowering::X86TargetLowering(const X86TargetMachine &TM,
   setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
   if (!Subtarget.is64Bit()) {
     setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::i64, Custom);
+    // WRMSR consumes an i64 value even in 32-bit mode. Split it into EDX:EAX
+    // during operand type legalization, before generic expansion sees it.
+    setOperationAction(ISD::INTRINSIC_VOID, MVT::i64, Custom);
   }
 
   // Only custom-lower 64-bit SADDO and friends on 64-bit because we don't
@@ -28447,6 +28450,18 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_vmxon:
       return lowerVMXManagement(Op, Subtarget, DAG);
 
+    case Intrinsic::x86_wrmsr: {
+      const SDLoc DL(Op);
+      auto [Lo, Hi] = DAG.SplitScalar(Op.getOperand(3), DL, MVT::i32, MVT::i32);
+      SDValue Chain = DAG.getCopyToReg(Op.getOperand(0), DL, X86::ECX,
+                                       Op.getOperand(2), SDValue());
+      Chain = DAG.getCopyToReg(Chain, DL, X86::EAX, Lo, Chain.getValue(1));
+      Chain = DAG.getCopyToReg(Chain, DL, X86::EDX, Hi, Chain.getValue(1));
+      return SDValue(DAG.getMachineNode(X86::WRMSR, DL, MVT::Other,
+                                        {Chain, Chain.getValue(1)}),
+                     0);
+    }
+
     case Intrinsic::swift_async_context_addr: {
       SDLoc dl(Op);
       auto &MF = DAG.getMachineFunction();
@@ -28871,6 +28886,8 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
                             Results);
     return DAG.getMergeValues(Results, dl);
   }
+  // Read Model-Specific Registers.
+  case RDMSR:
   // Read Performance Monitoring Counters.
   case RDPMC:
   // Read Processor Register.
@@ -28879,6 +28896,7 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
   case XGETBV: {
     SmallVector<SDValue, 2> Results;
 
+    // RDMSR uses ECX to select the model-specific register to read.
     // RDPMC uses ECX to select the index of the performance counter to read.
     // RDPRU uses ECX to select the processor register to read.
     // XGETBV uses ECX to select the index of the XCR register to return.
@@ -36074,6 +36092,10 @@ void X86TargetLowering::ReplaceNodeResults(SDNode *N,
                                      Results);
     case Intrinsic::x86_rdpmc:
       expandIntrinsicWChainHelper(N, dl, DAG, X86::RDPMC, X86::ECX, Subtarget,
+                                  Results);
+      return;
+    case Intrinsic::x86_rdmsr:
+      expandIntrinsicWChainHelper(N, dl, DAG, X86::RDMSR, X86::ECX, Subtarget,
                                   Results);
       return;
     case Intrinsic::x86_rdpru:
