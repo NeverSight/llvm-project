@@ -177,6 +177,28 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
+// SGX supervisor/VMM fallthrough: {rAX, rBX, rCX, rDX, CF | (ZF << 1)}.
+// Inputs/outputs retain their full code-mode width. EAX selects the leaf;
+// all implicit memory accesses and feature/privilege checks stay native.
+// The flag byte is an architectural status only for flag-writing leaves;
+// preserving leaves expose unmodelled incoming machine flags. These APIs do
+// not provide ENCLU entry/exit/resume or an enclave continuation ABI.
+let TargetPrefix = "x86" in {
+  def int_x86_encls : Intrinsic<
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i8_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty], []>;
+  def int_x86_enclv : Intrinsic<
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i8_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty], []>;
+  def int_x86_encls32 : Intrinsic<
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], []>;
+  def int_x86_enclv32 : Intrinsic<
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], []>;
+}
+
+//===----------------------------------------------------------------------===//
 // FLAGS.
 let TargetPrefix = "x86" in {
   def int_x86_flags_read_u32 : ClangBuiltin<"__builtin_ia32_readeflags_u32">,

@@ -28350,6 +28350,57 @@ static SDValue getVMXCompletion(SDNode *Access, const SDLoc &DL,
   return DAG.getMergeValues({Status, SDValue(Access, ChainIndex)}, DL);
 }
 
+// SGX owns its implicit DS accesses, enclave state and privilege/fault checks.
+// Preserve all four natural-width GPRs and capture CF/ZF before flag
+// arithmetic.
+static SDValue lowerSGXSupervisor(SDValue Op, const X86Subtarget &Subtarget,
+                                  SelectionDAG &DAG) {
+  const unsigned ID = Op.getConstantOperandVal(1);
+  const bool Wide = ID == Intrinsic::x86_encls || ID == Intrinsic::x86_enclv;
+  if (Wide != Subtarget.is64Bit())
+    report_fatal_error("SGX intrinsic does not match the target code mode");
+  if (!Subtarget.hasSGX())
+    report_fatal_error("SGX intrinsic requires the sgx target feature");
+  const SDLoc DL(Op);
+  const MVT VT = Wide ? MVT::i64 : MVT::i32;
+  const unsigned Registers[] = {
+      Wide ? X86::RAX : X86::EAX, Wide ? X86::RBX : X86::EBX,
+      Wide ? X86::RCX : X86::ECX, Wide ? X86::RDX : X86::EDX};
+  SDValue Chain = Op.getOperand(0), Glue;
+  for (unsigned I = 0; I != 4; ++I) {
+    Chain =
+        DAG.getCopyToReg(Chain, DL, Registers[I], Op.getOperand(I + 2), Glue);
+    Glue = Chain.getValue(1);
+  }
+  const bool System =
+      ID == Intrinsic::x86_encls || ID == Intrinsic::x86_encls32;
+  const unsigned Opcode = Wide ? (System ? X86::ENCLS : X86::ENCLV)
+                               : (System ? X86::ENCLS32 : X86::ENCLV32);
+  auto *Access = DAG.getMachineNode(
+      Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue), {Chain, Glue});
+  Chain = SDValue(Access, 0);
+  Glue = SDValue(Access, 1);
+  SmallVector<SDValue, 6> Results;
+  for (unsigned Register : Registers) {
+    SDValue Value = DAG.getCopyFromReg(Chain, DL, Register, VT, Glue);
+    Results.push_back(Value);
+    Chain = Value.getValue(1);
+    Glue = Value.getValue(2);
+  }
+  auto *CF = DAG.getMachineNode(
+      X86::SETCCr, DL, DAG.getVTList(MVT::i8, MVT::Glue),
+      {DAG.getTargetConstant(X86::COND_B, DL, MVT::i8), Glue});
+  auto *ZF = DAG.getMachineNode(
+      X86::SETCCr, DL, MVT::i8,
+      {DAG.getTargetConstant(X86::COND_E, DL, MVT::i8), SDValue(CF, 1)});
+  Results.push_back(
+      DAG.getNode(ISD::OR, DL, MVT::i8, SDValue(CF, 0),
+                  DAG.getNode(ISD::SHL, DL, MVT::i8, SDValue(ZF, 0),
+                              DAG.getConstant(1, DL, MVT::i8))));
+  Results.push_back(Chain);
+  return DAG.getMergeValues(Results, DL);
+}
+
 // Preserve native widths and keep every memory operand inside its instruction.
 static SDValue lowerDescriptorState(SDValue Op, const X86Subtarget &Subtarget,
                                     SelectionDAG &DAG) {
@@ -29134,6 +29185,12 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_invvpid:
     case Intrinsic::x86_invvpid32:
       return lowerVMXInvalidation(Op, Subtarget, DAG);
+
+    case Intrinsic::x86_encls:
+    case Intrinsic::x86_enclv:
+    case Intrinsic::x86_encls32:
+    case Intrinsic::x86_enclv32:
+      return lowerSGXSupervisor(Op, Subtarget, DAG);
 
     case Intrinsic::x86_verr_reg:
     case Intrinsic::x86_verr_mem:
@@ -36860,6 +36917,9 @@ void X86TargetLowering::ReplaceNodeResults(SDNode *N,
     case Intrinsic::x86_str_reg64:
     case Intrinsic::x86_smsw_reg64:
       report_fatal_error("64-bit descriptor state result requires 64-bit mode");
+    case Intrinsic::x86_encls:
+    case Intrinsic::x86_enclv:
+      report_fatal_error("SGX intrinsic does not match the target code mode");
     case Intrinsic::x86_vmread_reg:
       report_fatal_error("64-bit VMCS intrinsic requires 64-bit mode");
     case Intrinsic::x86_rdpru:
