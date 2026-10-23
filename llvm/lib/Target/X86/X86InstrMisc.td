@@ -1596,11 +1596,11 @@ let SchedRW = [WriteLoad] in {
 // OPCODE 0F 01 FE
 //
 let SchedRW = [WriteSystem] in {
-  let Uses = [EAX, EDX] in
+  let Uses = [EAX, EDX, ECX] in
   def INVLPGB32 : I<0x01, MRM_FE, (outs), (ins),
                   "invlpgb", []>,
                   TB, Requires<[Not64BitMode]>;
-  let Uses = [RAX, EDX] in
+  let Uses = [RAX, EDX, ECX] in
   def INVLPGB64 : I<0x01, MRM_FE, (outs), (ins),
                   "invlpgb", []>,
                   TB, Requires<[In64BitMode]>;

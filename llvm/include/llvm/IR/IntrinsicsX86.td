@@ -128,6 +128,23 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
+// Bounded processor-state effects. These preserve native privilege, feature
+// and descriptor validation. HRESET's ignored imm8 is emitted as zero.
+// INVLPGB passes the complete rAX control/address, EDX identifiers and ECX
+// count/page-size operands; its address is not an ordinary memory pointer.
+let TargetPrefix = "x86" in {
+  def int_x86_hreset : Intrinsic<[], [llvm_i32_ty], []>;
+  def int_x86_invlpgb : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty], []>;
+  def int_x86_invlpgb32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], []>;
+  def int_x86_tlbsync : Intrinsic<[], [], []>;
+  // LKGS is a long-mode operation. Its memory form owns the m16 selector read.
+  def int_x86_lkgs_reg : Intrinsic<[], [llvm_i16_ty], []>;
+  def int_x86_lkgs_mem : Intrinsic<[], [llvm_ptr_ty], []>;
+}
+
+//===----------------------------------------------------------------------===//
 // FLAGS.
 let TargetPrefix = "x86" in {
   def int_x86_flags_read_u32 : ClangBuiltin<"__builtin_ia32_readeflags_u32">,

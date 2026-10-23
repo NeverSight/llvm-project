@@ -28350,6 +28350,59 @@ static SDValue getVMXCompletion(SDNode *Access, const SDLoc &DL,
   return DAG.getMergeValues({Status, SDValue(Access, ChainIndex)}, DL);
 }
 
+static SDValue lowerBoundedSystemState(SDValue Op,
+                                       const X86Subtarget &Subtarget,
+                                       SelectionDAG &DAG) {
+  const unsigned ID = Op.getConstantOperandVal(1);
+  const SDLoc DL(Op);
+  SDValue Chain = Op.getOperand(0);
+  switch (ID) {
+  default:
+    llvm_unreachable("unexpected bounded system intrinsic");
+  case Intrinsic::x86_hreset:
+    Chain = DAG.getCopyToReg(Chain, DL, X86::EAX, Op.getOperand(2), SDValue());
+    return SDValue(DAG.getMachineNode(X86::HRESET, DL, MVT::Other,
+                                      {DAG.getTargetConstant(0, DL, MVT::i32),
+                                       Chain, Chain.getValue(1)}),
+                   0);
+  case Intrinsic::x86_tlbsync:
+    return SDValue(DAG.getMachineNode(X86::TLBSYNC, DL, MVT::Other, Chain), 0);
+  case Intrinsic::x86_invlpgb:
+  case Intrinsic::x86_invlpgb32: {
+    const bool Wide = ID == Intrinsic::x86_invlpgb;
+    if (Wide != Subtarget.is64Bit())
+      report_fatal_error(
+          "INVLPGB intrinsic does not match the target code mode");
+    Chain = DAG.getCopyToReg(Chain, DL, Wide ? X86::RAX : X86::EAX,
+                             Op.getOperand(2), SDValue());
+    Chain = DAG.getCopyToReg(Chain, DL, X86::EDX, Op.getOperand(3),
+                             Chain.getValue(1));
+    Chain = DAG.getCopyToReg(Chain, DL, X86::ECX, Op.getOperand(4),
+                             Chain.getValue(1));
+    return SDValue(DAG.getMachineNode(Wide ? X86::INVLPGB64 : X86::INVLPGB32,
+                                      DL, MVT::Other,
+                                      {Chain, Chain.getValue(1)}),
+                   0);
+  }
+  case Intrinsic::x86_lkgs_reg:
+  case Intrinsic::x86_lkgs_mem: {
+    if (!Subtarget.is64Bit())
+      report_fatal_error("LKGS intrinsic requires 64-bit mode");
+    if (ID == Intrinsic::x86_lkgs_reg)
+      return SDValue(DAG.getMachineNode(X86::LKGS16r, DL, MVT::Other,
+                                        {Op.getOperand(2), Chain}),
+                     0);
+    return SDValue(DAG.getMachineNode(X86::LKGS16m, DL, MVT::Other,
+                                      {Op.getOperand(2),
+                                       DAG.getTargetConstant(1, DL, MVT::i8),
+                                       DAG.getRegister(0, MVT::i64),
+                                       DAG.getTargetConstant(0, DL, MVT::i32),
+                                       DAG.getRegister(0, MVT::i16), Chain}),
+                   0);
+  }
+  }
+}
+
 static SDValue lowerDescriptorQuery(SDValue Op, const X86Subtarget &Subtarget,
                                     SelectionDAG &DAG) {
   const unsigned ID = Op.getConstantOperandVal(1);
@@ -28924,6 +28977,14 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_invvpid:
     case Intrinsic::x86_invvpid32:
       return lowerVMXInvalidation(Op, Subtarget, DAG);
+
+    case Intrinsic::x86_hreset:
+    case Intrinsic::x86_tlbsync:
+    case Intrinsic::x86_invlpgb:
+    case Intrinsic::x86_lkgs_reg:
+    case Intrinsic::x86_lkgs_mem:
+    case Intrinsic::x86_invlpgb32:
+      return lowerBoundedSystemState(Op, Subtarget, DAG);
 
     case Intrinsic::x86_clts:
       return SDValue(DAG.getMachineNode(X86::CLTS, SDLoc(Op), MVT::Other,
