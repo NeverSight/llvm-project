@@ -221,8 +221,7 @@ def MOV16sm : I<0x8E, MRMSrcMem, (outs SEGMENT_REG:$dst), (ins i16mem:$src),
 let SchedRW = [WriteSystem] in {
 def SWAPGS : I<0x01, MRM_F8, (outs), (ins), "swapgs", []>, TB;
 // LKGS instructions
-let hasSideEffects = 1 in {
-  let mayLoad = 1 in
+let hasSideEffects = 1, mayLoad = 1 in {
   def LKGS16m : I<0x00, MRM6m, (outs), (ins i16mem:$src), "lkgs\t$src",
                   []>, TB, XD, Requires<[In64BitMode]>;
   def LKGS16r : I<0x00, MRM6r, (outs), (ins GR16:$src), "lkgs\t$src",
@@ -275,17 +274,21 @@ def LSL64rr : RI<0x03, MRMSrcReg, (outs GR64:$dst), (ins GR16orGR32orGR64:$src),
 let hasSideEffects = 1 in
 def INVLPG : I<0x01, MRM7m, (outs), (ins i8mem:$addr), "invlpg\t$addr", []>, TB;
 
+let hasSideEffects = 1 in
 def STR16r : I<0x00, MRM1r, (outs GR16:$dst), (ins),
                "str{w}\t$dst", []>, TB, OpSize16;
+let hasSideEffects = 1 in
 def STR32r : I<0x00, MRM1r, (outs GR32:$dst), (ins),
                "str{l}\t$dst", []>, TB, OpSize32;
+let hasSideEffects = 1 in
 def STR64r : RI<0x00, MRM1r, (outs GR64:$dst), (ins),
                 "str{q}\t$dst", []>, TB;
-let mayStore = 1 in
+let hasSideEffects = 1, mayStore = 1 in
 def STRm   : I<0x00, MRM1m, (outs), (ins i16mem:$dst), "str{w}\t$dst", []>, TB;
 
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in
 def LTRr : I<0x00, MRM3r, (outs), (ins GR16:$src), "ltr{w}\t$src", []>, TB;
-let mayLoad = 1 in
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in
 def LTRm : I<0x00, MRM3m, (outs), (ins i16mem:$src), "ltr{w}\t$src", []>, TB;
 
 def PUSHCS16 : I<0x0E, RawFrm, (outs), (ins), "push{w}\t{%cs|cs}", []>,
@@ -383,13 +386,11 @@ def LGS32rm : I<0xb5, MRMSrcMem, (outs GR32:$dst), (ins opaquemem:$src),
 def LGS64rm : RI<0xb5, MRMSrcMem, (outs GR64:$dst), (ins opaquemem:$src),
                  "lgs{q}\t{$src, $dst|$dst, $src}", []>, TB;
 
-let Defs = [EFLAGS] in {
+let Defs = [EFLAGS], hasSideEffects = 1, mayLoad = 1 in {
 def VERRr : I<0x00, MRM4r, (outs), (ins GR16:$seg), "verr\t$seg", []>, TB;
 def VERWr : I<0x00, MRM5r, (outs), (ins GR16:$seg), "verw\t$seg", []>, TB;
-let mayLoad = 1 in {
 def VERRm : I<0x00, MRM4m, (outs), (ins i16mem:$seg), "verr\t$seg", []>, TB;
 def VERWm : I<0x00, MRM5m, (outs), (ins i16mem:$seg), "verw\t$seg", []>, TB;
-}
 } // Defs EFLAGS
 } // SchedRW
 
@@ -411,16 +412,19 @@ def SIDT32m : I<0x01, MRM1m, (outs), (ins opaquemem:$dst),
 def SIDT64m : I<0x01, MRM1m, (outs), (ins opaquemem:$dst),
                 "sidt{q}\t$dst", []>, TB, Requires <[In64BitMode]>;
 } // hasSideEffects = 1, mayStore = 1
+let hasSideEffects = 1 in
 def SLDT16r : I<0x00, MRM0r, (outs GR16:$dst), (ins),
                 "sldt{w}\t$dst", []>, TB, OpSize16;
-let mayStore = 1 in
+let hasSideEffects = 1, mayStore = 1 in
 def SLDT16m : I<0x00, MRM0m, (outs), (ins i16mem:$dst),
                 "sldt{w}\t$dst", []>, TB;
+let hasSideEffects = 1 in
 def SLDT32r : I<0x00, MRM0r, (outs GR32:$dst), (ins),
                 "sldt{l}\t$dst", []>, OpSize32, TB;
 
 // LLDT is not interpreted specially in 64-bit mode because there is no sign
 //   extension.
+let hasSideEffects = 1 in
 def SLDT64r : RI<0x00, MRM0r, (outs GR64:$dst), (ins),
                  "sldt{q}\t$dst", []>, TB, Requires<[In64BitMode]>;
 
@@ -438,9 +442,10 @@ def LIDT32m : I<0x01, MRM3m, (outs), (ins opaquemem:$src),
 def LIDT64m : I<0x01, MRM3m, (outs), (ins opaquemem:$src),
                 "lidt{q}\t$src", []>, TB, Requires<[In64BitMode]>;
 } // hasSideEffects = 1, mayLoad = 1
+let hasSideEffects = 1, mayLoad = 1 in
 def LLDT16r : I<0x00, MRM2r, (outs), (ins GR16:$src),
                 "lldt{w}\t$src", []>, TB;
-let mayLoad = 1 in
+let hasSideEffects = 1, mayLoad = 1 in
 def LLDT16m : I<0x00, MRM2m, (outs), (ins i16mem:$src),
                 "lldt{w}\t$src", []>, TB;
 } // SchedRW
@@ -501,21 +506,26 @@ let Predicates = [HasUSERMSR, HasEGPR, In64BitMode] in
 let Defs = [RAX, RDX], Uses = [ECX] in
 def RDPMC : I<0x33, RawFrm, (outs), (ins), "rdpmc", []>, TB;
 
+let hasSideEffects = 1 in
 def SMSW16r : I<0x01, MRM4r, (outs GR16:$dst), (ins),
                 "smsw{w}\t$dst", []>, OpSize16, TB;
+let hasSideEffects = 1 in
 def SMSW32r : I<0x01, MRM4r, (outs GR32:$dst), (ins),
                 "smsw{l}\t$dst", []>, OpSize32, TB;
 // no m form encodable; use SMSW16m
+let hasSideEffects = 1 in
 def SMSW64r : RI<0x01, MRM4r, (outs GR64:$dst), (ins),
                  "smsw{q}\t$dst", []>, TB;
 
 // For memory operands, there is only a 16-bit form
+let hasSideEffects = 1, mayStore = 1 in
 def SMSW16m : I<0x01, MRM4m, (outs), (ins i16mem:$dst),
                 "smsw{w}\t$dst", []>, TB;
 
+let hasSideEffects = 1 in
 def LMSW16r : I<0x01, MRM6r, (outs), (ins GR16:$src),
                 "lmsw{w}\t$src", []>, TB;
-let mayLoad = 1 in
+let hasSideEffects = 1, mayLoad = 1 in
 def LMSW16m : I<0x01, MRM6m, (outs), (ins i16mem:$src),
                 "lmsw{w}\t$src", []>, TB;
 
@@ -526,6 +536,7 @@ let Defs = [EAX, EBX, ECX, EDX], Uses = [EAX, ECX], hasSideEffects = 1 in
 //===----------------------------------------------------------------------===//
 // Cache instructions
 let SchedRW = [WriteSystem] in {
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in
 def INVD : I<0x08, RawFrm, (outs), (ins), "invd", []>, TB;
 def WBINVD : I<0x09, RawFrm, (outs), (ins), "wbinvd", [(int_x86_wbinvd)]>, TB, PS;
 

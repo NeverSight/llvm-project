@@ -145,6 +145,38 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
+// Descriptor and machine-state instructions. All operations are ordered
+// ambient effects, including dead reads and failed VERR/VERW checks. Verify
+// returns native ZF (1 = accessible). Register read widths are operand sizes;
+// upper bits retain the processor's native behavior. Memory forms access
+// exactly m16 and must not be rewritten as ordinary C/IR loads or stores.
+let TargetPrefix = "x86" in {
+  def int_x86_verr_reg : Intrinsic<[llvm_i8_ty], [llvm_i16_ty], []>;
+  def int_x86_verr_mem : Intrinsic<[llvm_i8_ty], [llvm_ptr_ty], []>;
+  def int_x86_verw_reg : Intrinsic<[llvm_i8_ty], [llvm_i16_ty], []>;
+  def int_x86_verw_mem : Intrinsic<[llvm_i8_ty], [llvm_ptr_ty], []>;
+  def int_x86_sldt_reg16 : Intrinsic<[llvm_i16_ty], [], []>;
+  def int_x86_sldt_reg32 : Intrinsic<[llvm_i32_ty], [], []>;
+  def int_x86_sldt_reg64 : Intrinsic<[llvm_i64_ty], [], []>;
+  def int_x86_sldt_mem : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_str_reg16 : Intrinsic<[llvm_i16_ty], [], []>;
+  def int_x86_str_reg32 : Intrinsic<[llvm_i32_ty], [], []>;
+  def int_x86_str_reg64 : Intrinsic<[llvm_i64_ty], [], []>;
+  def int_x86_str_mem : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_smsw_reg16 : Intrinsic<[llvm_i16_ty], [], []>;
+  def int_x86_smsw_reg32 : Intrinsic<[llvm_i32_ty], [], []>;
+  def int_x86_smsw_reg64 : Intrinsic<[llvm_i64_ty], [], []>;
+  def int_x86_smsw_mem : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_lldt_reg : Intrinsic<[], [llvm_i16_ty], []>;
+  def int_x86_lldt_mem : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_ltr_reg : Intrinsic<[], [llvm_i16_ty], []>;
+  def int_x86_ltr_mem : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_lmsw_reg : Intrinsic<[], [llvm_i16_ty], []>;
+  def int_x86_lmsw_mem : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_invd : Intrinsic<[], [], []>;
+}
+
+//===----------------------------------------------------------------------===//
 // FLAGS.
 let TargetPrefix = "x86" in {
   def int_x86_flags_read_u32 : ClangBuiltin<"__builtin_ia32_readeflags_u32">,
