@@ -274,6 +274,44 @@ def LSL64rr : RI<0x03, MRMSrcReg, (outs GR64:$dst), (ins GR16orGR32orGR64:$src),
                  "lsl{q}\t{$src, $dst|$dst, $src}", []>, TB;
 }
 
+// Preserve the pointer register class until final MC address-size lowering.
+let hasSideEffects = 1, mayLoad = 1 in {
+def LKGS16m_ADDR32 : PseudoI<(outs), (ins i16mem:$src), []>,
+    Requires<[In64BitMode]>;
+let Defs = [EFLAGS] in {
+def LAR16rm_ADDR32 : PseudoI<(outs GR16:$dst),
+    (ins i16mem:$src), []>,
+    Requires<[In64BitMode]>;
+def LAR16rm_ADDR16 : PseudoI<(outs GR16:$dst),
+    (ins i16mem:$src), []>,
+    Requires<[Not64BitMode]>;
+def LAR32rm_ADDR32 : PseudoI<(outs GR32:$dst),
+    (ins i16mem:$src), []>,
+    Requires<[In64BitMode]>;
+def LAR32rm_ADDR16 : PseudoI<(outs GR32:$dst),
+    (ins i16mem:$src), []>,
+    Requires<[Not64BitMode]>;
+def LAR64rm_ADDR32 : PseudoI<(outs GR64:$dst),
+    (ins i16mem:$src), []>,
+    Requires<[In64BitMode]>;
+def LSL16rm_ADDR32 : PseudoI<(outs GR16:$dst),
+    (ins i16mem:$src), []>,
+    Requires<[In64BitMode]>;
+def LSL16rm_ADDR16 : PseudoI<(outs GR16:$dst),
+    (ins i16mem:$src), []>,
+    Requires<[Not64BitMode]>;
+def LSL32rm_ADDR32 : PseudoI<(outs GR32:$dst),
+    (ins i16mem:$src), []>,
+    Requires<[In64BitMode]>;
+def LSL32rm_ADDR16 : PseudoI<(outs GR32:$dst),
+    (ins i16mem:$src), []>,
+    Requires<[Not64BitMode]>;
+def LSL64rm_ADDR32 : PseudoI<(outs GR64:$dst),
+    (ins i16mem:$src), []>,
+    Requires<[In64BitMode]>;
+}
+}
+
 let hasSideEffects = 1 in
 def INVLPG : I<0x01, MRM7m, (outs), (ins i8mem:$addr), "invlpg\t$addr", []>, TB;
 

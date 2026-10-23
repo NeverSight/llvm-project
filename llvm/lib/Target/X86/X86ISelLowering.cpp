@@ -28793,6 +28793,21 @@ static SDValue lowerBoundedSystemState(SDValue Op,
   }
 }
 
+static SDValue completeDescriptorQuery(SDValue Op, SDNode *Access,
+                                       SDValue Prior, SelectionDAG &DAG) {
+  const SDLoc DL(Op);
+  // Capture ZF before lowering the select: failure must not expose whatever
+  // happened to occupy the allocator's chosen destination register.
+  SDValue ZF(
+      DAG.getMachineNode(X86::SETCCr, DL, MVT::i8,
+                         {DAG.getTargetConstant(X86::COND_E, DL, MVT::i8),
+                          SDValue(Access, 2)}),
+      0);
+  SDValue Value =
+      DAG.getSelect(DL, Op.getValueType(), ZF, SDValue(Access, 0), Prior);
+  return DAG.getMergeValues({Value, ZF, SDValue(Access, 1)}, DL);
+}
+
 static SDValue lowerDescriptorQuery(SDValue Op, const X86Subtarget &Subtarget,
                                     SelectionDAG &DAG) {
   const unsigned ID = Op.getConstantOperandVal(1);
@@ -28877,16 +28892,7 @@ static SDValue lowerDescriptorQuery(SDValue Op, const X86Subtarget &Subtarget,
       Opcode, DL, DAG.getVTList(VT, MVT::Other, MVT::Glue), Operands);
   if (Legacy)
     return DAG.getMergeValues({SDValue(Access, 0), SDValue(Access, 1)}, DL);
-  // Capture ZF before lowering the select: failure must not expose whatever
-  // happened to occupy the allocator's chosen destination register.
-  SDValue ZF(
-      DAG.getMachineNode(X86::SETCCr, DL, MVT::i8,
-                         {DAG.getTargetConstant(X86::COND_E, DL, MVT::i8),
-                          SDValue(Access, 2)}),
-      0);
-  SDValue Value =
-      DAG.getSelect(DL, VT, ZF, SDValue(Access, 0), Op.getOperand(3));
-  return DAG.getMergeValues({Value, ZF, SDValue(Access, 1)}, DL);
+  return completeDescriptorQuery(Op, Access, Op.getOperand(3), DAG);
 }
 
 // Use the B register so the zero-prefix form selects DS even when the
@@ -28942,6 +28948,82 @@ lowerNativeAddressOperands(SDValue Op, const X86Subtarget &Subtarget,
   return {DAG.getRegister(Base, BaseVT), DAG.getTargetConstant(1, DL, MVT::i8),
           DAG.getRegister(0, BaseVT), DAG.getTargetConstant(0, DL, MVT::i32),
           DAG.getRegister(Segment, MVT::i16)};
+}
+
+static SDValue lowerDescriptorAddress(SDValue Op, const X86Subtarget &Subtarget,
+                                      SelectionDAG &DAG) {
+  const unsigned ID = Op.getConstantOperandVal(1);
+  unsigned Opcode, NarrowOpcode;
+  bool Wide = true;
+  switch (ID) {
+  default:
+    llvm_unreachable("unexpected explicit-address descriptor intrinsic");
+  case Intrinsic::x86_lkgs_address:
+    Opcode = X86::LKGS16m;
+    NarrowOpcode = X86::LKGS16m_ADDR32;
+    break;
+  case Intrinsic::x86_lar_mem16_address:
+    Opcode = X86::LAR16rm;
+    NarrowOpcode = X86::LAR16rm_ADDR32;
+    break;
+  case Intrinsic::x86_lar_mem16_address32:
+    Opcode = X86::LAR16rm;
+    NarrowOpcode = X86::LAR16rm_ADDR16;
+    Wide = false;
+    break;
+  case Intrinsic::x86_lar_mem32_address:
+    Opcode = X86::LAR32rm;
+    NarrowOpcode = X86::LAR32rm_ADDR32;
+    break;
+  case Intrinsic::x86_lar_mem32_address32:
+    Opcode = X86::LAR32rm;
+    NarrowOpcode = X86::LAR32rm_ADDR16;
+    Wide = false;
+    break;
+  case Intrinsic::x86_lar_mem64_address:
+    Opcode = X86::LAR64rm;
+    NarrowOpcode = X86::LAR64rm_ADDR32;
+    break;
+  case Intrinsic::x86_lsl_mem16_address:
+    Opcode = X86::LSL16rm;
+    NarrowOpcode = X86::LSL16rm_ADDR32;
+    break;
+  case Intrinsic::x86_lsl_mem16_address32:
+    Opcode = X86::LSL16rm;
+    NarrowOpcode = X86::LSL16rm_ADDR16;
+    Wide = false;
+    break;
+  case Intrinsic::x86_lsl_mem32_address:
+    Opcode = X86::LSL32rm;
+    NarrowOpcode = X86::LSL32rm_ADDR32;
+    break;
+  case Intrinsic::x86_lsl_mem32_address32:
+    Opcode = X86::LSL32rm;
+    NarrowOpcode = X86::LSL32rm_ADDR16;
+    Wide = false;
+    break;
+  case Intrinsic::x86_lsl_mem64_address:
+    Opcode = X86::LSL64rm;
+    NarrowOpcode = X86::LSL64rm_ADDR32;
+    break;
+  }
+  if (Wide != Subtarget.is64Bit() || Subtarget.is16Bit())
+    report_fatal_error(
+        "descriptor memory intrinsic does not match the target code mode");
+  SDValue Chain, Glue;
+  auto Operands =
+      lowerNativeAddressOperands(Op, Subtarget, 2, DAG, Chain, Glue);
+  if (Op.getConstantOperandVal(3) != (Wide ? 64 : 32))
+    Opcode = NarrowOpcode;
+  Operands.push_back(Chain);
+  Operands.push_back(Glue);
+  const SDLoc DL(Op);
+  if (ID == Intrinsic::x86_lkgs_address)
+    return SDValue(DAG.getMachineNode(Opcode, DL, MVT::Other, Operands), 0);
+  auto *Access = DAG.getMachineNode(
+      Opcode, DL, DAG.getVTList(Op.getValueType(), MVT::Other, MVT::Glue),
+      Operands);
+  return completeDescriptorQuery(Op, Access, Op.getOperand(5), DAG);
 }
 
 static SDValue lowerVMXAddress(SDValue Op, const X86Subtarget &Subtarget,
@@ -29535,6 +29617,19 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
           DAG.getMachineNode(IntNo == Intrinsic::x86_cli ? X86::CLI : X86::STI,
                              SDLoc(Op), MVT::Other, Op.getOperand(0)),
           0);
+
+    case Intrinsic::x86_lkgs_address:
+    case Intrinsic::x86_lar_mem16_address:
+    case Intrinsic::x86_lar_mem16_address32:
+    case Intrinsic::x86_lar_mem32_address:
+    case Intrinsic::x86_lar_mem32_address32:
+    case Intrinsic::x86_lar_mem64_address:
+    case Intrinsic::x86_lsl_mem16_address:
+    case Intrinsic::x86_lsl_mem16_address32:
+    case Intrinsic::x86_lsl_mem32_address:
+    case Intrinsic::x86_lsl_mem32_address32:
+    case Intrinsic::x86_lsl_mem64_address:
+      return lowerDescriptorAddress(Op, Subtarget, DAG);
 
     case Intrinsic::x86_lar_reg16:
     case Intrinsic::x86_lar_mem16:
@@ -37350,6 +37445,10 @@ void X86TargetLowering::ReplaceNodeResults(SDNode *N,
     case Intrinsic::x86_lsl_reg64:
     case Intrinsic::x86_lsl_mem64:
       report_fatal_error("64-bit descriptor query requires 64-bit mode");
+    case Intrinsic::x86_lar_mem64_address:
+    case Intrinsic::x86_lsl_mem64_address:
+      report_fatal_error(
+          "descriptor memory intrinsic does not match the target code mode");
     case Intrinsic::x86_sldt_reg64:
     case Intrinsic::x86_str_reg64:
     case Intrinsic::x86_smsw_reg64:
