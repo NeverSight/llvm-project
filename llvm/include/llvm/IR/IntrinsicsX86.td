@@ -251,6 +251,21 @@ let TargetPrefix = "x86" in {
       [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty],
       [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
       [ImmArg<ArgIndex<0>>]>;
+
+  // GETSEC leaves 0, 6, 7 and 8 fall through on the issuing processor.
+  // Transport every natural-width rAX/rBX/rCX/rDX input and result, including
+  // preserved registers on leaf-dependent paths. The constant first input's
+  // low EAX selects the leaf. Flags are preserved by these native leaves;
+  // no incoming compiler arithmetic flags are part of this API. Processor,
+  // chipset, privilege and measured-environment validation stays native.
+  def int_x86_getsec_bounded : Intrinsic<
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_getsec_bounded32 : Intrinsic<
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>]>;
 }
 
 //===----------------------------------------------------------------------===//

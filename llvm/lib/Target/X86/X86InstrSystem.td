@@ -790,11 +790,15 @@ let hasSideEffects = 1, SchedRW = [WriteSystem] in {
 }
 
 //===----------------------------------------------------------------------===//
-// SMX Instruction
-let SchedRW = [WriteSystem] in {
-let Uses = [RAX, RBX, RCX, RDX], Defs = [RAX, RBX, RCX] in {
+// SMX Instruction. Only bounded fallthrough leaves are selected from an IR
+// intrinsic; assembly may encode other leaves under their complete-state ABI.
+let SchedRW = [WriteSystem], hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
+let Uses = [RAX, RBX, RCX, RDX], Defs = [RAX, RBX, RCX, RDX],
+    Predicates = [In64BitMode] in
   def GETSEC : I<0x37, RawFrm, (outs), (ins), "getsec", []>, TB;
-} // Uses, Defs
+let Uses = [EAX, EBX, ECX, EDX], Defs = [EAX, EBX, ECX, EDX],
+    Predicates = [Not64BitMode] in
+  def GETSEC32 : I<0x37, RawFrm, (outs), (ins), "getsec", []>, TB;
 } // SchedRW
 
 //===----------------------------------------------------------------------===//
