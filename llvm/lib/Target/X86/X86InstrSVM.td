@@ -67,4 +67,25 @@ let Uses = [RAX, ECX] in
 def INVLPGA64 : I<0x01, MRM_DF, (outs), (ins),
                 "invlpga", []>, TB, Requires<[In64BitMode]>;
 }
+// Implicit addresses have no printed operand from which assembly could infer
+// width. Keep these pseudos until MC lowering emits the architectural 67 prefix.
+// The machine phase still sees the exact consumed AX/EAX and memory effects.
+let Uses = [AX], hasSideEffects = 1, mayLoad = 1 in
+def VMLOAD32_ADDR16 : PseudoI<(outs), (ins), []>,
+                              Requires<[Not64BitMode]>;
+let Uses = [EAX], hasSideEffects = 1, mayLoad = 1 in
+def VMLOAD64_ADDR32 : PseudoI<(outs), (ins), []>,
+                              Requires<[In64BitMode]>;
+let Uses = [AX], hasSideEffects = 1, mayStore = 1 in
+def VMSAVE32_ADDR16 : PseudoI<(outs), (ins), []>,
+                              Requires<[Not64BitMode]>;
+let Uses = [EAX], hasSideEffects = 1, mayStore = 1 in
+def VMSAVE64_ADDR32 : PseudoI<(outs), (ins), []>,
+                              Requires<[In64BitMode]>;
+let Uses = [AX, ECX], hasSideEffects = 1 in
+def INVLPGA32_ADDR16 : PseudoI<(outs), (ins), []>,
+                              Requires<[Not64BitMode]>;
+let Uses = [EAX, ECX], hasSideEffects = 1 in
+def INVLPGA64_ADDR32 : PseudoI<(outs), (ins), []>,
+                              Requires<[In64BitMode]>;
 } // SchedRW

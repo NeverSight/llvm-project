@@ -508,6 +508,30 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
            "Unexpected number of operands!");
     OutMI.setOpcode(convertTailJumpOpcode(OutMI.getOpcode()));
     break;
+  case X86::VMLOAD32_ADDR16:
+    OutMI.setOpcode(X86::VMLOAD32);
+    OutMI.setFlags(OutMI.getFlags() | X86::IP_HAS_AD_SIZE);
+    break;
+  case X86::VMLOAD64_ADDR32:
+    OutMI.setOpcode(X86::VMLOAD64);
+    OutMI.setFlags(OutMI.getFlags() | X86::IP_HAS_AD_SIZE);
+    break;
+  case X86::VMSAVE32_ADDR16:
+    OutMI.setOpcode(X86::VMSAVE32);
+    OutMI.setFlags(OutMI.getFlags() | X86::IP_HAS_AD_SIZE);
+    break;
+  case X86::VMSAVE64_ADDR32:
+    OutMI.setOpcode(X86::VMSAVE64);
+    OutMI.setFlags(OutMI.getFlags() | X86::IP_HAS_AD_SIZE);
+    break;
+  case X86::INVLPGA32_ADDR16:
+    OutMI.setOpcode(X86::INVLPGA32);
+    OutMI.setFlags(OutMI.getFlags() | X86::IP_HAS_AD_SIZE);
+    break;
+  case X86::INVLPGA64_ADDR32:
+    OutMI.setOpcode(X86::INVLPGA64);
+    OutMI.setFlags(OutMI.getFlags() | X86::IP_HAS_AD_SIZE);
+    break;
   case X86::MASKMOVDQU:
   case X86::VMASKMOVDQU:
     if (In64BitMode)

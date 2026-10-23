@@ -152,6 +152,14 @@ let TargetPrefix = "x86" in {
   def int_x86_vmsave32 : Intrinsic<[], [llvm_i32_ty], []>;
   def int_x86_invlpga : Intrinsic<[], [llvm_i64_ty, llvm_i32_ty], []>;
   def int_x86_invlpga32 : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty], []>;
+  // Explicit address-size overrides: addr32 requires long mode; addr16
+  // requires i386 mode. Only the addressed low bits are supplied to rAX.
+  def int_x86_vmload_addr16 : Intrinsic<[], [llvm_i16_ty], []>;
+  def int_x86_vmload_addr32 : Intrinsic<[], [llvm_i32_ty], []>;
+  def int_x86_vmsave_addr16 : Intrinsic<[], [llvm_i16_ty], []>;
+  def int_x86_vmsave_addr32 : Intrinsic<[], [llvm_i32_ty], []>;
+  def int_x86_invlpga_addr16 : Intrinsic<[], [llvm_i16_ty, llvm_i32_ty], []>;
+  def int_x86_invlpga_addr32 : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty], []>;
   def int_x86_stgi : Intrinsic<[], [], []>;
   def int_x86_clgi : Intrinsic<[], [], []>;
   def int_x86_swapgs : Intrinsic<[], [], []>;

@@ -28567,6 +28567,36 @@ static SDValue lowerBoundedSystemState(SDValue Op,
     llvm_unreachable("unexpected bounded system intrinsic");
   case Intrinsic::x86_invd:
     return SDValue(DAG.getMachineNode(X86::INVD, DL, MVT::Other, Chain), 0);
+  case Intrinsic::x86_vmload_addr16:
+  case Intrinsic::x86_vmload_addr32:
+  case Intrinsic::x86_vmsave_addr16:
+  case Intrinsic::x86_vmsave_addr32:
+  case Intrinsic::x86_invlpga_addr16:
+  case Intrinsic::x86_invlpga_addr32: {
+    const bool Address32 = ID == Intrinsic::x86_vmload_addr32 ||
+                           ID == Intrinsic::x86_vmsave_addr32 ||
+                           ID == Intrinsic::x86_invlpga_addr32;
+    if (Address32 != Subtarget.is64Bit() || Subtarget.is16Bit())
+      report_fatal_error(
+          "SVM address-size override does not match the target code mode");
+    Chain = DAG.getCopyToReg(Chain, DL, Address32 ? X86::EAX : X86::AX,
+                             Op.getOperand(2), SDValue());
+    unsigned Opcode;
+    if (ID == Intrinsic::x86_vmload_addr32 ||
+        ID == Intrinsic::x86_vmload_addr16)
+      Opcode = Address32 ? X86::VMLOAD64_ADDR32 : X86::VMLOAD32_ADDR16;
+    else if (ID == Intrinsic::x86_vmsave_addr32 ||
+             ID == Intrinsic::x86_vmsave_addr16)
+      Opcode = Address32 ? X86::VMSAVE64_ADDR32 : X86::VMSAVE32_ADDR16;
+    else {
+      Opcode = Address32 ? X86::INVLPGA64_ADDR32 : X86::INVLPGA32_ADDR16;
+      Chain = DAG.getCopyToReg(Chain, DL, X86::ECX, Op.getOperand(3),
+                               Chain.getValue(1));
+    }
+    return SDValue(
+        DAG.getMachineNode(Opcode, DL, MVT::Other, {Chain, Chain.getValue(1)}),
+        0);
+  }
   case Intrinsic::x86_stgi:
     return SDValue(DAG.getMachineNode(X86::STGI, DL, MVT::Other, Chain), 0);
   case Intrinsic::x86_clgi:
@@ -29272,6 +29302,12 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_vmsave32:
     case Intrinsic::x86_invlpga:
     case Intrinsic::x86_invlpga32:
+    case Intrinsic::x86_vmload_addr16:
+    case Intrinsic::x86_vmload_addr32:
+    case Intrinsic::x86_vmsave_addr16:
+    case Intrinsic::x86_vmsave_addr32:
+    case Intrinsic::x86_invlpga_addr16:
+    case Intrinsic::x86_invlpga_addr32:
     case Intrinsic::x86_stgi:
     case Intrinsic::x86_clgi:
     case Intrinsic::x86_swapgs:
