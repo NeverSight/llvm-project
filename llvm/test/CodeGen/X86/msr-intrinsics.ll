@@ -11,6 +11,8 @@
 
 declare i64 @llvm.x86.rdmsr(i32)
 declare void @llvm.x86.wrmsr(i32, i64)
+declare void @llvm.x86.wrmsrns(i32, i64)
+declare void @llvm.x86.clts()
 
 define i64 @read(i32 %index) {
 ; CHECK-LABEL: read:
@@ -35,6 +37,24 @@ define void @read_dead_result(i32 %index) {
 ; CHECK: rdmsr
 ; CHECK: ret
   %value = call i64 @llvm.x86.rdmsr(i32 %index)
+  ret void
+}
+
+define void @write_nonserializing(i32 %index, i64 %value) {
+; CHECK-LABEL: write_nonserializing:
+; CHECK-NOT: #APP
+; CHECK: wrmsrns
+; CHECK: ret
+  call void @llvm.x86.wrmsrns(i32 %index, i64 %value)
+  ret void
+}
+
+define void @clear_task_switched() {
+; CHECK-LABEL: clear_task_switched:
+; CHECK-NOT: #APP
+; CHECK: clts
+; CHECK: ret
+  call void @llvm.x86.clts()
   ret void
 }
 

@@ -445,14 +445,16 @@ def LLDT16m : I<0x00, MRM2m, (outs), (ins i16mem:$src),
 let SchedRW = [WriteSystem] in {
 let Uses = [EAX, ECX, EDX], hasSideEffects = 1 in
 def WRMSR : I<0x30, RawFrm, (outs), (ins), "wrmsr", []>, TB;
-let Uses = [EAX, ECX, EDX] in
+let Uses = [EAX, ECX, EDX], hasSideEffects = 1 in
 def WRMSRNS : I<0x01, MRM_C6, (outs), (ins), "wrmsrns", []>, TB;
 let Defs = [EAX, EDX], Uses = [ECX], hasSideEffects = 1 in
 def RDMSR : I<0x32, RawFrm, (outs), (ins), "rdmsr", []>, TB;
 let Defs = [RAX, EFLAGS], Uses = [RBX, RCX], Predicates = [In64BitMode] in
 def PBNDKB : I<0x01, MRM_C7, (outs), (ins), "pbndkb", []>, TB;
-let Uses = [RSI, RDI, RCX], Predicates = [In64BitMode] in {
+let Uses = [RSI, RDI, RCX], Defs = [RCX], Predicates = [In64BitMode],
+    hasSideEffects = 1, mayLoad = 1 in {
 def WRMSRLIST : I<0x01, MRM_C6, (outs), (ins), "wrmsrlist", []>, TB, XS;
+let mayStore = 1 in
 def RDMSRLIST : I<0x01, MRM_C6, (outs), (ins), "rdmsrlist", []>, TB, XD;
 }
 
@@ -779,6 +781,7 @@ let Uses = [RAX, RBX, RCX, RDX], Defs = [RAX, RBX, RCX] in {
 //===----------------------------------------------------------------------===//
 // TS flag control instruction.
 let SchedRW = [WriteSystem] in {
+let hasSideEffects = 1 in
 def CLTS : I<0x06, RawFrm, (outs), (ins), "clts", []>, TB;
 }
 

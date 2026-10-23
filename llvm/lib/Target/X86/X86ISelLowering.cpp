@@ -28479,14 +28479,43 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_invvpid32:
       return lowerVMXInvalidation(Op, Subtarget, DAG);
 
-    case Intrinsic::x86_wrmsr: {
+    case Intrinsic::x86_clts:
+      return SDValue(DAG.getMachineNode(X86::CLTS, SDLoc(Op), MVT::Other,
+                                        Op.getOperand(0)),
+                     0);
+
+    case Intrinsic::x86_rdmsrlist:
+    case Intrinsic::x86_wrmsrlist: {
+      if (!Subtarget.is64Bit())
+        report_fatal_error("MSRLIST intrinsic requires 64-bit mode");
+      const SDLoc DL(Op);
+      SDValue Chain = DAG.getCopyToReg(Op.getOperand(0), DL, X86::RSI,
+                                       Op.getOperand(2), SDValue());
+      Chain = DAG.getCopyToReg(Chain, DL, X86::RDI, Op.getOperand(3),
+                               Chain.getValue(1));
+      Chain = DAG.getCopyToReg(Chain, DL, X86::RCX, Op.getOperand(4),
+                               Chain.getValue(1));
+      const unsigned Opcode =
+          IntNo == Intrinsic::x86_rdmsrlist ? X86::RDMSRLIST : X86::WRMSRLIST;
+      auto *Access =
+          DAG.getMachineNode(Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue),
+                             {Chain, Chain.getValue(1)});
+      SDValue Mask = DAG.getCopyFromReg(SDValue(Access, 0), DL, X86::RCX,
+                                        MVT::i64, SDValue(Access, 1));
+      return DAG.getMergeValues({Mask, Mask.getValue(1)}, DL);
+    }
+
+    case Intrinsic::x86_wrmsr:
+    case Intrinsic::x86_wrmsrns: {
       const SDLoc DL(Op);
       auto [Lo, Hi] = DAG.SplitScalar(Op.getOperand(3), DL, MVT::i32, MVT::i32);
       SDValue Chain = DAG.getCopyToReg(Op.getOperand(0), DL, X86::ECX,
                                        Op.getOperand(2), SDValue());
       Chain = DAG.getCopyToReg(Chain, DL, X86::EAX, Lo, Chain.getValue(1));
       Chain = DAG.getCopyToReg(Chain, DL, X86::EDX, Hi, Chain.getValue(1));
-      return SDValue(DAG.getMachineNode(X86::WRMSR, DL, MVT::Other,
+      const unsigned Opcode =
+          IntNo == Intrinsic::x86_wrmsr ? X86::WRMSR : X86::WRMSRNS;
+      return SDValue(DAG.getMachineNode(Opcode, DL, MVT::Other,
                                         {Chain, Chain.getValue(1)}),
                      0);
     }
@@ -36127,6 +36156,9 @@ void X86TargetLowering::ReplaceNodeResults(SDNode *N,
       expandIntrinsicWChainHelper(N, dl, DAG, X86::RDMSR, X86::ECX, Subtarget,
                                   Results);
       return;
+    case Intrinsic::x86_rdmsrlist:
+    case Intrinsic::x86_wrmsrlist:
+      report_fatal_error("MSRLIST intrinsic requires 64-bit mode");
     case Intrinsic::x86_rdpru:
       expandIntrinsicWChainHelper(N, dl, DAG, X86::RDPRU, X86::ECX, Subtarget,
         Results);

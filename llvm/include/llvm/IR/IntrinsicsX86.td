@@ -111,6 +111,17 @@ let TargetPrefix = "x86" in {
 let TargetPrefix = "x86" in {
   def int_x86_rdmsr : Intrinsic<[llvm_i64_ty], [llvm_i32_ty], []>;
   def int_x86_wrmsr : Intrinsic<[], [llvm_i32_ty, llvm_i64_ty], []>;
+  def int_x86_wrmsrns : Intrinsic<[], [llvm_i32_ty, llvm_i64_ty], []>;
+
+  // Long-mode list instructions own both linear memory tables, including
+  // partial progress and fault ordering. Return the actual completion RCX;
+  // the input mask must not be reused after the instruction updates it.
+  def int_x86_rdmsrlist : Intrinsic<[llvm_i64_ty],
+                                   [llvm_ptr_ty, llvm_ptr_ty, llvm_i64_ty], []>;
+  def int_x86_wrmsrlist : Intrinsic<[llvm_i64_ty],
+                                   [llvm_ptr_ty, llvm_ptr_ty, llvm_i64_ty], []>;
+
+  def int_x86_clts : Intrinsic<[], [], []>;
 }
 
 // Read processor ID.
