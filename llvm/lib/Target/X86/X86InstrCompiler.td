@@ -407,7 +407,7 @@ def SETB_C64r : I<0, Pseudo, (outs GR64:$dst), (ins), "", []>;
 // String Pseudo Instructions
 //
 let SchedRW = [WriteMicrocoded] in {
-let Defs = [ECX,EDI,ESI], Uses = [ECX,EDI,ESI], isCodeGenOnly = 1 in {
+let Defs = [ECX,EDI,ESI], Uses = [ECX,EDI,ESI,DF], isCodeGenOnly = 1 in {
 def REP_MOVSB_32 : I<0xA4, RawFrm, (outs), (ins),
                     "{rep;movsb (%esi), %es:(%edi)|rep movsb es:[edi], [esi]}",
                     [(X86rep_movs i8)]>, REP, AdSize32,
@@ -426,7 +426,7 @@ def REP_MOVSQ_32 : RI<0xA5, RawFrm, (outs), (ins),
                    Requires<[NotLP64, In64BitMode]>;
 }
 
-let Defs = [RCX,RDI,RSI], Uses = [RCX,RDI,RSI], isCodeGenOnly = 1 in {
+let Defs = [RCX,RDI,RSI], Uses = [RCX,RDI,RSI,DF], isCodeGenOnly = 1 in {
 def REP_MOVSB_64 : I<0xA4, RawFrm, (outs), (ins),
                     "{rep;movsb (%rsi), %es:(%rdi)|rep movsb es:[rdi], [rsi]}",
                     [(X86rep_movs i8)]>, REP, AdSize64,
@@ -436,7 +436,7 @@ def REP_MOVSW_64 : I<0xA5, RawFrm, (outs), (ins),
                     [(X86rep_movs i16)]>, REP, AdSize64, OpSize16,
                    Requires<[IsLP64]>;
 def REP_MOVSD_64 : I<0xA5, RawFrm, (outs), (ins),
-                    "{rep;movsl (%rsi), %es:(%rdi)|rep movsdi es:[rdi], [rsi]}",
+                    "{rep;movsl (%rsi), %es:(%rdi)|rep movsd es:[rdi], [rsi]}",
                     [(X86rep_movs i32)]>, REP, AdSize64, OpSize32,
                    Requires<[IsLP64]>;
 def REP_MOVSQ_64 : RI<0xA5, RawFrm, (outs), (ins),
@@ -447,22 +447,22 @@ def REP_MOVSQ_64 : RI<0xA5, RawFrm, (outs), (ins),
 
 // FIXME: Should use "(X86rep_stos AL)" as the pattern.
 let Defs = [ECX,EDI], isCodeGenOnly = 1 in {
-  let Uses = [AL,ECX,EDI] in
+  let Uses = [AL,ECX,EDI,DF] in
   def REP_STOSB_32 : I<0xAA, RawFrm, (outs), (ins),
                        "{rep;stosb %al, %es:(%edi)|rep stosb es:[edi], al}",
                       [(X86rep_stos i8)]>, REP, AdSize32,
                      Requires<[NotLP64]>;
-  let Uses = [AX,ECX,EDI] in
+  let Uses = [AX,ECX,EDI,DF] in
   def REP_STOSW_32 : I<0xAB, RawFrm, (outs), (ins),
                       "{rep;stosw %ax, %es:(%edi)|rep stosw es:[edi], ax}",
                       [(X86rep_stos i16)]>, REP, AdSize32, OpSize16,
                      Requires<[NotLP64]>;
-  let Uses = [EAX,ECX,EDI] in
+  let Uses = [EAX,ECX,EDI,DF] in
   def REP_STOSD_32 : I<0xAB, RawFrm, (outs), (ins),
                       "{rep;stosl %eax, %es:(%edi)|rep stosd es:[edi], eax}",
                       [(X86rep_stos i32)]>, REP, AdSize32, OpSize32,
                      Requires<[NotLP64]>;
-  let Uses = [RAX,RCX,RDI] in
+  let Uses = [RAX,ECX,EDI,DF] in
   def REP_STOSQ_32 : RI<0xAB, RawFrm, (outs), (ins),
                         "{rep;stosq %rax, %es:(%edi)|rep stosq es:[edi], rax}",
                         [(X86rep_stos i64)]>, REP, AdSize32,
@@ -470,29 +470,82 @@ let Defs = [ECX,EDI], isCodeGenOnly = 1 in {
 }
 
 let Defs = [RCX,RDI], isCodeGenOnly = 1 in {
-  let Uses = [AL,RCX,RDI] in
+  let Uses = [AL,RCX,RDI,DF] in
   def REP_STOSB_64 : I<0xAA, RawFrm, (outs), (ins),
                        "{rep;stosb %al, %es:(%rdi)|rep stosb es:[rdi], al}",
                        [(X86rep_stos i8)]>, REP, AdSize64,
                        Requires<[IsLP64]>;
-  let Uses = [AX,RCX,RDI] in
+  let Uses = [AX,RCX,RDI,DF] in
   def REP_STOSW_64 : I<0xAB, RawFrm, (outs), (ins),
                        "{rep;stosw %ax, %es:(%rdi)|rep stosw es:[rdi], ax}",
                        [(X86rep_stos i16)]>, REP, AdSize64, OpSize16,
                        Requires<[IsLP64]>;
-  let Uses = [RAX,RCX,RDI] in
+  let Uses = [EAX,RCX,RDI,DF] in
   def REP_STOSD_64 : I<0xAB, RawFrm, (outs), (ins),
                       "{rep;stosl %eax, %es:(%rdi)|rep stosd es:[rdi], eax}",
                        [(X86rep_stos i32)]>, REP, AdSize64, OpSize32,
                        Requires<[IsLP64]>;
 
-  let Uses = [RAX,RCX,RDI] in
+  let Uses = [RAX,RCX,RDI,DF] in
   def REP_STOSQ_64 : RI<0xAB, RawFrm, (outs), (ins),
                         "{rep;stosq %rax, %es:(%rdi)|rep stosq es:[rdi], rax}",
                         [(X86rep_stos i64)]>, REP, AdSize64,
                         Requires<[IsLP64]>;
 }
 } // SchedRW
+
+//===----------------------------------------------------------------------===//
+// Native port-string APIs keep the complete REP operation in one instruction.
+let SchedRW = [WriteMicrocoded], hasSideEffects = 1, isCodeGenOnly = 1 in {
+let Defs = [ECX, EDI], Uses = [DX, ECX, EDI, DF],
+    mayLoad = 0, mayStore = 1 in {
+  def REP_INSB_32 : I<0x6C, RawFrm, (outs), (ins),
+                               "{rep;insb|rep insb}", []>, REP, AdSize32,
+                               Requires<[Not64BitMode]>;
+  def REP_INSW_32 : I<0x6D, RawFrm, (outs), (ins),
+                               "{rep;insw|rep insw}", []>, REP, AdSize32, OpSize16,
+                               Requires<[Not64BitMode]>;
+  def REP_INSL_32 : I<0x6D, RawFrm, (outs), (ins),
+                               "{rep;insl|rep insd}", []>, REP, AdSize32, OpSize32,
+                               Requires<[Not64BitMode]>;
+}
+let Defs = [ECX, ESI], Uses = [DX, ECX, ESI, DF],
+    mayLoad = 1, mayStore = 0 in {
+  def REP_OUTSB_32 : I<0x6E, RawFrm, (outs), (ins),
+                               "{rep;outsb|rep outsb}", []>, REP, AdSize32,
+                               Requires<[Not64BitMode]>;
+  def REP_OUTSW_32 : I<0x6F, RawFrm, (outs), (ins),
+                               "{rep;outsw|rep outsw}", []>, REP, AdSize32, OpSize16,
+                               Requires<[Not64BitMode]>;
+  def REP_OUTSL_32 : I<0x6F, RawFrm, (outs), (ins),
+                               "{rep;outsl|rep outsd}", []>, REP, AdSize32, OpSize32,
+                               Requires<[Not64BitMode]>;
+}
+let Defs = [RCX, RDI], Uses = [DX, RCX, RDI, DF],
+    mayLoad = 0, mayStore = 1 in {
+  def REP_INSB_64 : I<0x6C, RawFrm, (outs), (ins),
+                               "{rep;insb|rep insb}", []>, REP, AdSize64,
+                               Requires<[In64BitMode]>;
+  def REP_INSW_64 : I<0x6D, RawFrm, (outs), (ins),
+                               "{rep;insw|rep insw}", []>, REP, AdSize64, OpSize16,
+                               Requires<[In64BitMode]>;
+  def REP_INSL_64 : I<0x6D, RawFrm, (outs), (ins),
+                               "{rep;insl|rep insd}", []>, REP, AdSize64, OpSize32,
+                               Requires<[In64BitMode]>;
+}
+let Defs = [RCX, RSI], Uses = [DX, RCX, RSI, DF],
+    mayLoad = 1, mayStore = 0 in {
+  def REP_OUTSB_64 : I<0x6E, RawFrm, (outs), (ins),
+                               "{rep;outsb|rep outsb}", []>, REP, AdSize64,
+                               Requires<[In64BitMode]>;
+  def REP_OUTSW_64 : I<0x6F, RawFrm, (outs), (ins),
+                               "{rep;outsw|rep outsw}", []>, REP, AdSize64, OpSize16,
+                               Requires<[In64BitMode]>;
+  def REP_OUTSL_64 : I<0x6F, RawFrm, (outs), (ins),
+                               "{rep;outsl|rep outsd}", []>, REP, AdSize64, OpSize32,
+                               Requires<[In64BitMode]>;
+}
+}
 
 //===----------------------------------------------------------------------===//
 // Thread Local Storage Instructions

@@ -28522,6 +28522,91 @@ static SDValue lowerSystemRegisterAccess(SDValue Op,
   return DAG.getMergeValues({SDValue(Access, 0), SDValue(Access, 1)}, DL);
 }
 
+static SDValue lowerRepString(SDValue Op, const X86Subtarget &Subtarget,
+                              SelectionDAG &DAG) {
+  enum Kind { Move, Store, Input, Output };
+  struct Form {
+    unsigned ID;
+    Kind Operation;
+    unsigned Opcode32, Opcode64, ValueRegister;
+  };
+  static constexpr Form Forms[] = {
+      {Intrinsic::x86_movsb, Move, X86::REP_MOVSB_32, X86::REP_MOVSB_64, 0},
+      {Intrinsic::x86_movsb32, Move, X86::REP_MOVSB_32, X86::REP_MOVSB_64, 0},
+      {Intrinsic::x86_movsw, Move, X86::REP_MOVSW_32, X86::REP_MOVSW_64, 0},
+      {Intrinsic::x86_movsw32, Move, X86::REP_MOVSW_32, X86::REP_MOVSW_64, 0},
+      {Intrinsic::x86_movsd_rep, Move, X86::REP_MOVSD_32, X86::REP_MOVSD_64, 0},
+      {Intrinsic::x86_movsd_rep32, Move, X86::REP_MOVSD_32, X86::REP_MOVSD_64,
+       0},
+      {Intrinsic::x86_movsq, Move, 0, X86::REP_MOVSQ_64, 0},
+      {Intrinsic::x86_stosb, Store, X86::REP_STOSB_32, X86::REP_STOSB_64,
+       X86::AL},
+      {Intrinsic::x86_stosb32, Store, X86::REP_STOSB_32, X86::REP_STOSB_64,
+       X86::AL},
+      {Intrinsic::x86_stosw, Store, X86::REP_STOSW_32, X86::REP_STOSW_64,
+       X86::AX},
+      {Intrinsic::x86_stosw32, Store, X86::REP_STOSW_32, X86::REP_STOSW_64,
+       X86::AX},
+      {Intrinsic::x86_stosd, Store, X86::REP_STOSD_32, X86::REP_STOSD_64,
+       X86::EAX},
+      {Intrinsic::x86_stosd32, Store, X86::REP_STOSD_32, X86::REP_STOSD_64,
+       X86::EAX},
+      {Intrinsic::x86_stosq, Store, 0, X86::REP_STOSQ_64, X86::RAX},
+      {Intrinsic::x86_inbytestring, Input, X86::REP_INSB_32, X86::REP_INSB_64,
+       X86::DX},
+      {Intrinsic::x86_inwordstring, Input, X86::REP_INSW_32, X86::REP_INSW_64,
+       X86::DX},
+      {Intrinsic::x86_indwordstring, Input, X86::REP_INSL_32, X86::REP_INSL_64,
+       X86::DX},
+      {Intrinsic::x86_outbytestring, Output, X86::REP_OUTSB_32,
+       X86::REP_OUTSB_64, X86::DX},
+      {Intrinsic::x86_outwordstring, Output, X86::REP_OUTSW_32,
+       X86::REP_OUTSW_64, X86::DX},
+      {Intrinsic::x86_outdwordstring, Output, X86::REP_OUTSL_32,
+       X86::REP_OUTSL_64, X86::DX},
+  };
+  const unsigned ID = Op.getConstantOperandVal(1);
+  const Form *Selected =
+      llvm::find_if(Forms, [ID](const Form &F) { return F.ID == ID; });
+  assert(Selected != std::end(Forms) && "invalid REP string intrinsic");
+  const bool Is64 = Subtarget.is64Bit();
+  const bool PortIO =
+      Selected->Operation == Input || Selected->Operation == Output;
+  const MVT AddressVT = Is64 ? MVT::i64 : MVT::i32;
+  if (!PortIO && Op.getOperand(4).getValueType() != AddressVT)
+    report_fatal_error(
+        "REP memory-string intrinsic does not match the target code mode");
+  const unsigned Opcode = Is64 ? Selected->Opcode64 : Selected->Opcode32;
+  assert(Opcode && "qword string operation requires 64-bit mode");
+  const SDLoc DL(Op);
+  SDValue Chain = Op.getOperand(0), Glue;
+  auto SetRegister = [&](unsigned Register, SDValue Value) {
+    Chain = DAG.getCopyToReg(Chain, DL, Register, Value, Glue);
+    Glue = Chain.getValue(1);
+  };
+  auto Address = [&](SDValue Value) {
+    return DAG.getZExtOrTrunc(Value, DL, AddressVT);
+  };
+  if (PortIO) {
+    SetRegister(X86::DX, Op.getOperand(2));
+    const unsigned PointerRegister = Selected->Operation == Input
+                                         ? (Is64 ? X86::RDI : X86::EDI)
+                                         : (Is64 ? X86::RSI : X86::ESI);
+    SetRegister(PointerRegister, Address(Op.getOperand(3)));
+  } else {
+    SetRegister(Is64 ? X86::RDI : X86::EDI, Address(Op.getOperand(2)));
+    if (Selected->Operation == Move)
+      SetRegister(Is64 ? X86::RSI : X86::ESI, Address(Op.getOperand(3)));
+    else
+      SetRegister(Selected->ValueRegister, Op.getOperand(3));
+  }
+  SetRegister(Is64 ? X86::RCX : X86::ECX, Address(Op.getOperand(4)));
+  return SDValue(DAG.getMachineNode(Opcode, DL,
+                                    DAG.getVTList(MVT::Other, MVT::Glue),
+                                    {Chain, Glue}),
+                 0);
+}
+
 static SDValue lowerPortIO(SDValue Op, SelectionDAG &DAG) {
   const unsigned ID = Op.getConstantOperandVal(1);
   const bool Read = ID == Intrinsic::x86_inbyte ||
@@ -28638,6 +28723,28 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_writedr:
     case Intrinsic::x86_writedr32:
       return lowerSystemRegisterAccess(Op, Subtarget, DAG);
+
+    case Intrinsic::x86_movsb:
+    case Intrinsic::x86_movsb32:
+    case Intrinsic::x86_movsw:
+    case Intrinsic::x86_movsw32:
+    case Intrinsic::x86_movsd_rep:
+    case Intrinsic::x86_movsd_rep32:
+    case Intrinsic::x86_movsq:
+    case Intrinsic::x86_stosb:
+    case Intrinsic::x86_stosb32:
+    case Intrinsic::x86_stosw:
+    case Intrinsic::x86_stosw32:
+    case Intrinsic::x86_stosd:
+    case Intrinsic::x86_stosd32:
+    case Intrinsic::x86_stosq:
+    case Intrinsic::x86_inbytestring:
+    case Intrinsic::x86_inwordstring:
+    case Intrinsic::x86_indwordstring:
+    case Intrinsic::x86_outbytestring:
+    case Intrinsic::x86_outwordstring:
+    case Intrinsic::x86_outdwordstring:
+      return lowerRepString(Op, Subtarget, DAG);
 
     case Intrinsic::x86_inbyte:
     case Intrinsic::x86_inword:

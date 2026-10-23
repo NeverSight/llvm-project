@@ -167,6 +167,35 @@ let TargetPrefix = "x86" in {
                                     [ImmArg<ArgIndex<0>>]>;
 }
 
+// Native REP string operations. These APIs preserve the instruction's memory
+// accesses, direction flag and restart behavior; they are not memcpy/memset.
+// The unsuffixed memory-string APIs use 64-bit pointers/counts in 64-bit mode.
+// Their 32-suffixed counterparts require 32-bit mode. String port I/O follows
+// the Microsoft builtin signature: an i16 port and an i32 element count in
+// either mode, zero-extended to RCX in 64-bit mode.
+let TargetPrefix = "x86" in {
+  def int_x86_movsb : Intrinsic<[], [llvm_ptr_ty, llvm_ptr_ty, llvm_i64_ty], []>;
+  def int_x86_movsw : Intrinsic<[], [llvm_ptr_ty, llvm_ptr_ty, llvm_i64_ty], []>;
+  def int_x86_movsd_rep : Intrinsic<[], [llvm_ptr_ty, llvm_ptr_ty, llvm_i64_ty], []>;
+  def int_x86_movsq : Intrinsic<[], [llvm_ptr_ty, llvm_ptr_ty, llvm_i64_ty], []>;
+  def int_x86_movsb32 : Intrinsic<[], [llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty], []>;
+  def int_x86_movsw32 : Intrinsic<[], [llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty], []>;
+  def int_x86_movsd_rep32 : Intrinsic<[], [llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty], []>;
+  def int_x86_stosb : Intrinsic<[], [llvm_ptr_ty, llvm_i8_ty, llvm_i64_ty], []>;
+  def int_x86_stosw : Intrinsic<[], [llvm_ptr_ty, llvm_i16_ty, llvm_i64_ty], []>;
+  def int_x86_stosd : Intrinsic<[], [llvm_ptr_ty, llvm_i32_ty, llvm_i64_ty], []>;
+  def int_x86_stosq : Intrinsic<[], [llvm_ptr_ty, llvm_i64_ty, llvm_i64_ty], []>;
+  def int_x86_stosb32 : Intrinsic<[], [llvm_ptr_ty, llvm_i8_ty, llvm_i32_ty], []>;
+  def int_x86_stosw32 : Intrinsic<[], [llvm_ptr_ty, llvm_i16_ty, llvm_i32_ty], []>;
+  def int_x86_stosd32 : Intrinsic<[], [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty], []>;
+  def int_x86_inbytestring : Intrinsic<[], [llvm_i16_ty, llvm_ptr_ty, llvm_i32_ty], []>;
+  def int_x86_inwordstring : Intrinsic<[], [llvm_i16_ty, llvm_ptr_ty, llvm_i32_ty], []>;
+  def int_x86_indwordstring : Intrinsic<[], [llvm_i16_ty, llvm_ptr_ty, llvm_i32_ty], []>;
+  def int_x86_outbytestring : Intrinsic<[], [llvm_i16_ty, llvm_ptr_ty, llvm_i32_ty], []>;
+  def int_x86_outwordstring : Intrinsic<[], [llvm_i16_ty, llvm_ptr_ty, llvm_i32_ty], []>;
+  def int_x86_outdwordstring : Intrinsic<[], [llvm_i16_ty, llvm_ptr_ty, llvm_i32_ty], []>;
+}
+
 // Read processor ID.
 let TargetPrefix = "x86" in {
   def int_x86_rdpid : ClangBuiltin<"__builtin_ia32_rdpid">,
