@@ -86,7 +86,7 @@ def : Pat<(debugtrap),
 //===----------------------------------------------------------------------===//
 //  Input/Output Instructions.
 //
-let SchedRW = [WriteSystem] in {
+let SchedRW = [WriteSystem], hasSideEffects = 1 in {
 let Defs = [AL], Uses = [DX] in
 def IN8rr  : I<0xEC, RawFrm, (outs), (ins), "in{b}\t{%dx, %al|al, dx}", []>;
 let Defs = [AX], Uses = [DX] in
@@ -272,6 +272,7 @@ def LSL64rr : RI<0x03, MRMSrcReg, (outs GR64:$dst), (ins GR16orGR32orGR64:$src),
                  "lsl{q}\t{$src, $dst|$dst, $src}", []>, TB;
 }
 
+let hasSideEffects = 1 in
 def INVLPG : I<0x01, MRM7m, (outs), (ins i8mem:$addr), "invlpg\t$addr", []>, TB;
 
 def STR16r : I<0x00, MRM1r, (outs GR16:$dst), (ins),
@@ -396,6 +397,7 @@ def VERWm : I<0x00, MRM5m, (outs), (ins i16mem:$seg), "verw\t$seg", []>, TB;
 // Descriptor-table support instructions
 
 let SchedRW = [WriteSystem] in {
+let hasSideEffects = 1, mayStore = 1 in {
 def SGDT16m : I<0x01, MRM0m, (outs), (ins opaquemem:$dst),
                 "sgdtw\t$dst", []>, TB, OpSize16, Requires<[Not64BitMode]>;
 def SGDT32m : I<0x01, MRM0m, (outs), (ins opaquemem:$dst),
@@ -408,6 +410,7 @@ def SIDT32m : I<0x01, MRM1m, (outs), (ins opaquemem:$dst),
                 "sidt{l|d}\t$dst", []>, OpSize32, TB, Requires <[Not64BitMode]>;
 def SIDT64m : I<0x01, MRM1m, (outs), (ins opaquemem:$dst),
                 "sidt{q}\t$dst", []>, TB, Requires <[In64BitMode]>;
+} // hasSideEffects = 1, mayStore = 1
 def SLDT16r : I<0x00, MRM0r, (outs GR16:$dst), (ins),
                 "sldt{w}\t$dst", []>, TB, OpSize16;
 let mayStore = 1 in
@@ -421,6 +424,7 @@ def SLDT32r : I<0x00, MRM0r, (outs GR32:$dst), (ins),
 def SLDT64r : RI<0x00, MRM0r, (outs GR64:$dst), (ins),
                  "sldt{q}\t$dst", []>, TB, Requires<[In64BitMode]>;
 
+let hasSideEffects = 1, mayLoad = 1 in {
 def LGDT16m : I<0x01, MRM2m, (outs), (ins opaquemem:$src),
                 "lgdtw\t$src", []>, TB, OpSize16, Requires<[Not64BitMode]>;
 def LGDT32m : I<0x01, MRM2m, (outs), (ins opaquemem:$src),
@@ -433,6 +437,7 @@ def LIDT32m : I<0x01, MRM3m, (outs), (ins opaquemem:$src),
                 "lidt{l|d}\t$src", []>, OpSize32, TB, Requires<[Not64BitMode]>;
 def LIDT64m : I<0x01, MRM3m, (outs), (ins opaquemem:$src),
                 "lidt{q}\t$src", []>, TB, Requires<[In64BitMode]>;
+} // hasSideEffects = 1, mayLoad = 1
 def LLDT16r : I<0x00, MRM2r, (outs), (ins GR16:$src),
                 "lldt{w}\t$src", []>, TB;
 let mayLoad = 1 in
@@ -514,7 +519,7 @@ let mayLoad = 1 in
 def LMSW16m : I<0x01, MRM6m, (outs), (ins i16mem:$src),
                 "lmsw{w}\t$src", []>, TB;
 
-let Defs = [EAX, EBX, ECX, EDX], Uses = [EAX, ECX] in
+let Defs = [EAX, EBX, ECX, EDX], Uses = [EAX, ECX], hasSideEffects = 1 in
   def CPUID : I<0xA2, RawFrm, (outs), (ins), "cpuid", []>, TB;
 } // SchedRW
 
@@ -786,8 +791,10 @@ def CLTS : I<0x06, RawFrm, (outs), (ins), "clts", []>, TB;
 }
 
 //===----------------------------------------------------------------------===//
-// IF (inside EFLAGS) management instructions.
-let SchedRW = [WriteSystem], Uses = [EFLAGS], Defs = [EFLAGS] in {
+// IF/VIF management instructions. Privilege checks and the interrupt-enable
+// state are ambient processor effects. The arithmetic flags tracked by the
+// compiler's EFLAGS register are neither consumed nor changed.
+let SchedRW = [WriteSystem], hasSideEffects = 1 in {
 def CLI : I<0xFA, RawFrm, (outs), (ins), "cli", []>;
 def STI : I<0xFB, RawFrm, (outs), (ins), "sti", []>;
 }

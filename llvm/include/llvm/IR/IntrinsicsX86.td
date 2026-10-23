@@ -124,6 +124,26 @@ let TargetPrefix = "x86" in {
   def int_x86_clts : Intrinsic<[], [], []>;
 }
 
+// Ordered processor-state and port I/O operations. Pointer operands use the
+// default address space; the descriptor-table access remains in the instruction.
+let TargetPrefix = "x86" in {
+  def int_x86_cli : Intrinsic<[], [], []>;
+  def int_x86_sti : Intrinsic<[], [], []>;
+  def int_x86_invlpg : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_sgdt : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_sidt : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_lgdt : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_lidt : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_inbyte : Intrinsic<[llvm_i8_ty], [llvm_i16_ty], []>;
+  def int_x86_inword : Intrinsic<[llvm_i16_ty], [llvm_i16_ty], []>;
+  def int_x86_indword : Intrinsic<[llvm_i32_ty], [llvm_i16_ty], []>;
+  def int_x86_outbyte : Intrinsic<[], [llvm_i16_ty, llvm_i8_ty], []>;
+  def int_x86_outword : Intrinsic<[], [llvm_i16_ty, llvm_i16_ty], []>;
+  def int_x86_outdword : Intrinsic<[], [llvm_i16_ty, llvm_i32_ty], []>;
+  // Write EAX/EBX/ECX/EDX results to four consecutive i32 slots.
+  def int_x86_cpuidex : Intrinsic<[], [llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty], []>;
+}
+
 // Read processor ID.
 let TargetPrefix = "x86" in {
   def int_x86_rdpid : ClangBuiltin<"__builtin_ia32_rdpid">,

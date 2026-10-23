@@ -28451,12 +28451,137 @@ static SDValue lowerVMXInvalidation(SDValue Op, const X86Subtarget &Subtarget,
   return getVMXCompletion(Access, DL, DAG);
 }
 
+static SDValue lowerPortIO(SDValue Op, SelectionDAG &DAG) {
+  const unsigned ID = Op.getConstantOperandVal(1);
+  const bool Read = ID == Intrinsic::x86_inbyte ||
+                    ID == Intrinsic::x86_inword || ID == Intrinsic::x86_indword;
+  const MVT VT =
+      Read ? Op.getSimpleValueType() : Op.getOperand(3).getSimpleValueType();
+  unsigned Opcode, Register;
+  switch (VT.SimpleTy) {
+  case MVT::i8:
+    Opcode = Read ? X86::IN8rr : X86::OUT8rr;
+    Register = X86::AL;
+    break;
+  case MVT::i16:
+    Opcode = Read ? X86::IN16rr : X86::OUT16rr;
+    Register = X86::AX;
+    break;
+  case MVT::i32:
+    Opcode = Read ? X86::IN32rr : X86::OUT32rr;
+    Register = X86::EAX;
+    break;
+  default:
+    llvm_unreachable("invalid port I/O value type");
+  }
+  const SDLoc DL(Op);
+  SDValue Chain = DAG.getCopyToReg(Op.getOperand(0), DL, X86::DX,
+                                   Op.getOperand(2), SDValue());
+  if (!Read)
+    Chain = DAG.getCopyToReg(Chain, DL, Register, Op.getOperand(3),
+                             Chain.getValue(1));
+  auto *Access =
+      DAG.getMachineNode(Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue),
+                         {Chain, Chain.getValue(1)});
+  if (!Read)
+    return SDValue(Access, 0);
+  SDValue Value = DAG.getCopyFromReg(SDValue(Access, 0), DL, Register, VT,
+                                     SDValue(Access, 1));
+  return DAG.getMergeValues({Value, Value.getValue(1)}, DL);
+}
+
+static SDValue lowerDescriptorAccess(SDValue Op, const X86Subtarget &Subtarget,
+                                     SelectionDAG &DAG) {
+  const bool Is64 = Subtarget.is64Bit();
+  unsigned Opcode;
+  switch (Op.getConstantOperandVal(1)) {
+  case Intrinsic::x86_invlpg:
+    Opcode = X86::INVLPG;
+    break;
+  case Intrinsic::x86_sgdt:
+    Opcode = Is64 ? X86::SGDT64m : X86::SGDT32m;
+    break;
+  case Intrinsic::x86_sidt:
+    Opcode = Is64 ? X86::SIDT64m : X86::SIDT32m;
+    break;
+  case Intrinsic::x86_lgdt:
+    Opcode = Is64 ? X86::LGDT64m : X86::LGDT32m;
+    break;
+  case Intrinsic::x86_lidt:
+    Opcode = Is64 ? X86::LIDT64m : X86::LIDT32m;
+    break;
+  default:
+    llvm_unreachable("unexpected descriptor or page invalidation intrinsic");
+  }
+  const SDLoc DL(Op);
+  return SDValue(DAG.getMachineNode(
+                     Opcode, DL, MVT::Other,
+                     {Op.getOperand(2), DAG.getTargetConstant(1, DL, MVT::i8),
+                      DAG.getRegister(0, Is64 ? MVT::i64 : MVT::i32),
+                      DAG.getTargetConstant(0, DL, MVT::i32),
+                      DAG.getRegister(0, MVT::i16), Op.getOperand(0)}),
+                 0);
+}
+
+static SDValue lowerCPUID(SDValue Op, SelectionDAG &DAG) {
+  const SDLoc DL(Op);
+  SDValue Chain = DAG.getCopyToReg(Op.getOperand(0), DL, X86::EAX,
+                                   Op.getOperand(3), SDValue());
+  Chain = DAG.getCopyToReg(Chain, DL, X86::ECX, Op.getOperand(4),
+                           Chain.getValue(1));
+  auto *Access =
+      DAG.getMachineNode(X86::CPUID, DL, DAG.getVTList(MVT::Other, MVT::Glue),
+                         {Chain, Chain.getValue(1)});
+  Chain = SDValue(Access, 0);
+  SDValue Glue = SDValue(Access, 1);
+  SmallVector<SDValue, 4> Values;
+  for (unsigned Register : {X86::EAX, X86::EBX, X86::ECX, X86::EDX}) {
+    SDValue Value = DAG.getCopyFromReg(Chain, DL, Register, MVT::i32, Glue);
+    Values.push_back(Value);
+    Chain = Value.getValue(1);
+    Glue = Value.getValue(2);
+  }
+  SDValue Pointer = Op.getOperand(2);
+  for (unsigned I = 0; I != Values.size(); ++I) {
+    SDValue Address =
+        DAG.getMemBasePlusOffset(Pointer, TypeSize::getFixed(4 * I), DL);
+    Chain = DAG.getStore(Chain, DL, Values[I], Address, MachinePointerInfo(),
+                         Align(1));
+  }
+  return Chain;
+}
+
 static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
                                       SelectionDAG &DAG) {
   unsigned IntNo = Op.getConstantOperandVal(1);
   const IntrinsicData *IntrData = getIntrinsicWithChain(IntNo);
   if (!IntrData) {
     switch (IntNo) {
+
+    case Intrinsic::x86_inbyte:
+    case Intrinsic::x86_inword:
+    case Intrinsic::x86_indword:
+    case Intrinsic::x86_outbyte:
+    case Intrinsic::x86_outword:
+    case Intrinsic::x86_outdword:
+      return lowerPortIO(Op, DAG);
+
+    case Intrinsic::x86_invlpg:
+    case Intrinsic::x86_sgdt:
+    case Intrinsic::x86_sidt:
+    case Intrinsic::x86_lgdt:
+    case Intrinsic::x86_lidt:
+      return lowerDescriptorAccess(Op, Subtarget, DAG);
+
+    case Intrinsic::x86_cpuidex:
+      return lowerCPUID(Op, DAG);
+
+    case Intrinsic::x86_cli:
+    case Intrinsic::x86_sti:
+      return SDValue(
+          DAG.getMachineNode(IntNo == Intrinsic::x86_cli ? X86::CLI : X86::STI,
+                             SDLoc(Op), MVT::Other, Op.getOperand(0)),
+          0);
 
     case Intrinsic::x86_vmread:
     case Intrinsic::x86_vmread32:
