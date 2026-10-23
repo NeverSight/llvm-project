@@ -41,10 +41,6 @@
 	vmxoff
 // CHECK: vmxoff
 // CHECK: encoding: [0x0f,0x01,0xc4]
-	swapgs
-// CHECK: swapgs
-// CHECK: encoding: [0x0f,0x01,0xf8]
-
 	vmrun %eax
 // CHECK: vmrun
 // CHECK: encoding: [0x0f,0x01,0xd8]

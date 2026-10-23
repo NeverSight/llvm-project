@@ -125,6 +125,13 @@ let TargetPrefix = "x86" in {
   // when the selector is inaccessible. Use lsl.reg32 for explicit failure
   // preservation and a success flag. The query remains ordered and observable.
   def int_x86_lsl : Intrinsic<[llvm_i32_ty], [llvm_i32_ty], []>;
+  // ARPL is only available in non-long protected mode. Its register form
+  // returns the adjusted destination and ZF. The memory form owns the m16
+  // read and conditional write; it must not become an ordinary load/store.
+  def int_x86_arpl_reg : Intrinsic<[llvm_i16_ty, llvm_i8_ty],
+      [llvm_i16_ty, llvm_i16_ty], []>;
+  def int_x86_arpl_mem : Intrinsic<[llvm_i8_ty],
+      [llvm_ptr_ty, llvm_i16_ty], []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -137,6 +144,10 @@ let TargetPrefix = "x86" in {
   def int_x86_invlpgb : Intrinsic<[],
       [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty], []>;
   def int_x86_invlpgb32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], []>;
+  // Long-mode address-size override: EAX carries address/control, while EDX
+  // and ECX retain their complete 32-bit identifiers and count operands.
+  def int_x86_invlpgb_addr32 : Intrinsic<[],
       [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], []>;
   def int_x86_tlbsync : Intrinsic<[], [], []>;
   // LKGS is a long-mode operation. Its memory form owns the m16 selector read.

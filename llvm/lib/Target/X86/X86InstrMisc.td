@@ -1078,13 +1078,17 @@ def BOUNDS32rm : I<0x62, MRMSrcMem, (outs GR32:$dst), (ins i32mem:$src),
                    Requires<[Not64BitMode]>;
 
 // Adjust RPL Field of Segment Selector
-def ARPL16rr : I<0x63, MRMDestReg, (outs GR16:$dst), (ins GR16:$src),
+let Defs = [EFLAGS], hasSideEffects = 1 in {
+let Constraints = "$dst = $prior" in
+def ARPL16rr : I<0x63, MRMDestReg, (outs GR16:$dst),
+                 (ins GR16:$prior, GR16:$src),
                  "arpl\t{$src, $dst|$dst, $src}", []>,
                  Requires<[Not64BitMode]>;
-let mayStore = 1 in
+let mayLoad = 1, mayStore = 1 in
 def ARPL16mr : I<0x63, MRMDestMem, (outs), (ins i16mem:$dst, GR16:$src),
                  "arpl\t{$src, $dst|$dst, $src}", []>,
                  Requires<[Not64BitMode]>;
+} // Defs, hasSideEffects
 } // SchedRW
 
 //===----------------------------------------------------------------------===//
@@ -1604,6 +1608,10 @@ let SchedRW = [WriteSystem] in {
   def INVLPGB64 : I<0x01, MRM_FE, (outs), (ins),
                   "invlpgb", []>,
                   TB, Requires<[In64BitMode]>;
+  // Preserve the implicit address width until MC lowering can attach 67.
+  let Uses = [EAX, EDX, ECX], hasSideEffects = 1 in
+  def INVLPGB64_ADDR32 : PseudoI<(outs), (ins), []>,
+                                  Requires<[In64BitMode]>;
 } // SchedRW
 
 //===----------------------------------------------------------------------===//

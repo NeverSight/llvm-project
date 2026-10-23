@@ -28556,6 +28556,39 @@ static SDValue lowerDescriptorState(SDValue Op, const X86Subtarget &Subtarget,
   return DAG.getMergeValues({ZF, SDValue(Access, 0)}, DL);
 }
 
+static SDValue lowerArpl(SDValue Op, const X86Subtarget &Subtarget,
+                         SelectionDAG &DAG) {
+  if (Subtarget.is64Bit() || Subtarget.is16Bit())
+    report_fatal_error("ARPL intrinsic requires 32-bit code mode");
+  const bool Memory = Op.getConstantOperandVal(1) == Intrinsic::x86_arpl_mem;
+  const SDLoc DL(Op);
+  SmallVector<SDValue, 7> Operands;
+  if (Memory)
+    Operands = {Op.getOperand(2), DAG.getTargetConstant(1, DL, MVT::i8),
+                DAG.getRegister(0, MVT::i32),
+                DAG.getTargetConstant(0, DL, MVT::i32),
+                DAG.getRegister(0, MVT::i16)};
+  else
+    Operands.push_back(Op.getOperand(2));
+  Operands.push_back(Op.getOperand(3));
+  Operands.push_back(Op.getOperand(0));
+  auto *Access = DAG.getMachineNode(
+      Memory ? X86::ARPL16mr : X86::ARPL16rr, DL,
+      Memory ? DAG.getVTList(MVT::Other, MVT::Glue)
+             : DAG.getVTList(MVT::i16, MVT::Other, MVT::Glue),
+      Operands);
+  const unsigned ChainIndex = Memory ? 0 : 1;
+  SDValue ZF(
+      DAG.getMachineNode(X86::SETCCr, DL, MVT::i8,
+                         {DAG.getTargetConstant(X86::COND_E, DL, MVT::i8),
+                          SDValue(Access, ChainIndex + 1)}),
+      0);
+  if (Memory)
+    return DAG.getMergeValues({ZF, SDValue(Access, ChainIndex)}, DL);
+  return DAG.getMergeValues(
+      {SDValue(Access, 0), ZF, SDValue(Access, ChainIndex)}, DL);
+}
+
 static SDValue lowerBoundedSystemState(SDValue Op,
                                        const X86Subtarget &Subtarget,
                                        SelectionDAG &DAG) {
@@ -28656,9 +28689,11 @@ static SDValue lowerBoundedSystemState(SDValue Op,
   case Intrinsic::x86_tlbsync:
     return SDValue(DAG.getMachineNode(X86::TLBSYNC, DL, MVT::Other, Chain), 0);
   case Intrinsic::x86_invlpgb:
-  case Intrinsic::x86_invlpgb32: {
+  case Intrinsic::x86_invlpgb32:
+  case Intrinsic::x86_invlpgb_addr32: {
     const bool Wide = ID == Intrinsic::x86_invlpgb;
-    if (Wide != Subtarget.is64Bit())
+    const bool Override = ID == Intrinsic::x86_invlpgb_addr32;
+    if ((Wide || Override) != Subtarget.is64Bit() || Subtarget.is16Bit())
       report_fatal_error(
           "INVLPGB intrinsic does not match the target code mode");
     Chain = DAG.getCopyToReg(Chain, DL, Wide ? X86::RAX : X86::EAX,
@@ -28667,10 +28702,12 @@ static SDValue lowerBoundedSystemState(SDValue Op,
                              Chain.getValue(1));
     Chain = DAG.getCopyToReg(Chain, DL, X86::ECX, Op.getOperand(4),
                              Chain.getValue(1));
-    return SDValue(DAG.getMachineNode(Wide ? X86::INVLPGB64 : X86::INVLPGB32,
-                                      DL, MVT::Other,
-                                      {Chain, Chain.getValue(1)}),
-                   0);
+    const unsigned Opcode = Override ? X86::INVLPGB64_ADDR32
+                            : Wide   ? X86::INVLPGB64
+                                     : X86::INVLPGB32;
+    return SDValue(
+        DAG.getMachineNode(Opcode, DL, MVT::Other, {Chain, Chain.getValue(1)}),
+        0);
   }
   case Intrinsic::x86_lkgs_reg:
   case Intrinsic::x86_lkgs_mem: {
@@ -29319,10 +29356,15 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_hreset:
     case Intrinsic::x86_tlbsync:
     case Intrinsic::x86_invlpgb:
+    case Intrinsic::x86_invlpgb_addr32:
     case Intrinsic::x86_lkgs_reg:
     case Intrinsic::x86_lkgs_mem:
     case Intrinsic::x86_invlpgb32:
       return lowerBoundedSystemState(Op, Subtarget, DAG);
+
+    case Intrinsic::x86_arpl_reg:
+    case Intrinsic::x86_arpl_mem:
+      return lowerArpl(Op, Subtarget, DAG);
 
     case Intrinsic::x86_clts:
       return SDValue(DAG.getMachineNode(X86::CLTS, SDLoc(Op), MVT::Other,
