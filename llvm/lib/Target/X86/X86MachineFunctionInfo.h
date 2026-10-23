@@ -18,6 +18,7 @@
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MIRYamlMapping.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/YAMLTraits.h"
 #include <set>
 
@@ -260,8 +261,9 @@ public:
 
   AMXProgModelEnum getAMXProgModel() const { return AMXProgModel; }
   void setAMXProgModel(AMXProgModelEnum Model) {
-    assert((AMXProgModel == AMXProgModelEnum::None || AMXProgModel == Model) &&
-           "mixed model is not supported");
+    if (AMXProgModel != AMXProgModelEnum::None && AMXProgModel != Model)
+      report_fatal_error("cannot mix physical AMX tile intrinsics with "
+                         "compiler-managed tiles");
     AMXProgModel = Model;
   }
 

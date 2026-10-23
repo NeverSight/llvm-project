@@ -55,6 +55,68 @@ extern cl::opt<bool> IndirectBranchTracking;
 //===----------------------------------------------------------------------===//
 
 namespace {
+// Physical-register intrinsics own the architectural tile bank. Managed AMX
+// values let the allocator choose registers and synthesize configurations;
+// mixing those contracts can overwrite live tiles or configure the wrong bank.
+AMXProgModelEnum getAMXProgrammingModel(const Function &F) {
+  bool Physical = false;
+  bool Managed = false;
+  for (const BasicBlock &BB : F)
+    for (const Instruction &I : BB) {
+      const auto *Call = dyn_cast<CallBase>(&I);
+      const Function *Callee = Call ? Call->getCalledFunction() : nullptr;
+      if (!Callee || !Callee->isIntrinsic())
+        continue;
+      Managed |= Call->getType()->isX86_AMXTy() ||
+                 any_of(Call->args(), [](const Use &Arg) {
+                   return Arg->getType()->isX86_AMXTy();
+                 });
+      switch (Callee->getIntrinsicID()) {
+      case Intrinsic::x86_tcvtrowd2ps:
+      case Intrinsic::x86_tcvtrowd2psi:
+      case Intrinsic::x86_tcvtrowps2bf16h:
+      case Intrinsic::x86_tcvtrowps2bf16hi:
+      case Intrinsic::x86_tcvtrowps2bf16l:
+      case Intrinsic::x86_tcvtrowps2bf16li:
+      case Intrinsic::x86_tcvtrowps2phh:
+      case Intrinsic::x86_tcvtrowps2phhi:
+      case Intrinsic::x86_tcvtrowps2phl:
+      case Intrinsic::x86_tcvtrowps2phli:
+      case Intrinsic::x86_tilemovrow:
+      case Intrinsic::x86_tilemovrowi:
+      case Intrinsic::x86_tilezero:
+      case Intrinsic::x86_tileloadd64:
+      case Intrinsic::x86_tileloaddt164:
+      case Intrinsic::x86_tileloaddrs64:
+      case Intrinsic::x86_tileloaddrst164:
+      case Intrinsic::x86_tilestored64:
+      case Intrinsic::x86_tdpbssd:
+      case Intrinsic::x86_tdpbsud:
+      case Intrinsic::x86_tdpbusd:
+      case Intrinsic::x86_tdpbuud:
+      case Intrinsic::x86_tdpbf16ps:
+      case Intrinsic::x86_tdpfp16ps:
+      case Intrinsic::x86_tcmmimfp16ps:
+      case Intrinsic::x86_tcmmrlfp16ps:
+      case Intrinsic::x86_tdpbf8ps:
+      case Intrinsic::x86_tdpbhf8ps:
+      case Intrinsic::x86_tdphbf8ps:
+      case Intrinsic::x86_tdphf8ps:
+      case Intrinsic::x86_tmmultf32ps:
+        Physical = true;
+        break;
+      default:
+        break;
+      }
+    }
+  if (Physical && Managed)
+    report_fatal_error(
+        "cannot mix physical AMX tile intrinsics with compiler-managed tiles");
+  return Physical  ? AMXProgModelEnum::DirectReg
+         : Managed ? AMXProgModelEnum::ManagedRA
+                   : AMXProgModelEnum::None;
+}
+
   /// This corresponds to X86AddressMode, but uses SDValue's instead of register
   /// numbers for the leaves of the matched tree.
   struct X86ISelAddressMode {
@@ -177,6 +239,8 @@ namespace {
           OptForMinSize(false), IndirectTlsSegRefs(false) {}
 
     bool runOnMachineFunction(MachineFunction &MF) override {
+      MF.getInfo<X86MachineFunctionInfo>()->setAMXProgModel(
+          getAMXProgrammingModel(MF.getFunction()));
       // Reset the subtarget each time through.
       Subtarget = &MF.getSubtarget<X86Subtarget>();
       IndirectTlsSegRefs = MF.getFunction().hasFnAttribute(

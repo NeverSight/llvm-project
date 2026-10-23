@@ -39171,7 +39171,8 @@ X86TargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   const MIMetadata MIMD(MI);
 
   auto TMMImmToTMMReg = [](unsigned Imm) {
-    assert (Imm < 8 && "Illegal tmm index");
+    if (Imm >= 8)
+      report_fatal_error("AMX intrinsic requires a tile index in [0, 7]");
     return X86::TMM0 + Imm;
   };
   switch (MI.getOpcode()) {
