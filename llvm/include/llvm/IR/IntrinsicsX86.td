@@ -91,6 +91,43 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
+// Descriptor queries return {value, ZF}. ZF=1 means the native LAR/LSL
+// succeeded; ZF=0 returns the supplied prior destination. Memory forms own
+// their m16 selector read, including fault ordering. Result width names the
+// operand size, not the code mode; only 64-bit results require 64-bit mode.
+// No descriptor, privilege or reserved-bit semantics are synthesized in IR.
+let TargetPrefix = "x86" in {
+  def int_x86_lar_reg16 : Intrinsic<[llvm_i16_ty, llvm_i8_ty],
+      [llvm_i16_ty, llvm_i16_ty], []>;
+  def int_x86_lar_mem16 : Intrinsic<[llvm_i16_ty, llvm_i8_ty],
+      [llvm_ptr_ty, llvm_i16_ty], []>;
+  def int_x86_lar_reg32 : Intrinsic<[llvm_i32_ty, llvm_i8_ty],
+      [llvm_i16_ty, llvm_i32_ty], []>;
+  def int_x86_lar_mem32 : Intrinsic<[llvm_i32_ty, llvm_i8_ty],
+      [llvm_ptr_ty, llvm_i32_ty], []>;
+  def int_x86_lar_reg64 : Intrinsic<[llvm_i64_ty, llvm_i8_ty],
+      [llvm_i16_ty, llvm_i64_ty], []>;
+  def int_x86_lar_mem64 : Intrinsic<[llvm_i64_ty, llvm_i8_ty],
+      [llvm_ptr_ty, llvm_i64_ty], []>;
+  def int_x86_lsl_reg16 : Intrinsic<[llvm_i16_ty, llvm_i8_ty],
+      [llvm_i16_ty, llvm_i16_ty], []>;
+  def int_x86_lsl_mem16 : Intrinsic<[llvm_i16_ty, llvm_i8_ty],
+      [llvm_ptr_ty, llvm_i16_ty], []>;
+  def int_x86_lsl_reg32 : Intrinsic<[llvm_i32_ty, llvm_i8_ty],
+      [llvm_i16_ty, llvm_i32_ty], []>;
+  def int_x86_lsl_mem32 : Intrinsic<[llvm_i32_ty, llvm_i8_ty],
+      [llvm_ptr_ty, llvm_i32_ty], []>;
+  def int_x86_lsl_reg64 : Intrinsic<[llvm_i64_ty, llvm_i8_ty],
+      [llvm_i16_ty, llvm_i64_ty], []>;
+  def int_x86_lsl_mem64 : Intrinsic<[llvm_i64_ty, llvm_i8_ty],
+      [llvm_ptr_ty, llvm_i64_ty], []>;
+  // Compatibility with NeverC's __segmentlimit: the result is unspecified
+  // when the selector is inaccessible. Use lsl.reg32 for explicit failure
+  // preservation and a success flag. The query remains ordered and observable.
+  def int_x86_lsl : Intrinsic<[llvm_i32_ty], [llvm_i32_ty], []>;
+}
+
+//===----------------------------------------------------------------------===//
 // FLAGS.
 let TargetPrefix = "x86" in {
   def int_x86_flags_read_u32 : ClangBuiltin<"__builtin_ia32_readeflags_u32">,
