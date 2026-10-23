@@ -25,6 +25,10 @@ def ENCLS : I<0x01, MRM_CF, (outs), (ins),
 // ENCLV - Execute an Enclave VMM Function of Specified Leaf Number
 def ENCLV : I<0x01, MRM_C0, (outs), (ins),
              "enclv", []>, TB;
+
+// Only the bounded fallthrough intrinsic selects this from a DAG. Native
+// assembly can also encode the entry/exit/resume leaves with its own ABI.
+def ENCLU : I<0x01, MRM_D7, (outs), (ins), "enclu", []>, TB;
 }
 
 let Uses = [EAX, EBX, ECX, EDX], Defs = [EAX, EBX, ECX, EDX, EFLAGS],
@@ -32,8 +36,7 @@ let Uses = [EAX, EBX, ECX, EDX], Defs = [EAX, EBX, ECX, EDX, EFLAGS],
     Predicates = [HasSGX, Not64BitMode] in {
 def ENCLS32 : I<0x01, MRM_CF, (outs), (ins), "encls", []>, TB;
 def ENCLV32 : I<0x01, MRM_C0, (outs), (ins), "enclv", []>, TB;
+def ENCLU32 : I<0x01, MRM_D7, (outs), (ins), "enclu", []>, TB;
 }
 
-// ENCLU needs a separate entry/exit/resume continuation contract.
-def ENCLU : I<0x01, MRM_D7, (outs), (ins), "enclu", []>, TB;
 } // SchedRW

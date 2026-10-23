@@ -52,6 +52,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/PatternMatch.h"
+#include "llvm/IR/X86SgxIntrinsics.h"
 #include "llvm/MC/BinaryRewrite.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
@@ -28353,14 +28354,25 @@ static SDValue getVMXCompletion(SDNode *Access, const SDLoc &DL,
 // SGX owns its implicit DS accesses, enclave state and privilege/fault checks.
 // Preserve all four natural-width GPRs and capture CF/ZF before flag
 // arithmetic.
-static SDValue lowerSGXSupervisor(SDValue Op, const X86Subtarget &Subtarget,
-                                  SelectionDAG &DAG) {
+static SDValue lowerSGXFallthrough(SDValue Op, const X86Subtarget &Subtarget,
+                                   SelectionDAG &DAG) {
   const unsigned ID = Op.getConstantOperandVal(1);
-  const bool Wide = ID == Intrinsic::x86_encls || ID == Intrinsic::x86_enclv;
-  if (Wide != Subtarget.is64Bit())
+  const bool User = ID == Intrinsic::x86_enclu_bounded ||
+                    ID == Intrinsic::x86_enclu_bounded32;
+  const bool Wide = ID == Intrinsic::x86_encls || ID == Intrinsic::x86_enclv ||
+                    ID == Intrinsic::x86_enclu_bounded;
+  if (Wide != Subtarget.is64Bit() || (!Wide && !Subtarget.is32Bit()))
     report_fatal_error("SGX intrinsic does not match the target code mode");
   if (!Subtarget.hasSGX())
     report_fatal_error("SGX intrinsic requires the sgx target feature");
+  if (User) {
+    const auto *Control = dyn_cast<ConstantSDNode>(Op.getOperand(2));
+    if (!Control)
+      report_fatal_error("bounded ENCLU requires a constant leaf");
+    if (!X86::isBoundedEncluLeaf(Control->getZExtValue()))
+      report_fatal_error(
+          "bounded ENCLU requires a fallthrough leaf (0, 1, 5..11)");
+  }
   const SDLoc DL(Op);
   const MVT VT = Wide ? MVT::i64 : MVT::i32;
   const unsigned Registers[] = {
@@ -28368,14 +28380,23 @@ static SDValue lowerSGXSupervisor(SDValue Op, const X86Subtarget &Subtarget,
       Wide ? X86::RCX : X86::ECX, Wide ? X86::RDX : X86::EDX};
   SDValue Chain = Op.getOperand(0), Glue;
   for (unsigned I = 0; I != 4; ++I) {
-    Chain =
-        DAG.getCopyToReg(Chain, DL, Registers[I], Op.getOperand(I + 2), Glue);
+    SDValue Input = Op.getOperand(I + 2);
+    // ImmArg becomes a TargetConstant in SelectionDAGBuilder. rAX still
+    // needs an ordinary constant that instruction selection can materialize.
+    if (Input.getOpcode() == ISD::TargetConstant)
+      Input =
+          DAG.getConstant(cast<ConstantSDNode>(Input)->getAPIntValue(), DL, VT);
+    Chain = DAG.getCopyToReg(Chain, DL, Registers[I], Input, Glue);
     Glue = Chain.getValue(1);
   }
   const bool System =
       ID == Intrinsic::x86_encls || ID == Intrinsic::x86_encls32;
-  const unsigned Opcode = Wide ? (System ? X86::ENCLS : X86::ENCLV)
-                               : (System ? X86::ENCLS32 : X86::ENCLV32);
+  const unsigned Opcode = Wide ? (User     ? X86::ENCLU
+                                  : System ? X86::ENCLS
+                                           : X86::ENCLV)
+                               : (User     ? X86::ENCLU32
+                                  : System ? X86::ENCLS32
+                                           : X86::ENCLV32);
   auto *Access = DAG.getMachineNode(
       Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue), {Chain, Glue});
   Chain = SDValue(Access, 0);
@@ -29307,7 +29328,9 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_enclv:
     case Intrinsic::x86_encls32:
     case Intrinsic::x86_enclv32:
-      return lowerSGXSupervisor(Op, Subtarget, DAG);
+    case Intrinsic::x86_enclu_bounded:
+    case Intrinsic::x86_enclu_bounded32:
+      return lowerSGXFallthrough(Op, Subtarget, DAG);
 
     case Intrinsic::x86_verr_reg:
     case Intrinsic::x86_verr_mem:
@@ -37060,6 +37083,7 @@ void X86TargetLowering::ReplaceNodeResults(SDNode *N,
       report_fatal_error("64-bit descriptor state result requires 64-bit mode");
     case Intrinsic::x86_encls:
     case Intrinsic::x86_enclv:
+    case Intrinsic::x86_enclu_bounded:
       report_fatal_error("SGX intrinsic does not match the target code mode");
     case Intrinsic::x86_vmread_reg:
       report_fatal_error("64-bit VMCS intrinsic requires 64-bit mode");

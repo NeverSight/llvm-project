@@ -235,6 +235,22 @@ let TargetPrefix = "x86" in {
   def int_x86_enclv32 : Intrinsic<
       [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty],
       [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], []>;
+
+  // ENCLU's fallthrough leaves use the same register/status transport. The
+  // first input is a constant natural-width rAX whose low 32 bits select a
+  // supported leaf: EREPORT, EGETKEY, EACCEPT, EMODPE, EACCEPTCOPY,
+  // EVERIFYREPORT2, EDECCSSA, EREPORT2 or EGETKEY256 (0, 1, 5..11).
+  // Reject entry/exit/resume and unknown leaves; they cannot be represented
+  // by a returning call with this register set. Preserved incoming flags are
+  // not inputs to this API, so their bits in the status byte are unspecified.
+  def int_x86_enclu_bounded : Intrinsic<
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i8_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_enclu_bounded32 : Intrinsic<
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>]>;
 }
 
 //===----------------------------------------------------------------------===//
