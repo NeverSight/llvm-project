@@ -28567,6 +28567,56 @@ static SDValue lowerBoundedSystemState(SDValue Op,
     llvm_unreachable("unexpected bounded system intrinsic");
   case Intrinsic::x86_invd:
     return SDValue(DAG.getMachineNode(X86::INVD, DL, MVT::Other, Chain), 0);
+  case Intrinsic::x86_stgi:
+    return SDValue(DAG.getMachineNode(X86::STGI, DL, MVT::Other, Chain), 0);
+  case Intrinsic::x86_clgi:
+    return SDValue(DAG.getMachineNode(X86::CLGI, DL, MVT::Other, Chain), 0);
+  case Intrinsic::x86_swapgs:
+    if (!Subtarget.is64Bit())
+      report_fatal_error("SWAPGS intrinsic requires 64-bit mode");
+    return SDValue(DAG.getMachineNode(X86::SWAPGS, DL, MVT::Other, Chain), 0);
+  case Intrinsic::x86_clac:
+    return SDValue(DAG.getMachineNode(X86::CLAC, DL, MVT::Other, Chain), 0);
+  case Intrinsic::x86_stac:
+    return SDValue(DAG.getMachineNode(X86::STAC, DL, MVT::Other, Chain), 0);
+  case Intrinsic::x86_hlt:
+    return SDValue(DAG.getMachineNode(X86::HLT, DL, MVT::Other, Chain), 0);
+  case Intrinsic::x86_vmfunc_eptp_switch:
+    Chain = DAG.getCopyToReg(Chain, DL, X86::EAX,
+                             DAG.getConstant(0, DL, MVT::i32), SDValue());
+    Chain = DAG.getCopyToReg(Chain, DL, X86::ECX, Op.getOperand(2),
+                             Chain.getValue(1));
+    return SDValue(DAG.getMachineNode(X86::VMFUNC, DL, MVT::Other,
+                                      {Chain, Chain.getValue(1)}),
+                   0);
+  case Intrinsic::x86_vmload:
+  case Intrinsic::x86_vmload32:
+  case Intrinsic::x86_vmsave:
+  case Intrinsic::x86_vmsave32:
+  case Intrinsic::x86_invlpga:
+  case Intrinsic::x86_invlpga32: {
+    const bool Wide = ID == Intrinsic::x86_vmload ||
+                      ID == Intrinsic::x86_vmsave ||
+                      ID == Intrinsic::x86_invlpga;
+    if (Wide != Subtarget.is64Bit())
+      report_fatal_error("SVM intrinsic does not match the target code mode");
+    Chain = DAG.getCopyToReg(Chain, DL, Wide ? X86::RAX : X86::EAX,
+                             Op.getOperand(2), SDValue());
+    unsigned Opcode;
+    if (ID == Intrinsic::x86_vmload || ID == Intrinsic::x86_vmload32)
+      Opcode = Wide ? X86::VMLOAD64 : X86::VMLOAD32;
+    else if (ID == Intrinsic::x86_vmsave || ID == Intrinsic::x86_vmsave32)
+      Opcode = Wide ? X86::VMSAVE64 : X86::VMSAVE32;
+    else {
+      Opcode = Wide ? X86::INVLPGA64 : X86::INVLPGA32;
+      Chain = DAG.getCopyToReg(Chain, DL, X86::ECX, Op.getOperand(3),
+                               Chain.getValue(1));
+    }
+    return SDValue(
+        DAG.getMachineNode(Opcode, DL, MVT::Other, {Chain, Chain.getValue(1)}),
+        0);
+  }
+
   case Intrinsic::x86_hreset:
     Chain = DAG.getCopyToReg(Chain, DL, X86::EAX, Op.getOperand(2), SDValue());
     return SDValue(DAG.getMachineNode(X86::HRESET, DL, MVT::Other,
@@ -29216,6 +29266,19 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_lmsw_mem:
       return lowerDescriptorState(Op, Subtarget, DAG);
 
+    case Intrinsic::x86_vmload:
+    case Intrinsic::x86_vmload32:
+    case Intrinsic::x86_vmsave:
+    case Intrinsic::x86_vmsave32:
+    case Intrinsic::x86_invlpga:
+    case Intrinsic::x86_invlpga32:
+    case Intrinsic::x86_stgi:
+    case Intrinsic::x86_clgi:
+    case Intrinsic::x86_swapgs:
+    case Intrinsic::x86_clac:
+    case Intrinsic::x86_stac:
+    case Intrinsic::x86_hlt:
+    case Intrinsic::x86_vmfunc_eptp_switch:
     case Intrinsic::x86_invd:
     case Intrinsic::x86_hreset:
     case Intrinsic::x86_tlbsync:

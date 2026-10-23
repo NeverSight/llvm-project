@@ -39,7 +39,8 @@ let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
                    "ud1{q}\t{$src2, $src1|$src1, $src2}", []>, TB;
 }
 
-let isTerminator = 1 in
+// HLT can resume at the next instruction; it is not a CFG terminator.
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in
   def HLT : I<0xF4, RawFrm, (outs), (ins), "hlt", []>;
 def RSM : I<0xAA, RawFrm, (outs), (ins), "rsm", []>, TB;
 
@@ -219,7 +220,9 @@ def MOV16sm : I<0x8E, MRMSrcMem, (outs SEGMENT_REG:$dst), (ins i16mem:$src),
 // Segmentation support instructions.
 
 let SchedRW = [WriteSystem] in {
-def SWAPGS : I<0x01, MRM_F8, (outs), (ins), "swapgs", []>, TB;
+let hasSideEffects = 1 in
+def SWAPGS : I<0x01, MRM_F8, (outs), (ins), "swapgs", []>, TB,
+             Requires<[In64BitMode]>;
 // LKGS instructions
 let hasSideEffects = 1, mayLoad = 1 in {
   def LKGS16m : I<0x00, MRM6m, (outs), (ins i16mem:$src), "lkgs\t$src",
@@ -780,8 +783,8 @@ let Predicates = [HasINVPCID, HasEGPR] in {
 
 
 //===----------------------------------------------------------------------===//
-// SMAP Instruction
-let Defs = [EFLAGS], SchedRW = [WriteSystem] in {
+// SMAP changes AC, preserving the compiler's arithmetic EFLAGS value.
+let hasSideEffects = 1, SchedRW = [WriteSystem] in {
   def CLAC : I<0x01, MRM_CA, (outs), (ins), "clac", []>, TB;
   def STAC : I<0x01, MRM_CB, (outs), (ins), "stac", []>, TB;
 }

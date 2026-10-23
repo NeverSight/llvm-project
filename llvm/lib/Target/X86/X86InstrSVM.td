@@ -19,9 +19,11 @@ let SchedRW = [WriteSystem] in {
 def VMMCALL : I<0x01, MRM_D9, (outs), (ins), "vmmcall", []>, TB;
 
 // 0F 01 DC
+let hasSideEffects = 1 in
 def STGI : I<0x01, MRM_DC, (outs), (ins), "stgi", []>, TB;
 
 // 0F 01 DD
+let hasSideEffects = 1 in
 def CLGI : I<0x01, MRM_DD, (outs), (ins), "clgi", []>, TB;
 
 // 0F 01 DE
@@ -37,26 +39,32 @@ def VMRUN64 : I<0x01, MRM_D8, (outs), (ins), "vmrun", []>, TB,
                 Requires<[In64BitMode]>;
 
 // 0F 01 DA
+let hasSideEffects = 1, mayLoad = 1 in {
 let Uses = [EAX] in
 def VMLOAD32 : I<0x01, MRM_DA, (outs), (ins), "vmload", []>, TB,
                  Requires<[Not64BitMode]>;
 let Uses = [RAX] in
 def VMLOAD64 : I<0x01, MRM_DA, (outs), (ins), "vmload", []>, TB,
                  Requires<[In64BitMode]>;
+}
 
 // 0F 01 DB
+let hasSideEffects = 1, mayStore = 1 in {
 let Uses = [EAX] in
 def VMSAVE32 : I<0x01, MRM_DB, (outs), (ins), "vmsave", []>, TB,
                  Requires<[Not64BitMode]>;
 let Uses = [RAX] in
 def VMSAVE64 : I<0x01, MRM_DB, (outs), (ins), "vmsave", []>, TB,
                  Requires<[In64BitMode]>;
+}
 
 // 0F 01 DF
+let hasSideEffects = 1 in {
 let Uses = [EAX, ECX] in
 def INVLPGA32 : I<0x01, MRM_DF, (outs), (ins),
                 "invlpga", []>, TB, Requires<[Not64BitMode]>;
 let Uses = [RAX, ECX] in
 def INVLPGA64 : I<0x01, MRM_DF, (outs), (ins),
                 "invlpga", []>, TB, Requires<[In64BitMode]>;
+}
 } // SchedRW

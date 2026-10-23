@@ -46,6 +46,7 @@ def VMCLEARm : I<0xC7, MRM6m, (outs), (ins i64mem:$vmcs),
   "vmclear\t$vmcs", []>, TB, PD;
 
 // OF 01 D4
+let Uses = [EAX, ECX], hasSideEffects = 1, mayLoad = 1 in
 def VMFUNC : I<0x01, MRM_D4, (outs), (ins), "vmfunc", []>, TB;
 
 let Defs = [EFLAGS], hasSideEffects = 1 in {

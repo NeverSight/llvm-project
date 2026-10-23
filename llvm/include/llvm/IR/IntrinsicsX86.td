@@ -142,6 +142,26 @@ let TargetPrefix = "x86" in {
   // LKGS is a long-mode operation. Its memory form owns the m16 selector read.
   def int_x86_lkgs_reg : Intrinsic<[], [llvm_i16_ty], []>;
   def int_x86_lkgs_mem : Intrinsic<[], [llvm_ptr_ty], []>;
+
+  // Bounded SVM effects: physical VMCB addresses and linear INVLPGA addresses
+  // are integers, never compiler-dereferenced pointers. These forms use the
+  // code mode's default address size; the 32 forms require 32-bit mode.
+  def int_x86_vmload : Intrinsic<[], [llvm_i64_ty], []>;
+  def int_x86_vmload32 : Intrinsic<[], [llvm_i32_ty], []>;
+  def int_x86_vmsave : Intrinsic<[], [llvm_i64_ty], []>;
+  def int_x86_vmsave32 : Intrinsic<[], [llvm_i32_ty], []>;
+  def int_x86_invlpga : Intrinsic<[], [llvm_i64_ty, llvm_i32_ty], []>;
+  def int_x86_invlpga32 : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty], []>;
+  def int_x86_stgi : Intrinsic<[], [], []>;
+  def int_x86_clgi : Intrinsic<[], [], []>;
+  def int_x86_swapgs : Intrinsic<[], [], []>;
+  def int_x86_clac : Intrinsic<[], [], []>;
+  def int_x86_stac : Intrinsic<[], [], []>;
+  // HLT resumes at the following instruction after a returning interrupt.
+  def int_x86_hlt : Intrinsic<[], [], []>;
+  // VMFUNC leaf 0 only: EAX=0, complete ECX EPTP-list index. No invented
+  // VMfail status or contract for future leaves with other register effects.
+  def int_x86_vmfunc_eptp_switch : Intrinsic<[], [llvm_i32_ty], []>;
 }
 
 //===----------------------------------------------------------------------===//
