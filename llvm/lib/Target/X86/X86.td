@@ -344,6 +344,10 @@ def FeatureAVX10_1 : SubtargetFeature<"avx10.1", "HasAVX10_1", "true",
                                        FeatureBF16, FeatureVPOPCNTDQ, FeatureVBMI2, FeatureBITALG,
                                        FeatureFP16, FeatureVLX, FeatureDQI]>;
 // Deprecated feature. Keep it here to suppress warnings in old IRs.
+def FeatureAVX10_1_256 : SubtargetFeature<"avx10.1-256", "HasAVX10_1_256", "true",
+                                          "Support AVX10.1 instruction",
+                                          [FeatureAVX10_1]>;
+// Deprecated feature. Keep it here to suppress warnings in old IRs.
 def FeatureAVX10_1_512 : SubtargetFeature<"avx10.1-512", "HasAVX10_1_512", "true",
                                           "Support AVX10.1 instruction",
                                           [FeatureAVX10_1]>;
