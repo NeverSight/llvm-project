@@ -63,6 +63,18 @@ let TargetPrefix = "x86" in {
   // completion status only when the instruction falls through on VMfail.
   def int_x86_vmlaunch : Intrinsic<[llvm_i8_ty], [], []>;
   def int_x86_vmresume : Intrinsic<[llvm_i8_ty], [], []>;
+
+  // Translation invalidation keeps the complete mode-sized type selector and
+  // the instruction-owned m128 descriptor access. Status uses the VMX encoding
+  // above; no part of the descriptor is speculatively loaded by the compiler.
+  def int_x86_invept : Intrinsic<[llvm_i8_ty],
+                                [llvm_i64_ty, llvm_ptr_ty], []>;
+  def int_x86_invept32 : Intrinsic<[llvm_i8_ty],
+                                  [llvm_i32_ty, llvm_ptr_ty], []>;
+  def int_x86_invvpid : Intrinsic<[llvm_i8_ty],
+                                 [llvm_i64_ty, llvm_ptr_ty], []>;
+  def int_x86_invvpid32 : Intrinsic<[llvm_i8_ty],
+                                   [llvm_i32_ty, llvm_ptr_ty], []>;
 }
 
 //===----------------------------------------------------------------------===//

@@ -28428,6 +28428,29 @@ static SDValue lowerVMXManagement(SDValue Op, const X86Subtarget &Subtarget,
   return getVMXCompletion(Access, DL, DAG);
 }
 
+static SDValue lowerVMXInvalidation(SDValue Op, const X86Subtarget &Subtarget,
+                                    SelectionDAG &DAG) {
+  const unsigned ID = Op.getConstantOperandVal(1);
+  const bool Is64 = ID == Intrinsic::x86_invept || ID == Intrinsic::x86_invvpid;
+  const bool IsEPT =
+      ID == Intrinsic::x86_invept || ID == Intrinsic::x86_invept32;
+  if (Is64 != Subtarget.is64Bit())
+    report_fatal_error(
+        Is64 ? "64-bit VMX invalidation intrinsic requires 64-bit mode"
+             : "32-bit VMX invalidation intrinsic requires 32-bit mode");
+  const unsigned Opcode = IsEPT ? (Is64 ? X86::INVEPT64 : X86::INVEPT32)
+                                : (Is64 ? X86::INVVPID64 : X86::INVVPID32);
+  const SDLoc DL(Op);
+  const MVT PtrVT = Is64 ? MVT::i64 : MVT::i32;
+  auto *Access = DAG.getMachineNode(
+      Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue),
+      {Op.getOperand(2), Op.getOperand(3),
+       DAG.getTargetConstant(1, DL, MVT::i8), DAG.getRegister(0, PtrVT),
+       DAG.getTargetConstant(0, DL, MVT::i32), DAG.getRegister(0, MVT::i16),
+       Op.getOperand(0)});
+  return getVMXCompletion(Access, DL, DAG);
+}
+
 static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
                                       SelectionDAG &DAG) {
   unsigned IntNo = Op.getConstantOperandVal(1);
@@ -28449,6 +28472,12 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_vmxoff:
     case Intrinsic::x86_vmxon:
       return lowerVMXManagement(Op, Subtarget, DAG);
+
+    case Intrinsic::x86_invept:
+    case Intrinsic::x86_invept32:
+    case Intrinsic::x86_invvpid:
+    case Intrinsic::x86_invvpid32:
+      return lowerVMXInvalidation(Op, Subtarget, DAG);
 
     case Intrinsic::x86_wrmsr: {
       const SDLoc DL(Op);

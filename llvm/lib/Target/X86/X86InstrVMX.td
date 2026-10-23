@@ -15,6 +15,7 @@
 // VMX instructions
 
 let SchedRW = [WriteSystem] in {
+let Defs = [EFLAGS], hasSideEffects = 1, mayLoad = 1 in {
 // 66 0F 38 80
 def INVEPT32 : I<0x80, MRMSrcMem, (outs), (ins GR32:$src1, i128mem:$src2),
                "invept\t{$src2, $src1|$src1, $src2}", []>, T8, PD,
@@ -36,6 +37,7 @@ def INVVPID64 : I<0x81, MRMSrcMem, (outs), (ins GR64:$src1, i128mem:$src2),
 def INVVPID64_EVEX : I<0xF1, MRMSrcMem, (outs), (ins GR64:$src1, i128mem:$src2),
                        "invvpid\t{$src2, $src1|$src1, $src2}", []>,
                      EVEX, NoCD8, T_MAP4, XS, WIG, Requires<[In64BitMode]>;
+} // Defs = [EFLAGS], hasSideEffects = 1, mayLoad = 1
 
 // 0F 01 C1
 def VMCALL : I<0x01, MRM_C1, (outs), (ins), "vmcall", []>, TB;
