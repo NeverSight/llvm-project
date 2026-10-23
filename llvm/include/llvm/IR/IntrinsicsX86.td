@@ -90,6 +90,62 @@ let TargetPrefix = "x86" in {
                                    [llvm_i32_ty, llvm_ptr_ty], []>;
 }
 
+
+// Explicit VMX memory addressing. The integer offset is truncated to the
+// constant address width before native segment-base addition. The final
+// immediate is zero (DS default) or an architectural segment prefix byte.
+// Memory access, privilege checks and VMfail ordering remain instruction-owned.
+let TargetPrefix = "x86" in {
+  def int_x86_vmread_address : Intrinsic<[llvm_i8_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_vmwrite_mem_address : Intrinsic<[llvm_i8_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_invept_address : Intrinsic<[llvm_i8_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_invvpid_address : Intrinsic<[llvm_i8_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_vmclear_address : Intrinsic<[llvm_i8_ty],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_vmptrld_address : Intrinsic<[llvm_i8_ty],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_vmptrst_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_vmxon_address : Intrinsic<[llvm_i8_ty],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_vmread_address32 : Intrinsic<[llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_vmwrite_mem_address32 : Intrinsic<[llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_invept_address32 : Intrinsic<[llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_invvpid_address32 : Intrinsic<[llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_vmclear_address32 : Intrinsic<[llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_vmptrld_address32 : Intrinsic<[llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_vmptrst_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_vmxon_address32 : Intrinsic<[llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+}
+
 //===----------------------------------------------------------------------===//
 // Descriptor queries return {value, ZF}. ZF=1 means the native LAR/LSL
 // succeeded; ZF=0 returns the supplied prior destination. Memory forms own

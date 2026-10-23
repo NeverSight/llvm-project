@@ -92,3 +92,57 @@ def VMXON : I<0xC7, MRM6m, (outs), (ins i64mem:$vmxon),
   "vmxon\t$vmxon", []>, TB, XS;
 } // Defs = [EFLAGS], hasSideEffects = 1
 } // SchedRW
+
+// Explicit-address intrinsics retain the normal pointer register class until
+// MC lowering selects the narrow address registers. Pseudos keep native memory
+// effects and EFLAGS definitions through scheduling and register allocation.
+let SchedRW = [WriteSystem], Defs = [EFLAGS], hasSideEffects = 1 in {
+let mayStore = 1 in
+def VMREAD64mr_ADDR32 : PseudoI<(outs), (ins i64mem:$dst, GR64:$src), []>,
+    Requires<[In64BitMode]>;
+let mayStore = 1 in
+def VMREAD32mr_ADDR16 : PseudoI<(outs), (ins i32mem:$dst, GR32:$src), []>,
+    Requires<[Not64BitMode]>;
+let mayLoad = 1 in
+def VMWRITE64rm_ADDR32 : PseudoI<(outs), (ins GR64:$dst, i64mem:$src), []>,
+    Requires<[In64BitMode]>;
+let mayLoad = 1 in
+def VMWRITE32rm_ADDR16 : PseudoI<(outs), (ins GR32:$dst, i32mem:$src), []>,
+    Requires<[Not64BitMode]>;
+let mayLoad = 1 in
+def INVEPT64_ADDR32 : PseudoI<(outs), (ins GR64:$src1, i128mem:$src2), []>,
+    Requires<[In64BitMode]>;
+let mayLoad = 1 in
+def INVEPT32_ADDR16 : PseudoI<(outs), (ins GR32:$src1, i128mem:$src2), []>,
+    Requires<[Not64BitMode]>;
+let mayLoad = 1 in
+def INVVPID64_ADDR32 : PseudoI<(outs), (ins GR64:$src1, i128mem:$src2), []>,
+    Requires<[In64BitMode]>;
+let mayLoad = 1 in
+def INVVPID32_ADDR16 : PseudoI<(outs), (ins GR32:$src1, i128mem:$src2), []>,
+    Requires<[Not64BitMode]>;
+let mayLoad = 1 in
+def VMCLEARm_ADDR32 : PseudoI<(outs), (ins i64mem:$vmcs), []>,
+    Requires<[In64BitMode]>;
+let mayLoad = 1 in
+def VMCLEARm_ADDR16 : PseudoI<(outs), (ins i64mem:$vmcs), []>,
+    Requires<[Not64BitMode]>;
+let mayLoad = 1 in
+def VMPTRLDm_ADDR32 : PseudoI<(outs), (ins i64mem:$vmcs), []>,
+    Requires<[In64BitMode]>;
+let mayLoad = 1 in
+def VMPTRLDm_ADDR16 : PseudoI<(outs), (ins i64mem:$vmcs), []>,
+    Requires<[Not64BitMode]>;
+let mayStore = 1 in
+def VMPTRSTm_ADDR32 : PseudoI<(outs), (ins i64mem:$vmcs), []>,
+    Requires<[In64BitMode]>;
+let mayStore = 1 in
+def VMPTRSTm_ADDR16 : PseudoI<(outs), (ins i64mem:$vmcs), []>,
+    Requires<[Not64BitMode]>;
+let mayLoad = 1 in
+def VMXON_ADDR32 : PseudoI<(outs), (ins i64mem:$vmxon), []>,
+    Requires<[In64BitMode]>;
+let mayLoad = 1 in
+def VMXON_ADDR16 : PseudoI<(outs), (ins i64mem:$vmxon), []>,
+    Requires<[Not64BitMode]>;
+}

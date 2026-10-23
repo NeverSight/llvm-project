@@ -52,6 +52,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/PatternMatch.h"
+#include "llvm/IR/X86NativeMemoryAddress.h"
 #include "llvm/IR/X86SgxIntrinsics.h"
 #include "llvm/IR/X86SmxIntrinsics.h"
 #include "llvm/MC/BinaryRewrite.h"
@@ -28888,6 +28889,213 @@ static SDValue lowerDescriptorQuery(SDValue Op, const X86Subtarget &Subtarget,
   return DAG.getMergeValues({Value, ZF, SDValue(Access, 1)}, DL);
 }
 
+// Use the B register so the zero-prefix form selects DS even when the
+// allocator otherwise chooses BP/SP. Machine memory operands use the code-mode
+// pointer class; address-size pseudos narrow the base at MC lowering. Truncate
+// the offset before native segment addition and keep setup glued to the access.
+static SmallVector<SDValue, 8>
+lowerNativeAddressOperands(SDValue Op, const X86Subtarget &Subtarget,
+                           unsigned OffsetOperand, SelectionDAG &DAG,
+                           SDValue &Chain, SDValue &Glue) {
+  const auto *Width =
+      dyn_cast<ConstantSDNode>(Op.getOperand(OffsetOperand + 1));
+  const auto *Prefix =
+      dyn_cast<ConstantSDNode>(Op.getOperand(OffsetOperand + 2));
+  if (!Width || !Prefix)
+    report_fatal_error("native memory addressing requires constant controls");
+  if (!X86::isNativeMemoryAddressWidth(Subtarget.is64Bit(),
+                                       Width->getZExtValue()))
+    report_fatal_error(
+        "native memory address width is invalid for this code mode");
+  if (!X86::isNativeMemorySegmentPrefix(Prefix->getZExtValue()))
+    report_fatal_error("invalid native memory segment prefix");
+  const unsigned Bits = Width->getZExtValue();
+  const MVT VT = MVT::getIntegerVT(Bits);
+  const MVT BaseVT = Subtarget.is64Bit() ? MVT::i64 : MVT::i32;
+  const unsigned Base = Subtarget.is64Bit() ? X86::RBX : X86::EBX;
+  unsigned Segment = 0;
+  switch (Prefix->getZExtValue()) {
+  case 0x26:
+    Segment = X86::ES;
+    break;
+  case 0x2e:
+    Segment = X86::CS;
+    break;
+  case 0x36:
+    Segment = X86::SS;
+    break;
+  case 0x3e:
+    Segment = X86::DS;
+    break;
+  case 0x64:
+    Segment = X86::FS;
+    break;
+  case 0x65:
+    Segment = X86::GS;
+    break;
+  }
+  const SDLoc DL(Op);
+  SDValue Offset = DAG.getZExtOrTrunc(Op.getOperand(OffsetOperand), DL, VT);
+  Offset = DAG.getZExtOrTrunc(Offset, DL, BaseVT);
+  Chain = DAG.getCopyToReg(Op.getOperand(0), DL, Base, Offset, SDValue());
+  Glue = Chain.getValue(1);
+  return {DAG.getRegister(Base, BaseVT), DAG.getTargetConstant(1, DL, MVT::i8),
+          DAG.getRegister(0, BaseVT), DAG.getTargetConstant(0, DL, MVT::i32),
+          DAG.getRegister(Segment, MVT::i16)};
+}
+
+static SDValue lowerVMXAddress(SDValue Op, const X86Subtarget &Subtarget,
+                               SelectionDAG &DAG) {
+  enum class Kind { Read, Selector, Memory, Void };
+  unsigned Opcode;
+  bool Wide;
+  Kind Form;
+  switch (Op.getConstantOperandVal(1)) {
+  default:
+    llvm_unreachable("unexpected explicit-address VMX intrinsic");
+  case Intrinsic::x86_vmread_address:
+    Opcode = X86::VMREAD64mr;
+    Wide = true;
+    Form = Kind::Read;
+    break;
+  case Intrinsic::x86_vmwrite_mem_address:
+    Opcode = X86::VMWRITE64rm;
+    Wide = true;
+    Form = Kind::Selector;
+    break;
+  case Intrinsic::x86_invept_address:
+    Opcode = X86::INVEPT64;
+    Wide = true;
+    Form = Kind::Selector;
+    break;
+  case Intrinsic::x86_invvpid_address:
+    Opcode = X86::INVVPID64;
+    Wide = true;
+    Form = Kind::Selector;
+    break;
+  case Intrinsic::x86_vmclear_address:
+    Opcode = X86::VMCLEARm;
+    Wide = true;
+    Form = Kind::Memory;
+    break;
+  case Intrinsic::x86_vmptrld_address:
+    Opcode = X86::VMPTRLDm;
+    Wide = true;
+    Form = Kind::Memory;
+    break;
+  case Intrinsic::x86_vmptrst_address:
+    Opcode = X86::VMPTRSTm;
+    Wide = true;
+    Form = Kind::Void;
+    break;
+  case Intrinsic::x86_vmxon_address:
+    Opcode = X86::VMXON;
+    Wide = true;
+    Form = Kind::Memory;
+    break;
+  case Intrinsic::x86_vmread_address32:
+    Opcode = X86::VMREAD32mr;
+    Wide = false;
+    Form = Kind::Read;
+    break;
+  case Intrinsic::x86_vmwrite_mem_address32:
+    Opcode = X86::VMWRITE32rm;
+    Wide = false;
+    Form = Kind::Selector;
+    break;
+  case Intrinsic::x86_invept_address32:
+    Opcode = X86::INVEPT32;
+    Wide = false;
+    Form = Kind::Selector;
+    break;
+  case Intrinsic::x86_invvpid_address32:
+    Opcode = X86::INVVPID32;
+    Wide = false;
+    Form = Kind::Selector;
+    break;
+  case Intrinsic::x86_vmclear_address32:
+    Opcode = X86::VMCLEARm;
+    Wide = false;
+    Form = Kind::Memory;
+    break;
+  case Intrinsic::x86_vmptrld_address32:
+    Opcode = X86::VMPTRLDm;
+    Wide = false;
+    Form = Kind::Memory;
+    break;
+  case Intrinsic::x86_vmptrst_address32:
+    Opcode = X86::VMPTRSTm;
+    Wide = false;
+    Form = Kind::Void;
+    break;
+  case Intrinsic::x86_vmxon_address32:
+    Opcode = X86::VMXON;
+    Wide = false;
+    Form = Kind::Memory;
+    break;
+  }
+  if (Wide != Subtarget.is64Bit() || (!Wide && !Subtarget.is32Bit()))
+    report_fatal_error(
+        "VMX address intrinsic does not match the target code mode");
+  const bool HasSelector = Form == Kind::Read || Form == Kind::Selector;
+  SDValue Chain, Glue;
+  auto Operands = lowerNativeAddressOperands(Op, Subtarget, HasSelector ? 3 : 2,
+                                             DAG, Chain, Glue);
+  const unsigned Width = Op.getConstantOperandVal(HasSelector ? 4 : 3);
+  if (Width != (Subtarget.is64Bit() ? 64u : 32u)) {
+    switch (Opcode) {
+    default:
+      llvm_unreachable("unexpected VMX address-size override");
+    case X86::VMREAD64mr:
+      Opcode = X86::VMREAD64mr_ADDR32;
+      break;
+    case X86::VMREAD32mr:
+      Opcode = X86::VMREAD32mr_ADDR16;
+      break;
+    case X86::VMWRITE64rm:
+      Opcode = X86::VMWRITE64rm_ADDR32;
+      break;
+    case X86::VMWRITE32rm:
+      Opcode = X86::VMWRITE32rm_ADDR16;
+      break;
+    case X86::INVEPT64:
+      Opcode = X86::INVEPT64_ADDR32;
+      break;
+    case X86::INVEPT32:
+      Opcode = X86::INVEPT32_ADDR16;
+      break;
+    case X86::INVVPID64:
+      Opcode = X86::INVVPID64_ADDR32;
+      break;
+    case X86::INVVPID32:
+      Opcode = X86::INVVPID32_ADDR16;
+      break;
+    case X86::VMCLEARm:
+      Opcode = Wide ? X86::VMCLEARm_ADDR32 : X86::VMCLEARm_ADDR16;
+      break;
+    case X86::VMPTRLDm:
+      Opcode = Wide ? X86::VMPTRLDm_ADDR32 : X86::VMPTRLDm_ADDR16;
+      break;
+    case X86::VMPTRSTm:
+      Opcode = Wide ? X86::VMPTRSTm_ADDR32 : X86::VMPTRSTm_ADDR16;
+      break;
+    case X86::VMXON:
+      Opcode = Wide ? X86::VMXON_ADDR32 : X86::VMXON_ADDR16;
+      break;
+    }
+  }
+  if (Form == Kind::Read)
+    Operands.push_back(Op.getOperand(2));
+  else if (Form == Kind::Selector)
+    Operands.insert(Operands.begin(), Op.getOperand(2));
+  Operands.push_back(Chain);
+  Operands.push_back(Glue);
+  auto *Access = DAG.getMachineNode(
+      Opcode, SDLoc(Op), DAG.getVTList(MVT::Other, MVT::Glue), Operands);
+  return Form == Kind::Void ? SDValue(Access, 0)
+                            : getVMXCompletion(Access, SDLoc(Op), DAG);
+}
+
 static SDValue lowerVMCSAccess(SDValue Op, const X86Subtarget &Subtarget,
                                SelectionDAG &DAG) {
   const unsigned ID = Op.getConstantOperandVal(1);
@@ -29342,6 +29550,24 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_lsl_mem64:
     case Intrinsic::x86_lsl:
       return lowerDescriptorQuery(Op, Subtarget, DAG);
+    case Intrinsic::x86_vmread_address:
+    case Intrinsic::x86_vmwrite_mem_address:
+    case Intrinsic::x86_invept_address:
+    case Intrinsic::x86_invvpid_address:
+    case Intrinsic::x86_vmclear_address:
+    case Intrinsic::x86_vmptrld_address:
+    case Intrinsic::x86_vmptrst_address:
+    case Intrinsic::x86_vmxon_address:
+    case Intrinsic::x86_vmread_address32:
+    case Intrinsic::x86_vmwrite_mem_address32:
+    case Intrinsic::x86_invept_address32:
+    case Intrinsic::x86_invvpid_address32:
+    case Intrinsic::x86_vmclear_address32:
+    case Intrinsic::x86_vmptrld_address32:
+    case Intrinsic::x86_vmptrst_address32:
+    case Intrinsic::x86_vmxon_address32:
+      return lowerVMXAddress(Op, Subtarget, DAG);
+
     case Intrinsic::x86_vmread:
     case Intrinsic::x86_vmread32:
     case Intrinsic::x86_vmwrite:
