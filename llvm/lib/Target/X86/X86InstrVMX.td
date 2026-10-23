@@ -54,6 +54,7 @@ def VMPTRLDm : I<0xC7, MRM6m, (outs), (ins i64mem:$vmcs),
   "vmptrld\t$vmcs", []>, TB;
 def VMPTRSTm : I<0xC7, MRM7m, (outs), (ins i64mem:$vmcs),
   "vmptrst\t$vmcs", []>, TB;
+let Defs = [EFLAGS], hasSideEffects = 1 in {
 def VMREAD64rr : I<0x78, MRMDestReg, (outs GR64:$dst), (ins GR64:$src),
   "vmread{q}\t{$src, $dst|$dst, $src}", []>, TB, Requires<[In64BitMode]>;
 def VMREAD32rr : I<0x78, MRMDestReg, (outs GR32:$dst), (ins GR32:$src),
@@ -66,17 +67,18 @@ def VMREAD32mr : I<0x78, MRMDestMem, (outs), (ins i32mem:$dst, GR32:$src),
   "vmread{l}\t{$src, $dst|$dst, $src}", []>, TB, Requires<[Not64BitMode]>;
 } // mayStore
 
-def VMWRITE64rr : I<0x79, MRMSrcReg, (outs GR64:$dst), (ins GR64:$src),
+def VMWRITE64rr : I<0x79, MRMSrcReg, (outs), (ins GR64:$dst, GR64:$src),
   "vmwrite{q}\t{$src, $dst|$dst, $src}", []>, TB, Requires<[In64BitMode]>;
-def VMWRITE32rr : I<0x79, MRMSrcReg, (outs GR32:$dst), (ins GR32:$src),
+def VMWRITE32rr : I<0x79, MRMSrcReg, (outs), (ins GR32:$dst, GR32:$src),
   "vmwrite{l}\t{$src, $dst|$dst, $src}", []>, TB, Requires<[Not64BitMode]>;
 
 let mayLoad = 1 in {
-def VMWRITE64rm : I<0x79, MRMSrcMem, (outs GR64:$dst), (ins i64mem:$src),
+def VMWRITE64rm : I<0x79, MRMSrcMem, (outs), (ins GR64:$dst, i64mem:$src),
   "vmwrite{q}\t{$src, $dst|$dst, $src}", []>, TB, Requires<[In64BitMode]>;
-def VMWRITE32rm : I<0x79, MRMSrcMem, (outs GR32:$dst), (ins i32mem:$src),
+def VMWRITE32rm : I<0x79, MRMSrcMem, (outs), (ins GR32:$dst, i32mem:$src),
   "vmwrite{l}\t{$src, $dst|$dst, $src}", []>, TB, Requires<[Not64BitMode]>;
 } // mayLoad
+} // Defs = [EFLAGS], hasSideEffects = 1
 
 // 0F 01 C4
 def VMXOFF : I<0x01, MRM_C4, (outs), (ins), "vmxoff", []>, TB;

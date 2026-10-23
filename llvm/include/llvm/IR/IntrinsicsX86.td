@@ -38,6 +38,22 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
+// VMCS access. The status is 0 on VMsucceed, 1 on VMfailValid (ZF), and
+// 2 on VMfailInvalid (CF). The memory destination of VMREAD is written by
+// the instruction itself, only on success; it must not become an eager store.
+// The unsuffixed forms require 64-bit mode; the 32 forms require 32-bit mode.
+let TargetPrefix = "x86" in {
+  def int_x86_vmread : Intrinsic<[llvm_i8_ty],
+                                [llvm_i64_ty, llvm_ptr_ty], []>;
+  def int_x86_vmread32 : Intrinsic<[llvm_i8_ty],
+                                  [llvm_i32_ty, llvm_ptr_ty], []>;
+  def int_x86_vmwrite : Intrinsic<[llvm_i8_ty],
+                                 [llvm_i64_ty, llvm_i64_ty], []>;
+  def int_x86_vmwrite32 : Intrinsic<[llvm_i8_ty],
+                                   [llvm_i32_ty, llvm_i32_ty], []>;
+}
+
+//===----------------------------------------------------------------------===//
 // FLAGS.
 let TargetPrefix = "x86" in {
   def int_x86_flags_read_u32 : ClangBuiltin<"__builtin_ia32_readeflags_u32">,
