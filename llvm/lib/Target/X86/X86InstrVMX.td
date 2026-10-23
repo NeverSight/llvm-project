@@ -39,22 +39,25 @@ def INVVPID64_EVEX : I<0xF1, MRMSrcMem, (outs), (ins GR64:$src1, i128mem:$src2),
 
 // 0F 01 C1
 def VMCALL : I<0x01, MRM_C1, (outs), (ins), "vmcall", []>, TB;
+let Defs = [EFLAGS], hasSideEffects = 1, mayLoad = 1 in
 def VMCLEARm : I<0xC7, MRM6m, (outs), (ins i64mem:$vmcs),
   "vmclear\t$vmcs", []>, TB, PD;
 
 // OF 01 D4
 def VMFUNC : I<0x01, MRM_D4, (outs), (ins), "vmfunc", []>, TB;
 
+let Defs = [EFLAGS], hasSideEffects = 1 in {
 // 0F 01 C2
 def VMLAUNCH : I<0x01, MRM_C2, (outs), (ins), "vmlaunch", []>, TB;
 
 // 0F 01 C3
 def VMRESUME : I<0x01, MRM_C3, (outs), (ins), "vmresume", []>, TB;
+let mayLoad = 1 in
 def VMPTRLDm : I<0xC7, MRM6m, (outs), (ins i64mem:$vmcs),
   "vmptrld\t$vmcs", []>, TB;
+let mayStore = 1 in
 def VMPTRSTm : I<0xC7, MRM7m, (outs), (ins i64mem:$vmcs),
   "vmptrst\t$vmcs", []>, TB;
-let Defs = [EFLAGS], hasSideEffects = 1 in {
 def VMREAD64rr : I<0x78, MRMDestReg, (outs GR64:$dst), (ins GR64:$src),
   "vmread{q}\t{$src, $dst|$dst, $src}", []>, TB, Requires<[In64BitMode]>;
 def VMREAD32rr : I<0x78, MRMDestReg, (outs GR32:$dst), (ins GR32:$src),
@@ -78,10 +81,11 @@ def VMWRITE64rm : I<0x79, MRMSrcMem, (outs), (ins GR64:$dst, i64mem:$src),
 def VMWRITE32rm : I<0x79, MRMSrcMem, (outs), (ins GR32:$dst, i32mem:$src),
   "vmwrite{l}\t{$src, $dst|$dst, $src}", []>, TB, Requires<[Not64BitMode]>;
 } // mayLoad
-} // Defs = [EFLAGS], hasSideEffects = 1
 
 // 0F 01 C4
 def VMXOFF : I<0x01, MRM_C4, (outs), (ins), "vmxoff", []>, TB;
+let mayLoad = 1 in
 def VMXON : I<0xC7, MRM6m, (outs), (ins i64mem:$vmxon),
   "vmxon\t$vmxon", []>, TB, XS;
+} // Defs = [EFLAGS], hasSideEffects = 1
 } // SchedRW

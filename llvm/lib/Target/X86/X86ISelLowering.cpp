@@ -28330,7 +28330,22 @@ bool X86::isExtendedSwiftAsyncFrameSupported(const X86Subtarget &Subtarget,
 }
 
 // Capture both completion flags before any arithmetic can overwrite EFLAGS.
-// VMCS accesses remain chained even when their returned status is unused.
+// VMX operations remain chained even when their returned status is unused.
+static SDValue getVMXCompletion(SDNode *Access, const SDLoc &DL,
+                                SelectionDAG &DAG) {
+  auto *ZF = DAG.getMachineNode(
+      X86::SETCCr, DL, DAG.getVTList(MVT::i8, MVT::Glue),
+      {DAG.getTargetConstant(X86::COND_E, DL, MVT::i8), SDValue(Access, 1)});
+  auto *CF = DAG.getMachineNode(X86::SETCCr, DL, MVT::i8,
+                                DAG.getTargetConstant(X86::COND_B, DL, MVT::i8),
+                                SDValue(ZF, 1));
+  SDValue Status =
+      DAG.getNode(ISD::OR, DL, MVT::i8, SDValue(ZF, 0),
+                  DAG.getNode(ISD::SHL, DL, MVT::i8, SDValue(CF, 0),
+                              DAG.getConstant(1, DL, MVT::i8)));
+  return DAG.getMergeValues({Status, SDValue(Access, 0)}, DL);
+}
+
 static SDValue lowerVMCSAccess(SDValue Op, const X86Subtarget &Subtarget,
                                SelectionDAG &DAG) {
   const unsigned ID = Op.getConstantOperandVal(1);
@@ -28362,17 +28377,52 @@ static SDValue lowerVMCSAccess(SDValue Op, const X86Subtarget &Subtarget,
   Operands.push_back(Op.getOperand(0));
   auto *Access = DAG.getMachineNode(
       Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue), Operands);
-  auto *ZF = DAG.getMachineNode(
-      X86::SETCCr, DL, DAG.getVTList(MVT::i8, MVT::Glue),
-      {DAG.getTargetConstant(X86::COND_E, DL, MVT::i8), SDValue(Access, 1)});
-  auto *CF = DAG.getMachineNode(X86::SETCCr, DL, MVT::i8,
-                                DAG.getTargetConstant(X86::COND_B, DL, MVT::i8),
-                                SDValue(ZF, 1));
-  SDValue Status =
-      DAG.getNode(ISD::OR, DL, MVT::i8, SDValue(ZF, 0),
-                  DAG.getNode(ISD::SHL, DL, MVT::i8, SDValue(CF, 0),
-                              DAG.getConstant(1, DL, MVT::i8)));
-  return DAG.getMergeValues({Status, SDValue(Access, 0)}, DL);
+  return getVMXCompletion(Access, DL, DAG);
+}
+
+static SDValue lowerVMXManagement(SDValue Op, const X86Subtarget &Subtarget,
+                                  SelectionDAG &DAG) {
+  unsigned Opcode;
+  switch (Op.getConstantOperandVal(1)) {
+  case Intrinsic::x86_vmclear:
+    Opcode = X86::VMCLEARm;
+    break;
+  case Intrinsic::x86_vmlaunch:
+    Opcode = X86::VMLAUNCH;
+    break;
+  case Intrinsic::x86_vmptrld:
+    Opcode = X86::VMPTRLDm;
+    break;
+  case Intrinsic::x86_vmptrst:
+    Opcode = X86::VMPTRSTm;
+    break;
+  case Intrinsic::x86_vmresume:
+    Opcode = X86::VMRESUME;
+    break;
+  case Intrinsic::x86_vmxoff:
+    Opcode = X86::VMXOFF;
+    break;
+  case Intrinsic::x86_vmxon:
+    Opcode = X86::VMXON;
+    break;
+  default:
+    llvm_unreachable("unexpected VMX management intrinsic");
+  }
+  const SDLoc DL(Op);
+  SmallVector<SDValue, 6> Operands;
+  if (Op.getNumOperands() == 3) {
+    const MVT PtrVT = Subtarget.is64Bit() ? MVT::i64 : MVT::i32;
+    Operands = {Op.getOperand(2), DAG.getTargetConstant(1, DL, MVT::i8),
+                DAG.getRegister(0, PtrVT),
+                DAG.getTargetConstant(0, DL, MVT::i32),
+                DAG.getRegister(0, MVT::i16)};
+  }
+  Operands.push_back(Op.getOperand(0));
+  auto *Access = DAG.getMachineNode(
+      Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue), Operands);
+  if (Op.getOpcode() == ISD::INTRINSIC_VOID)
+    return SDValue(Access, 0);
+  return getVMXCompletion(Access, DL, DAG);
 }
 
 static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
@@ -28387,6 +28437,15 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_vmwrite:
     case Intrinsic::x86_vmwrite32:
       return lowerVMCSAccess(Op, Subtarget, DAG);
+
+    case Intrinsic::x86_vmclear:
+    case Intrinsic::x86_vmlaunch:
+    case Intrinsic::x86_vmptrld:
+    case Intrinsic::x86_vmptrst:
+    case Intrinsic::x86_vmresume:
+    case Intrinsic::x86_vmxoff:
+    case Intrinsic::x86_vmxon:
+      return lowerVMXManagement(Op, Subtarget, DAG);
 
     case Intrinsic::swift_async_context_addr: {
       SDLoc dl(Op);

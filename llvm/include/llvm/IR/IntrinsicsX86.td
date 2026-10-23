@@ -51,6 +51,18 @@ let TargetPrefix = "x86" in {
                                  [llvm_i64_ty, llvm_i64_ty], []>;
   def int_x86_vmwrite32 : Intrinsic<[llvm_i8_ty],
                                    [llvm_i32_ty, llvm_i32_ty], []>;
+
+  // VMX management uses an m64 physical-address operand in either mode. Keep
+  // that access in the instruction, rather than loading the address in IR.
+  def int_x86_vmclear : Intrinsic<[llvm_i8_ty], [llvm_ptr_ty], []>;
+  def int_x86_vmptrld : Intrinsic<[llvm_i8_ty], [llvm_ptr_ty], []>;
+  def int_x86_vmptrst : Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_vmxon : Intrinsic<[llvm_i8_ty], [llvm_ptr_ty], []>;
+  def int_x86_vmxoff : Intrinsic<[], [], []>;
+  // Successful VM entry transfers control through the VMCS. These return a
+  // completion status only when the instruction falls through on VMfail.
+  def int_x86_vmlaunch : Intrinsic<[llvm_i8_ty], [], []>;
+  def int_x86_vmresume : Intrinsic<[llvm_i8_ty], [], []>;
 }
 
 //===----------------------------------------------------------------------===//
