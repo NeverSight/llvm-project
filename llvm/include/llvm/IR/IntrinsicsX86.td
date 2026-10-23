@@ -52,6 +52,19 @@ let TargetPrefix = "x86" in {
   def int_x86_vmwrite32 : Intrinsic<[llvm_i8_ty],
                                    [llvm_i32_ty, llvm_i32_ty], []>;
 
+  // Register VMREAD returns {value, status}. On VMfail, value is the supplied
+  // prior destination; no memory access or undefined SSA value is introduced.
+  def int_x86_vmread_reg : Intrinsic<[llvm_i64_ty, llvm_i8_ty],
+                                    [llvm_i64_ty, llvm_i64_ty], []>;
+  def int_x86_vmread_reg32 : Intrinsic<[llvm_i32_ty, llvm_i8_ty],
+                                      [llvm_i32_ty, llvm_i32_ty], []>;
+  // VMWRITE owns the source read and its fault ordering. An ordinary load
+  // followed by the register API is not equivalent to the memory instruction.
+  def int_x86_vmwrite_mem : Intrinsic<[llvm_i8_ty],
+                                     [llvm_i64_ty, llvm_ptr_ty], []>;
+  def int_x86_vmwrite_mem32 : Intrinsic<[llvm_i8_ty],
+                                       [llvm_i32_ty, llvm_ptr_ty], []>;
+
   // VMX management uses an m64 physical-address operand in either mode. Keep
   // that access in the instruction, rather than loading the address in IR.
   def int_x86_vmclear : Intrinsic<[llvm_i8_ty], [llvm_ptr_ty], []>;

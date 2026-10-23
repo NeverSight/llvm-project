@@ -28335,10 +28335,11 @@ bool X86::isExtendedSwiftAsyncFrameSupported(const X86Subtarget &Subtarget,
 // Capture both completion flags before any arithmetic can overwrite EFLAGS.
 // VMX operations remain chained even when their returned status is unused.
 static SDValue getVMXCompletion(SDNode *Access, const SDLoc &DL,
-                                SelectionDAG &DAG) {
-  auto *ZF = DAG.getMachineNode(
-      X86::SETCCr, DL, DAG.getVTList(MVT::i8, MVT::Glue),
-      {DAG.getTargetConstant(X86::COND_E, DL, MVT::i8), SDValue(Access, 1)});
+                                SelectionDAG &DAG, unsigned ChainIndex = 0) {
+  auto *ZF =
+      DAG.getMachineNode(X86::SETCCr, DL, DAG.getVTList(MVT::i8, MVT::Glue),
+                         {DAG.getTargetConstant(X86::COND_E, DL, MVT::i8),
+                          SDValue(Access, ChainIndex + 1)});
   auto *CF = DAG.getMachineNode(X86::SETCCr, DL, MVT::i8,
                                 DAG.getTargetConstant(X86::COND_B, DL, MVT::i8),
                                 SDValue(ZF, 1));
@@ -28346,13 +28347,15 @@ static SDValue getVMXCompletion(SDNode *Access, const SDLoc &DL,
       DAG.getNode(ISD::OR, DL, MVT::i8, SDValue(ZF, 0),
                   DAG.getNode(ISD::SHL, DL, MVT::i8, SDValue(CF, 0),
                               DAG.getConstant(1, DL, MVT::i8)));
-  return DAG.getMergeValues({Status, SDValue(Access, 0)}, DL);
+  return DAG.getMergeValues({Status, SDValue(Access, ChainIndex)}, DL);
 }
 
 static SDValue lowerVMCSAccess(SDValue Op, const X86Subtarget &Subtarget,
                                SelectionDAG &DAG) {
   const unsigned ID = Op.getConstantOperandVal(1);
-  const bool Is64 = ID == Intrinsic::x86_vmread || ID == Intrinsic::x86_vmwrite;
+  const bool Is64 =
+      ID == Intrinsic::x86_vmread || ID == Intrinsic::x86_vmwrite ||
+      ID == Intrinsic::x86_vmread_reg || ID == Intrinsic::x86_vmwrite_mem;
   const bool IsRead =
       ID == Intrinsic::x86_vmread || ID == Intrinsic::x86_vmread32;
   if (Is64 != Subtarget.is64Bit())
@@ -28361,18 +28364,34 @@ static SDValue lowerVMCSAccess(SDValue Op, const X86Subtarget &Subtarget,
 
   const SDLoc DL(Op);
   const MVT PtrVT = Is64 ? MVT::i64 : MVT::i32;
+  if (ID == Intrinsic::x86_vmread_reg || ID == Intrinsic::x86_vmread_reg32) {
+    auto *Access =
+        DAG.getMachineNode(Is64 ? X86::VMREAD64rr : X86::VMREAD32rr, DL,
+                           DAG.getVTList(PtrVT, MVT::Other, MVT::Glue),
+                           {Op.getOperand(2), Op.getOperand(0)});
+    SDValue Completion = getVMXCompletion(Access, DL, DAG, 1);
+    SDValue Success = DAG.getSetCC(DL, MVT::i8, Completion,
+                                   DAG.getConstant(0, DL, MVT::i8), ISD::SETEQ);
+    SDValue Value =
+        DAG.getSelect(DL, PtrVT, Success, SDValue(Access, 0), Op.getOperand(3));
+    return DAG.getMergeValues({Value, Completion, Completion.getValue(1)}, DL);
+  }
   SmallVector<SDValue, 8> Operands;
   unsigned Opcode;
-  if (IsRead) {
-    Opcode = Is64 ? X86::VMREAD64mr : X86::VMREAD32mr;
+  if (IsRead || ID == Intrinsic::x86_vmwrite_mem ||
+      ID == Intrinsic::x86_vmwrite_mem32) {
+    Opcode = IsRead ? (Is64 ? X86::VMREAD64mr : X86::VMREAD32mr)
+                    : (Is64 ? X86::VMWRITE64rm : X86::VMWRITE32rm);
     // Using the memory instruction is essential: a failed VMREAD leaves its
     // destination unchanged and does not perform a separate C/IR store.
-    Operands = {Op.getOperand(3),
-                DAG.getTargetConstant(1, DL, MVT::i8),
+    Operands = {Op.getOperand(3), DAG.getTargetConstant(1, DL, MVT::i8),
                 DAG.getRegister(0, PtrVT),
                 DAG.getTargetConstant(0, DL, MVT::i32),
-                DAG.getRegister(0, MVT::i16),
-                Op.getOperand(2)};
+                DAG.getRegister(0, MVT::i16)};
+    if (IsRead)
+      Operands.push_back(Op.getOperand(2));
+    else
+      Operands.insert(Operands.begin(), Op.getOperand(2));
   } else {
     Opcode = Is64 ? X86::VMWRITE64rr : X86::VMWRITE32rr;
     Operands = {Op.getOperand(2), Op.getOperand(3)};
@@ -28775,6 +28794,10 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_vmread32:
     case Intrinsic::x86_vmwrite:
     case Intrinsic::x86_vmwrite32:
+    case Intrinsic::x86_vmread_reg:
+    case Intrinsic::x86_vmread_reg32:
+    case Intrinsic::x86_vmwrite_mem:
+    case Intrinsic::x86_vmwrite_mem32:
       return lowerVMCSAccess(Op, Subtarget, DAG);
 
     case Intrinsic::x86_vmclear:
@@ -36475,6 +36498,8 @@ void X86TargetLowering::ReplaceNodeResults(SDNode *N,
     case Intrinsic::x86_readcr:
     case Intrinsic::x86_readdr:
       report_fatal_error("CR/DR intrinsic does not match the target code mode");
+    case Intrinsic::x86_vmread_reg:
+      report_fatal_error("64-bit VMCS intrinsic requires 64-bit mode");
     case Intrinsic::x86_rdpru:
       expandIntrinsicWChainHelper(N, dl, DAG, X86::RDPRU, X86::ECX, Subtarget,
         Results);
