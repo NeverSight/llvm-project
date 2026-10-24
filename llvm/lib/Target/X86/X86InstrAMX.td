@@ -539,3 +539,13 @@ let Predicates = [HasAMXTF32, In64BitMode] in {
     }
   } // SchedRW = [WriteSystem]
 } // HasAMXTF32
+
+// Preserve address width and forced encoding until MC lowering, after EVEX
+// compression. A physical programming model cannot share managed tile values.
+let SchedRW = [WriteSystem], hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    Defs = [TMM0, TMM1, TMM2, TMM3, TMM4, TMM5, TMM6, TMM7] in {
+  def AMX_MEMORY_NATIVE : PseudoI<(outs),
+      (ins i32imm:$descriptor, i8mem:$address), []>;
+  def AMX_ROW_NATIVE : PseudoI<(outs VR512:$dst),
+      (ins i32imm:$descriptor, GR32:$row), []>;
+}

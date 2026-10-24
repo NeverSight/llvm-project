@@ -6051,6 +6051,40 @@ let TargetPrefix = "x86" in {
 // AMX - Intel AMX extensions
 
 let TargetPrefix = "x86" in {
+  // Explicit native offsets, address size, segment byte and encoding (0 VEX,
+  // 1 EVEX). The physical bank and fault/restart state stay instruction-owned.
+  def int_x86_ldtilecfg_address : Intrinsic<[], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_sttilecfg_address : Intrinsic<[], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_tileloadd64_address : Intrinsic<[], [llvm_i8_ty, llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>]>;
+  def int_x86_tileloaddt164_address : Intrinsic<[], [llvm_i8_ty, llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>]>;
+  def int_x86_tileloaddrs64_address : Intrinsic<[], [llvm_i8_ty, llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>]>;
+  def int_x86_tileloaddrst164_address : Intrinsic<[], [llvm_i8_ty, llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>]>;
+  def int_x86_tilestored64_address : Intrinsic<[], [llvm_i8_ty, llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>]>;
+  def int_x86_tcvtrowd2ps_reg : Intrinsic<[llvm_v16f32_ty],
+      [llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_tcvtrowps2bf16h_reg : Intrinsic<[llvm_v32bf16_ty],
+      [llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_tcvtrowps2bf16l_reg : Intrinsic<[llvm_v32bf16_ty],
+      [llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_tcvtrowps2phh_reg : Intrinsic<[llvm_v32f16_ty],
+      [llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_tcvtrowps2phl_reg : Intrinsic<[llvm_v32f16_ty],
+      [llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_tilemovrow_reg : Intrinsic<[llvm_v16i32_ty],
+      [llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>]>;
   def int_x86_ldtilecfg : ClangBuiltin<"__builtin_ia32_tile_loadconfig">,
               Intrinsic<[], [llvm_ptr_ty], []>;
   def int_x86_sttilecfg : ClangBuiltin<"__builtin_ia32_tile_storeconfig">,

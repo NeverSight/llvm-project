@@ -1272,6 +1272,10 @@ inline bool canUseApxExtendedReg(const MCInstrDesc &Desc) {
       // because we are not sure what instruction it will become.
       // FIXME: Could we improve it in X86ExpandPseudo?
       return false;
+    case X86::AMX_ROW_NATIVE:
+      // The explicit row interface always expands to an EVEX instruction.
+      // Its fixed R16D selector must survive register-class verification.
+      return true;
     case X86::MOV32r0:
     case X86::MOV32r1:
     case X86::MOV32r_1:
