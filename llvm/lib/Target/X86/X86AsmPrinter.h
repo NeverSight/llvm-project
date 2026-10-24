@@ -106,6 +106,7 @@ private:
   // the number of NOPs used for stackmap padding.
   void EmitAndCountInstruction(MCInst &Inst);
   bool emitRepStringState(const MachineInstr *MI);
+  bool emitBoundedLeafState(const MachineInstr *MI);
   void emitSEHStateWrite(const MachineInstr &MI);
   SmallVector<const MCSymbol *, 8> SEHStateWriteSymbols;
   void LowerSTACKMAP(const MachineInstr &MI);

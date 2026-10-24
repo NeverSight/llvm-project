@@ -2717,6 +2717,56 @@ bool hasJumpTableInfoInBlock(const llvm::MachineInstr *MI) {
   return false;
 }
 
+bool X86AsmPrinter::emitBoundedLeafState(const MachineInstr *MI) {
+  bool User, Wide;
+  switch (MI->getOpcode()) {
+  case X86::ENCLU_STATE64:
+    User = true;
+    Wide = true;
+    break;
+  case X86::ENCLU_STATE32:
+    User = true;
+    Wide = false;
+    break;
+  case X86::GETSEC_STATE64:
+    User = false;
+    Wide = true;
+    break;
+  case X86::GETSEC_STATE32:
+    User = false;
+    Wide = false;
+    break;
+  default:
+    return false;
+  }
+  if (MI->getNumExplicitOperands() || Wide != Subtarget->is64Bit() ||
+      (!Wide && !Subtarget->is32Bit()) || !Subtarget->canUseLAHFSAHF() ||
+      (User && !Subtarget->hasSGX()))
+    report_fatal_error("invalid bounded leaf state operands or target");
+  SMShadowTracker.emitShadowPadding(*OutStreamer, getSubtargetInfo());
+  NoAutoPaddingScope NoPadScope(*OutStreamer);
+  const unsigned AX = Wide ? X86::RAX : X86::EAX;
+  const unsigned SI = Wide ? X86::RSI : X86::ESI;
+  const unsigned Move = Wide ? X86::MOV64rr : X86::MOV32rr;
+  EmitAndCountInstruction(MCInstBuilder(Move).addReg(SI).addReg(AX));
+  EmitAndCountInstruction(
+      MCInstBuilder(X86::MOV32rr).addReg(X86::EAX).addReg(X86::EDI));
+  EmitAndCountInstruction(MCInstBuilder(X86::ADD8i8).addImm(127));
+  EmitAndCountInstruction(MCInstBuilder(X86::SAHF));
+  EmitAndCountInstruction(MCInstBuilder(Move).addReg(AX).addReg(SI));
+  EmitAndCountInstruction(
+      MCInstBuilder(Wide ? (User ? X86::ENCLU : X86::GETSEC)
+                         : (User ? X86::ENCLU32 : X86::GETSEC32)));
+  EmitAndCountInstruction(MCInstBuilder(Move).addReg(SI).addReg(AX));
+  EmitAndCountInstruction(MCInstBuilder(X86::LAHF));
+  EmitAndCountInstruction(
+      MCInstBuilder(X86::SETCCr).addReg(X86::AL).addImm(X86::COND_O));
+  EmitAndCountInstruction(
+      MCInstBuilder(X86::MOV16rr).addReg(X86::DI).addReg(X86::AX));
+  EmitAndCountInstruction(MCInstBuilder(Move).addReg(AX).addReg(SI));
+  return true;
+}
+
 bool X86AsmPrinter::emitRepStringState(const MachineInstr *MI) {
   using X86::RepStringKind;
   RepStringKind Kind;
@@ -2855,6 +2905,8 @@ bool X86AsmPrinter::emitRepStringState(const MachineInstr *MI) {
 }
 
 void X86AsmPrinter::emitInstruction(const MachineInstr *MI) {
+  if (emitBoundedLeafState(MI))
+    return;
   if (emitRepStringState(MI))
     return;
   if (MI->getOpcode() == X86::MPX_BRANCH) {

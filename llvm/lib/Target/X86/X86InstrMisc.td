@@ -299,6 +299,22 @@ def BSR64rm  : RI<0xBD, MRMSrcMem, (outs GR64:$dst), (ins GR64:$fallback, i64mem
                   TB, Sched<[WriteBSRLd]>;
 } // Defs = [EFLAGS]
 
+// Bounded SGX/SMX leaves with explicit incoming and outgoing arithmetic flags.
+// SI preserves AX while LAHF/SAHF use AH; DI carries the packed flag word.
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    SchedRW = [WriteMicrocoded] in {
+  let Uses = [RAX,RBX,RCX,RDX,RDI],
+      Defs = [RAX,RBX,RCX,RDX,RDI,RSI,EFLAGS] in {
+    def ENCLU_STATE64 : PseudoI<(outs), (ins), []>;
+    def GETSEC_STATE64 : PseudoI<(outs), (ins), []>;
+  }
+  let Uses = [EAX,EBX,ECX,EDX,EDI],
+      Defs = [EAX,EBX,ECX,EDX,EDI,ESI,EFLAGS] in {
+    def ENCLU_STATE32 : PseudoI<(outs), (ins), []>;
+    def GETSEC_STATE32 : PseudoI<(outs), (ins), []>;
+  }
+}
+
 // Explicit REP execution is one scheduling unit through MC emission. The
 // temporary DF window contains no compiler-generated memory accesses. Unlike
 // ordinary string records these define full natural-width result registers.

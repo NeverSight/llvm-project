@@ -54,6 +54,7 @@
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/X86AMXNative.h"
 #include "llvm/IR/X86MpxState.h"
+#include "llvm/IR/X86NativeArithmeticFlags.h"
 #include "llvm/IR/X86NativeMemoryAddress.h"
 #include "llvm/IR/X86RepStringState.h"
 #include "llvm/IR/X86SgxIntrinsics.h"
@@ -28427,6 +28428,69 @@ static SDValue lowerSGXFallthrough(SDValue Op, const X86Subtarget &Subtarget,
   return DAG.getMergeValues(Results, DL);
 }
 
+// Restore explicit arithmetic flags inside the same scheduling unit as the
+// selected leaf. No spill, padding or compiler arithmetic may enter that
+// window.
+static SDValue lowerBoundedLeafState(SDValue Op, const X86Subtarget &Subtarget,
+                                     SelectionDAG &DAG) {
+  const unsigned ID = Op.getConstantOperandVal(1);
+  const bool User = ID == Intrinsic::x86_enclu_bounded_state ||
+                    ID == Intrinsic::x86_enclu_bounded_state32;
+  const bool Wide = ID == Intrinsic::x86_enclu_bounded_state ||
+                    ID == Intrinsic::x86_getsec_bounded_state;
+  if (Wide != Subtarget.is64Bit() || (!Wide && !Subtarget.is32Bit()))
+    report_fatal_error(
+        "bounded leaf state does not match the target code mode");
+  if (User && !Subtarget.hasSGX())
+    report_fatal_error("bounded ENCLU state requires the sgx target feature");
+  if (!Subtarget.canUseLAHFSAHF())
+    report_fatal_error("bounded leaf state requires the sahf target feature");
+  const auto *Control = dyn_cast<ConstantSDNode>(Op.getOperand(2));
+  if (!Control || !(User ? X86::isBoundedEncluLeaf(Control->getZExtValue())
+                         : X86::isBoundedGetsecLeaf(Control->getZExtValue())))
+    report_fatal_error(
+        "bounded leaf state requires a constant fallthrough leaf");
+  const SDLoc DL(Op);
+  const MVT Word = Wide ? MVT::i64 : MVT::i32;
+  const unsigned Registers[] = {
+      Wide ? X86::RAX : X86::EAX, Wide ? X86::RBX : X86::EBX,
+      Wide ? X86::RCX : X86::ECX, Wide ? X86::RDX : X86::EDX};
+  SDValue Chain = Op.getOperand(0), Glue;
+  auto SetRegister = [&](unsigned Register, SDValue Value) {
+    Chain = DAG.getCopyToReg(Chain, DL, Register, Value, Glue);
+    Glue = Chain.getValue(1);
+  };
+  for (unsigned I = 0; I != 4; ++I)
+    SetRegister(Registers[I],
+                I == 0 ? DAG.getConstant(Control->getAPIntValue(), DL, Word)
+                       : Op.getOperand(I + 2));
+  auto Flags = DAG.getNode(
+      ISD::AND, DL, MVT::i16, Op.getOperand(6),
+      DAG.getConstant(X86::NativeArithmeticFlagsMask, DL, MVT::i16));
+  SetRegister(Wide ? X86::RDI : X86::EDI, DAG.getZExtOrTrunc(Flags, DL, Word));
+  const unsigned Opcode =
+      Wide ? (User ? X86::ENCLU_STATE64 : X86::GETSEC_STATE64)
+           : (User ? X86::ENCLU_STATE32 : X86::GETSEC_STATE32);
+  auto *Access = DAG.getMachineNode(
+      Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue), {Chain, Glue});
+  Chain = SDValue(Access, 0);
+  Glue = SDValue(Access, 1);
+  auto GetRegister = [&](unsigned Register, MVT Type) {
+    auto Value = DAG.getCopyFromReg(Chain, DL, Register, Type, Glue);
+    Chain = Value.getValue(1);
+    Glue = Value.getValue(2);
+    return Value;
+  };
+  SmallVector<SDValue, 6> Results;
+  for (const auto Register : Registers)
+    Results.push_back(GetRegister(Register, Word));
+  Results.push_back(DAG.getNode(
+      ISD::AND, DL, MVT::i16, GetRegister(X86::DI, MVT::i16),
+      DAG.getConstant(X86::NativeArithmeticFlagsMask, DL, MVT::i16)));
+  Results.push_back(Chain);
+  return DAG.getMergeValues(Results, DL);
+}
+
 // Bound the leaf before transporting register state. GETSEC itself owns all
 // implicit accesses, cross-processor effects and privilege/feature checks.
 static SDValue lowerGetsecBounded(SDValue Op, const X86Subtarget &Subtarget,
@@ -30446,6 +30510,11 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_getsec_bounded:
     case Intrinsic::x86_getsec_bounded32:
       return lowerGetsecBounded(Op, Subtarget, DAG);
+    case Intrinsic::x86_enclu_bounded_state:
+    case Intrinsic::x86_enclu_bounded_state32:
+    case Intrinsic::x86_getsec_bounded_state:
+    case Intrinsic::x86_getsec_bounded_state32:
+      return lowerBoundedLeafState(Op, Subtarget, DAG);
 
     case Intrinsic::x86_verr_reg:
     case Intrinsic::x86_verr_mem:
@@ -38200,6 +38269,10 @@ void X86TargetLowering::ReplaceNodeResults(SDNode *N,
     case Intrinsic::x86_str_reg64:
     case Intrinsic::x86_smsw_reg64:
       report_fatal_error("64-bit descriptor state result requires 64-bit mode");
+    case Intrinsic::x86_enclu_bounded_state:
+    case Intrinsic::x86_getsec_bounded_state:
+      report_fatal_error(
+          "bounded leaf state does not match the target code mode");
     case Intrinsic::x86_getsec_bounded:
       report_fatal_error(
           "GETSEC intrinsic does not match the target code mode");

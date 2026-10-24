@@ -555,6 +555,29 @@ let TargetPrefix = "x86" in {
       [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
       [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
       [ImmArg<ArgIndex<0>>]>;
+
+  // Explicit arithmetic flags on entry and completion. The indivisible
+  // operation restores CF/PF/AF/ZF/SF/OF before the native instruction, then
+  // captures all six before compiler arithmetic. The i16 status uses mask
+  // 0xd501 (LAHF in AH, OF in bit zero); other flag/state bits are unchanged.
+  // Leaf admission and full natural-width register transport match the
+  // bounded interfaces above. These are not nonlocal continuation APIs.
+  def int_x86_enclu_bounded_state : Intrinsic<
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i16_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i16_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_enclu_bounded_state32 : Intrinsic<
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i16_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i16_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_getsec_bounded_state : Intrinsic<
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i16_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i16_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_getsec_bounded_state32 : Intrinsic<
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i16_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i16_ty],
+      [ImmArg<ArgIndex<0>>]>;
 }
 
 //===----------------------------------------------------------------------===//
