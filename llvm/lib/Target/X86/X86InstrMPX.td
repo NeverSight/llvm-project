@@ -85,4 +85,5 @@ let SchedRW = [WriteSystem], hasSideEffects = 1, mayLoad = 1, mayStore = 1,
   def MPX_STATE64 : PseudoI<(outs),
       (ins i32imm:$descriptor, GR64:$base, GR64:$index), []>;
   def MPX_MOVE_BOUNDS : PseudoI<(outs), (ins i32imm:$descriptor), []>;
+  def MPX_BRANCH : PseudoI<(outs), (ins i32imm:$kind), []>;
 }

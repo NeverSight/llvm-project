@@ -300,6 +300,11 @@ let TargetPrefix = "x86" in {
 // BNDLDX/STX take base+displacement and the unscaled pointer-comparison value.
 // They access the bounds tables, not the supplied pointer address.
 let TargetPrefix = "x86" in {
+  // Original near-transfer bounds effect: 0 initializes only when MPX is
+  // enabled and BNDPRESERVE=0; 1 preserves. Compiler-created transfers in
+  // either function preserve bounds. These APIs support 32- and 64-bit mode.
+  def int_x86_bnd_branch : Intrinsic<[], [llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>]>;
   def int_x86_bndmov_reg : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty],
       [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>;
   def int_x86_bndcl_reg : Intrinsic<[], [llvm_i32_ty, llvm_i64_ty],

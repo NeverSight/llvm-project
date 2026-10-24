@@ -17,6 +17,9 @@ indices in [0, 3]. ``bits`` and ``segment`` are constant ``i32`` controls.
    * - IR name
      - Arguments
      - Native effect
+   * - ``llvm.x86.bnd.branch``
+     - ``i32 kind`` (constant 0 or 1)
+     - Original conditional initialization (0) or preservation (1); both code modes.
    * - ``llvm.x86.bndmov.reg``
      - ``i32 bank, i32 source``
      - Copy a bounds register; available in both code modes.
@@ -36,7 +39,7 @@ indices in [0, 3]. ``bits`` and ``segment`` are constant ``i32`` controls.
      - ``i32 bank, word translation_base, word pointer_value, i32 bits, i32 segment``
      - Access a bounds table using base+displacement and an unscaled pointer comparison value.
 
-Append ``32`` to each name except ``bndmov.reg`` for i386, replacing ``word``
+Append ``32`` to each name except ``bndmov.reg`` and ``bnd.branch`` for i386, replacing ``word``
 with ``i32``. The code modes must match the API; code16 is rejected.
 The allowed address encodings are 32 or 64 in long mode, and 32 in i386.
 Segment controls are 0, 0x26, 0x2e, 0x36, 0x3e, 0x64 or 0x65.
@@ -54,15 +57,28 @@ receive the BND/F2 prefix, preserving bounds when BNDPRESERVE=0. Callees and
 inline assembly still own their architectural side effects. This is an ambient
 state interface, not an ABI for passing bounds through arbitrary callees. XRay
 sleds are rejected because their runtime byte-patching contract cannot accept
-the added prefixes. Software lifting must separately model original branches'
-BNDINIT effects; preserving compiler-created branches does not supply that model.
+the added prefixes.
+
+Software lifting must separately model original branches' BNDINIT effects.
+``bnd.branch(0)`` emits an unprefixed E9 jump to the next instruction: the CPU
+initializes BND0--BND3 only if MPX is enabled and BNDPRESERVE is clear. It leaves
+GPRs and arithmetic flags untouched. Forced ``disp32`` prevents assembly
+roundtrips from shortening E9 to EB, which would lose that effect.
+``bnd.branch(1)`` establishes ambient-bank preservation in a function even when
+it contains no other MPX intrinsic. Both remain ordered effects in optimized
+IR. A lifter must select the kind from the original encoding and preserve its
+position relative to potentially faulting operand accesses; the intrinsic does
+not reconstruct that ordering or transport a complete machine-state continuation.
 
 Qualification
 -------------
 
 ``CodeGen/X86/mpx-state-intrinsics.ll`` checks both modes, ordering, controls,
 object formats and the XRay boundary. ``MC/X86/mpx-native-encoding.s`` checks
-native bytes and disassembly. NeverC's ``tests/verify-mpx-encoding.py`` adds
+native bytes and disassembly. ``CodeGen/X86/mpx-branch-intrinsics.ll`` covers
+branch-only functions, initialization through CFG folding, both code modes,
+assembly roundtrips, all three object formats and invalid controls.
+NeverC's ``tests/verify-mpx-encoding.py`` adds
 independent opcode/prefix checks and controlled GPR/ABI transport, including
 high address bits with 67H, over 520 long-mode or 268 i386 combinations at
 O0/O2 for ELF, COFF and Mach-O. It does not execute MPX semantics.
@@ -71,7 +87,11 @@ NeverC's ``tests/verify-mpx-state.py`` executes an isolated supervisor guest.
 It tests enable/disable state, all banks, bounds checks, table hit/miss/fault,
 repeated faults and conditional control flow. Its explicit QEMU limitation
 option skips 180 of 520 combinations on QEMU 10.2; skipped cases are not passes.
-The remaining 340 pass at O0/O2. Tables use a zero directory base, so nonzero
+The remaining 340 pass at O0/O2. Six additional original-branch cases inspect
+all four banks with MPX disabled and both values of BNDPRESERVE. The limitation
+option runs five and skips the initializing E9 case because QEMU's direct-jump
+translation omits BNDINIT; strict mode rejects the unchanged bounds. Native
+bytes still require E9. Tables use a zero directory base, so nonzero
 BNDCFG directory-base translation is not qualified. These are processor-model
 tests; successful execution on physical MPX hardware remains unqualified.
 

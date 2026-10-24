@@ -28953,6 +28953,21 @@ lowerNativeAddressOperands(SDValue Op, const X86Subtarget &Subtarget,
 
 static SDValue lowerMPXState(SDValue Op, const X86Subtarget &Subtarget,
                              SelectionDAG &DAG) {
+  if (Op.getConstantOperandVal(1) == Intrinsic::x86_bnd_branch) {
+    if (Subtarget.is16Bit())
+      report_fatal_error("MPX branch intrinsic requires 32- or 64-bit mode");
+    const auto *Kind = dyn_cast<ConstantSDNode>(Op.getOperand(2));
+    if (!Kind || Kind->getZExtValue() >= unsigned(X86::MpxBranchKind::Count))
+      report_fatal_error("MPX branch kind must be a constant in [0, 1]");
+    DAG.getMachineFunction().getInfo<X86MachineFunctionInfo>()->setHasMPXState(
+        true);
+    const SDLoc DL(Op);
+    return SDValue(DAG.getMachineNode(X86::MPX_BRANCH, DL, MVT::Other,
+                                      {DAG.getTargetConstant(
+                                           Kind->getZExtValue(), DL, MVT::i32),
+                                       Op.getOperand(0)}),
+                   0);
+  }
   using X86::MpxOperation;
   MpxOperation Kind;
   bool Wide = Subtarget.is64Bit();
@@ -29801,6 +29816,7 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
                              SDLoc(Op), MVT::Other, Op.getOperand(0)),
           0);
 
+    case Intrinsic::x86_bnd_branch:
     case Intrinsic::x86_bndmov_reg:
     case Intrinsic::x86_bndcl_reg:
     case Intrinsic::x86_bndcu_reg:
