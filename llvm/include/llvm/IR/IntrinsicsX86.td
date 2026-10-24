@@ -676,6 +676,56 @@ let TargetPrefix = "x86" in {
   def int_x86_outdwordstring : Intrinsic<[], [llvm_i16_ty, llvm_ptr_ty, llvm_i32_ty], []>;
 }
 
+// Explicit REP state. Natural-width inputs/outputs retain hardware partial-
+// register behavior. DF is an explicit byte (nonzero means backward); normal
+// completion restores ABI DF=0. Comparisons transport the six arithmetic flags
+// as LAHF bits in AH and OF in bit 0, including zero-count and fault restart.
+// See X86RepStringState.rst for input/result order and constant controls.
+let TargetPrefix = "x86" in {
+  def int_x86_rep_movs_state : Intrinsic<[llvm_i64_ty, llvm_i64_ty, llvm_i64_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i8_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>, ImmArg<ArgIndex<6>>]>;
+  def int_x86_rep_stos_state : Intrinsic<[llvm_i64_ty, llvm_i64_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>]>;
+  def int_x86_rep_lods_state : Intrinsic<[llvm_i64_ty, llvm_i64_ty, llvm_i64_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i8_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>, ImmArg<ArgIndex<6>>]>;
+  def int_x86_rep_cmps_state : Intrinsic<[llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i16_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i8_ty, llvm_i16_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<5>>, ImmArg<ArgIndex<6>>, ImmArg<ArgIndex<7>>, ImmArg<ArgIndex<8>>]>;
+  def int_x86_rep_scas_state : Intrinsic<[llvm_i64_ty, llvm_i64_ty, llvm_i16_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i8_ty, llvm_i16_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<5>>, ImmArg<ArgIndex<6>>, ImmArg<ArgIndex<7>>]>;
+  def int_x86_rep_ins_state : Intrinsic<[llvm_i64_ty, llvm_i64_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i16_ty, llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>]>;
+  def int_x86_rep_outs_state : Intrinsic<[llvm_i64_ty, llvm_i64_ty],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i16_ty, llvm_i8_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>, ImmArg<ArgIndex<6>>]>;
+  def int_x86_rep_movs_state32 : Intrinsic<[llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>, ImmArg<ArgIndex<6>>]>;
+  def int_x86_rep_stos_state32 : Intrinsic<[llvm_i32_ty, llvm_i32_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>]>;
+  def int_x86_rep_lods_state32 : Intrinsic<[llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>, ImmArg<ArgIndex<6>>]>;
+  def int_x86_rep_cmps_state32 : Intrinsic<[llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i16_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty, llvm_i16_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<5>>, ImmArg<ArgIndex<6>>, ImmArg<ArgIndex<7>>, ImmArg<ArgIndex<8>>]>;
+  def int_x86_rep_scas_state32 : Intrinsic<[llvm_i32_ty, llvm_i32_ty, llvm_i16_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i8_ty, llvm_i16_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<5>>, ImmArg<ArgIndex<6>>, ImmArg<ArgIndex<7>>]>;
+  def int_x86_rep_ins_state32 : Intrinsic<[llvm_i32_ty, llvm_i32_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i16_ty, llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>]>;
+  def int_x86_rep_outs_state32 : Intrinsic<[llvm_i32_ty, llvm_i32_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i16_ty, llvm_i8_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<4>>, ImmArg<ArgIndex<5>>, ImmArg<ArgIndex<6>>]>;
+}
+
 // Read processor ID.
 let TargetPrefix = "x86" in {
   def int_x86_rdpid : ClangBuiltin<"__builtin_ia32_rdpid">,

@@ -105,6 +105,7 @@ private:
   // outputting it to the OutStream. This allows the shadow tracker to minimise
   // the number of NOPs used for stackmap padding.
   void EmitAndCountInstruction(MCInst &Inst);
+  bool emitRepStringState(const MachineInstr *MI);
   void emitSEHStateWrite(const MachineInstr &MI);
   SmallVector<const MCSymbol *, 8> SEHStateWriteSymbols;
   void LowerSTACKMAP(const MachineInstr &MI);

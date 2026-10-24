@@ -299,6 +299,55 @@ def BSR64rm  : RI<0xBD, MRMSrcMem, (outs GR64:$dst), (ins GR64:$fallback, i64mem
                   TB, Sched<[WriteBSRLd]>;
 } // Defs = [EFLAGS]
 
+// Explicit REP execution is one scheduling unit through MC emission. The
+// temporary DF window contains no compiler-generated memory accesses. Unlike
+// ordinary string records these define full natural-width result registers.
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    SchedRW = [WriteMicrocoded] in {
+  let Uses = [RSI,RDI,RCX], Defs = [RSI,RDI,RCX,EFLAGS,DF] in
+  def REP_MOVS_STATE64 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [RDI,RCX,RAX], Defs = [RDI,RCX,EFLAGS,DF] in
+  def REP_STOS_STATE64 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [RSI,RCX,RAX], Defs = [RSI,RCX,RAX,EFLAGS,DF] in
+  def REP_LODS_STATE64 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [RSI,RDI,RCX,RAX], Defs = [RSI,RDI,RCX,RAX,EFLAGS,DF] in
+  def REP_CMPS_STATE64 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [RDI,RCX,RAX,RDX], Defs = [RDI,RCX,RAX,RDX,EFLAGS,DF] in
+  def REP_SCAS_STATE64 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [RDI,RCX,RDX], Defs = [RDI,RCX,EFLAGS,DF] in
+  def REP_INS_STATE64 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [RSI,RCX,RDX], Defs = [RSI,RCX,EFLAGS,DF] in
+  def REP_OUTS_STATE64 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [ESI,EDI,ECX], Defs = [ESI,EDI,ECX,EFLAGS,DF] in
+  def REP_MOVS_STATE32 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [EDI,ECX,EAX], Defs = [EDI,ECX,EFLAGS,DF] in
+  def REP_STOS_STATE32 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [ESI,ECX,EAX], Defs = [ESI,ECX,EAX,EFLAGS,DF] in
+  def REP_LODS_STATE32 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [ESI,EDI,ECX,EAX], Defs = [ESI,EDI,ECX,EAX,EFLAGS,DF] in
+  def REP_CMPS_STATE32 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [EDI,ECX,EAX,EDX], Defs = [EDI,ECX,EAX,EDX,EFLAGS,DF] in
+  def REP_SCAS_STATE32 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [EDI,ECX,EDX], Defs = [EDI,ECX,EFLAGS,DF] in
+  def REP_INS_STATE32 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+  let Uses = [ESI,ECX,EDX], Defs = [ESI,ECX,EFLAGS,DF] in
+  def REP_OUTS_STATE32 : PseudoI<(outs),
+      (ins i32imm:$control, GR32:$direction), []>;
+}
+
 let SchedRW = [WriteMicrocoded] in {
 let Defs = [EDI,ESI], Uses = [EDI,ESI,DF], mayLoad = 1, mayStore = 1 in {
 def MOVSB : I<0xA4, RawFrmDstSrc, (outs), (ins dstidx8:$dst, srcidx8:$src),
