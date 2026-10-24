@@ -559,7 +559,8 @@ let TargetPrefix = "x86" in {
   // Explicit arithmetic flags on entry and completion. The indivisible
   // operation restores CF/PF/AF/ZF/SF/OF before the native instruction, then
   // captures all six before compiler arithmetic. The i16 status uses mask
-  // 0xd501 (LAHF in AH, OF in bit zero); other flag/state bits are unchanged.
+  // 0xd501 (LAHF in AH, OF in bit zero). Other status-word bits are ignored
+  // on input and zero on output.
   // Leaf admission and full natural-width register transport match the
   // bounded interfaces above. These are not nonlocal continuation APIs.
   def int_x86_enclu_bounded_state : Intrinsic<
