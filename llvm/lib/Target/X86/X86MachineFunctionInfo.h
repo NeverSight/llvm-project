@@ -39,6 +39,7 @@ template <> struct ScalarEnumerationTraits<AMXProgModelEnum> {
 
 struct X86MachineFunctionInfo final : public yaml::MachineFunctionInfo {
   AMXProgModelEnum AMXProgModel;
+  bool HasMPXState = false;
 
   X86MachineFunctionInfo() = default;
   X86MachineFunctionInfo(const llvm::X86MachineFunctionInfo &MFI);
@@ -50,6 +51,7 @@ struct X86MachineFunctionInfo final : public yaml::MachineFunctionInfo {
 template <> struct MappingTraits<X86MachineFunctionInfo> {
   static void mapping(IO &YamlIO, X86MachineFunctionInfo &MFI) {
     YamlIO.mapOptional("amxProgModel", MFI.AMXProgModel);
+    YamlIO.mapOptional("hasMPXState", MFI.HasMPXState, false);
   }
 };
 } // end namespace yaml
@@ -135,6 +137,9 @@ class X86MachineFunctionInfo : public MachineFunctionInfo {
   /// True if this function has a subset of CSRs that is handled explicitly via
   /// copies.
   bool IsSplitCSR = false;
+
+  /// Compiler-created control transfers must preserve the ambient MPX bank.
+  bool HasMPXState = false;
 
   /// True if this function uses the red zone.
   bool UsesRedZone = false;
@@ -273,6 +278,9 @@ public:
 
   bool isSplitCSR() const { return IsSplitCSR; }
   void setIsSplitCSR(bool s) { IsSplitCSR = s; }
+
+  bool hasMPXState() const { return HasMPXState; }
+  void setHasMPXState(bool V) { HasMPXState = V; }
 
   bool getUsesRedZone() const { return UsesRedZone; }
   void setUsesRedZone(bool V) { UsesRedZone = V; }

@@ -291,6 +291,86 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
+// MPX operations use the architectural bounds bank, never vector SSA bounds.
+// Register indices and memory controls are constants. Memory/table accesses,
+// enable checks, #BR and fault partial progress belong to the native operation.
+// The address control selects the encoding (32/64 in long mode, 32 in i386).
+// MPX ignores 67H in long mode: every supplied address bit remains significant.
+// BNDMK takes the lower bound and inclusive upper address, not its complement.
+// BNDLDX/STX take base+displacement and the unscaled pointer-comparison value.
+// They access the bounds tables, not the supplied pointer address.
+let TargetPrefix = "x86" in {
+  def int_x86_bndmov_reg : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>;
+  def int_x86_bndcl_reg : Intrinsic<[], [llvm_i32_ty, llvm_i64_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_bndcu_reg : Intrinsic<[], [llvm_i32_ty, llvm_i64_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_bndcn_reg : Intrinsic<[], [llvm_i32_ty, llvm_i64_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_bndmov_load : Intrinsic<[],
+      [llvm_i32_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndmov_store : Intrinsic<[],
+      [llvm_i32_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndmov_store_lock : Intrinsic<[],
+      [llvm_i32_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndcl_address : Intrinsic<[],
+      [llvm_i32_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndcu_address : Intrinsic<[],
+      [llvm_i32_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndcn_address : Intrinsic<[],
+      [llvm_i32_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndmk : Intrinsic<[],
+      [llvm_i32_ty, llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>]>;
+  def int_x86_bndldx : Intrinsic<[],
+      [llvm_i32_ty, llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>]>;
+  def int_x86_bndstx : Intrinsic<[],
+      [llvm_i32_ty, llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>]>;
+  def int_x86_bndcl_reg32 : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_bndcu_reg32 : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_bndcn_reg32 : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_bndmov_load32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndmov_store32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndmov_store_lock32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndcl_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndcu_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndcn_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bndmk32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>]>;
+  def int_x86_bndldx32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>]>;
+  def int_x86_bndstx32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>]>;
+}
+
+//===----------------------------------------------------------------------===//
 // Descriptor and machine-state instructions. All operations are ordered
 // ambient effects, including dead reads and failed VERR/VERW checks. Verify
 // returns native ZF (1 = accessible). Register read widths are operand sizes;

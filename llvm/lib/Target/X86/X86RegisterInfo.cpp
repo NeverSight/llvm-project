@@ -539,6 +539,10 @@ BitVector X86RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   for (MCPhysReg Reg : X86::DEBUG_REGRegClass)
     Reserved.set(Reg);
 
+  // MPX is an ambient architectural bank, not an allocatable vector class.
+  for (MCPhysReg Reg : X86::BNDRRegClass)
+    Reserved.set(Reg);
+
   // Set the stack-pointer register and its aliases as reserved.
   for (const MCPhysReg &SubReg : subregs_inclusive(X86::RSP))
     Reserved.set(SubReg);

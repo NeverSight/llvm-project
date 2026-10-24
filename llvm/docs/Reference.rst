@@ -20,6 +20,7 @@ LLVM and API reference documentation.
    LibFuzzer
    FuzzingLLVM
    LangRef
+   X86MPXIntrinsics
    UndefinedBehavior
    InAlloca
    BitCodeFormat
@@ -69,6 +70,9 @@ LLVM and API reference documentation.
 
 API Reference
 -------------
+
+:doc:`X86MPXIntrinsics`
+  Architectural MPX bounds-bank intrinsics in the NeverSight LLVM fork.
 
 `Doxygen generated documentation <https://llvm.org/doxygen/>`_
   (`classes <https://llvm.org/doxygen/inherits.html>`_)

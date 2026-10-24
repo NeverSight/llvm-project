@@ -806,6 +806,10 @@ static int readModRM(struct InternalInstruction *insn) {
       return prefix##_YMM0 + index;                                            \
     case TYPE_XMM:                                                             \
       return prefix##_XMM0 + index;                                            \
+    case TYPE_BNDR:                                                            \
+      if (index > 3)                                                           \
+        *valid = 0;                                                            \
+      return prefix##_BND0 + index;                                            \
     case TYPE_TMM:                                                             \
       if (index > 7)                                                           \
         *valid = 0;                                                            \

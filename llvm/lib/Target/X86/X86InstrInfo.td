@@ -72,6 +72,9 @@ include "X86InstrAVX10.td"
 include "X86InstrMMX.td"
 include "X86Instr3DNow.td"
 
+// MPX architectural bounds bank.
+include "X86InstrMPX.td"
+
 include "X86InstrVMX.td"
 include "X86InstrSVM.td"
 include "X86InstrSNP.td"

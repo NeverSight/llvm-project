@@ -52,6 +52,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/PatternMatch.h"
+#include "llvm/IR/X86MpxState.h"
 #include "llvm/IR/X86NativeMemoryAddress.h"
 #include "llvm/IR/X86SgxIntrinsics.h"
 #include "llvm/IR/X86SmxIntrinsics.h"
@@ -28950,6 +28951,188 @@ lowerNativeAddressOperands(SDValue Op, const X86Subtarget &Subtarget,
           DAG.getRegister(Segment, MVT::i16)};
 }
 
+static SDValue lowerMPXState(SDValue Op, const X86Subtarget &Subtarget,
+                             SelectionDAG &DAG) {
+  using X86::MpxOperation;
+  MpxOperation Kind;
+  bool Wide = Subtarget.is64Bit();
+  switch (Op.getConstantOperandVal(1)) {
+  default:
+    llvm_unreachable("unexpected MPX intrinsic");
+  case Intrinsic::x86_bndmov_reg:
+    Kind = MpxOperation::Move;
+    break;
+  case Intrinsic::x86_bndcl_reg:
+    Kind = MpxOperation::CheckLowerRegister;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndcu_reg:
+    Kind = MpxOperation::CheckUpperRegister;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndcn_reg:
+    Kind = MpxOperation::CheckUpperRawRegister;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndmov_load:
+    Kind = MpxOperation::Load;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndmov_store:
+    Kind = MpxOperation::Store;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndmov_store_lock:
+    Kind = MpxOperation::StoreLocked;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndcl_address:
+    Kind = MpxOperation::CheckLowerAddress;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndcu_address:
+    Kind = MpxOperation::CheckUpperAddress;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndcn_address:
+    Kind = MpxOperation::CheckUpperRawAddress;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndmk:
+    Kind = MpxOperation::Make;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndldx:
+    Kind = MpxOperation::LoadTable;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndstx:
+    Kind = MpxOperation::StoreTable;
+    Wide = true;
+    break;
+  case Intrinsic::x86_bndcl_reg32:
+    Kind = MpxOperation::CheckLowerRegister;
+    Wide = false;
+    break;
+  case Intrinsic::x86_bndcu_reg32:
+    Kind = MpxOperation::CheckUpperRegister;
+    Wide = false;
+    break;
+  case Intrinsic::x86_bndcn_reg32:
+    Kind = MpxOperation::CheckUpperRawRegister;
+    Wide = false;
+    break;
+  case Intrinsic::x86_bndmov_load32:
+    Kind = MpxOperation::Load;
+    Wide = false;
+    break;
+  case Intrinsic::x86_bndmov_store32:
+    Kind = MpxOperation::Store;
+    Wide = false;
+    break;
+  case Intrinsic::x86_bndmov_store_lock32:
+    Kind = MpxOperation::StoreLocked;
+    Wide = false;
+    break;
+  case Intrinsic::x86_bndcl_address32:
+    Kind = MpxOperation::CheckLowerAddress;
+    Wide = false;
+    break;
+  case Intrinsic::x86_bndcu_address32:
+    Kind = MpxOperation::CheckUpperAddress;
+    Wide = false;
+    break;
+  case Intrinsic::x86_bndcn_address32:
+    Kind = MpxOperation::CheckUpperRawAddress;
+    Wide = false;
+    break;
+  case Intrinsic::x86_bndmk32:
+    Kind = MpxOperation::Make;
+    Wide = false;
+    break;
+  case Intrinsic::x86_bndldx32:
+    Kind = MpxOperation::LoadTable;
+    Wide = false;
+    break;
+  case Intrinsic::x86_bndstx32:
+    Kind = MpxOperation::StoreTable;
+    Wide = false;
+    break;
+  }
+  if (Subtarget.is16Bit() || Wide != Subtarget.is64Bit())
+    report_fatal_error("MPX intrinsic does not match the target code mode");
+  auto GetBound = [&](unsigned Operand) -> unsigned {
+    const auto *Index = dyn_cast<ConstantSDNode>(Op.getOperand(Operand));
+    if (!Index || Index->getZExtValue() >= X86::MpxRegisterCount)
+      report_fatal_error("MPX bounds register must be a constant in [0, 3]");
+    return Index->getZExtValue();
+  };
+  const unsigned Bound = GetBound(2);
+  DAG.getMachineFunction().getInfo<X86MachineFunctionInfo>()->setHasMPXState(
+      true);
+  const SDLoc DL(Op);
+  if (Kind == MpxOperation::Move) {
+    const unsigned Descriptor =
+        X86::mpxDescriptor(Kind, Bound, GetBound(3), false, 0);
+    return SDValue(
+        DAG.getMachineNode(X86::MPX_MOVE_BOUNDS, DL, MVT::Other,
+                           {DAG.getTargetConstant(Descriptor, DL, MVT::i32),
+                            Op.getOperand(0)}),
+        0);
+  }
+  const bool Register = X86::mpxIsCheckRegister(Kind);
+  const bool Pair = X86::mpxHasIndex(Kind);
+  unsigned Bits = Wide ? 64 : 32;
+  unsigned Prefix = 0;
+  if (!Register) {
+    const unsigned WidthOperand = Pair ? 5 : 4;
+    const auto *Width = dyn_cast<ConstantSDNode>(Op.getOperand(WidthOperand));
+    const auto *Segment =
+        dyn_cast<ConstantSDNode>(Op.getOperand(WidthOperand + 1));
+    if (!Width || !Segment)
+      report_fatal_error("MPX addressing requires constant controls");
+    if (!X86::isNativeMemoryAddressWidth(Wide, Width->getZExtValue()) ||
+        Width->getZExtValue() == 16)
+      report_fatal_error(
+          "invalid MPX address encoding width for this code mode");
+    if (!X86::isNativeMemorySegmentPrefix(Segment->getZExtValue()))
+      report_fatal_error("invalid MPX segment prefix");
+    Bits = Width->getZExtValue();
+    Prefix = Segment->getZExtValue();
+  }
+  const MVT VT = Wide ? MVT::i64 : MVT::i32;
+  SDValue Base = Op.getOperand(3);
+  SDValue Index = Base;
+  SDValue Chain = Op.getOperand(0), Glue;
+  if (!Register) {
+    // Unlike ordinary memory instructions, MPX ignores 67H in long mode.
+    // Keep the full GPR values even when selecting a 32-bit address encoding.
+    const unsigned BaseReg = Wide ? X86::RBX : X86::EBX;
+    Chain = DAG.getCopyToReg(Chain, DL, BaseReg, Base, Glue);
+    Glue = Chain.getValue(1);
+    Base = DAG.getRegister(BaseReg, VT);
+    Index = Base;
+    if (Pair) {
+      SDValue Value = Op.getOperand(4);
+      if (Kind == MpxOperation::Make)
+        Value = DAG.getNode(ISD::SUB, DL, VT, Value, Op.getOperand(3));
+      const unsigned IndexReg = Wide ? X86::RSI : X86::ESI;
+      Chain = DAG.getCopyToReg(Chain, DL, IndexReg, Value, Glue);
+      Glue = Chain.getValue(1);
+      Index = DAG.getRegister(IndexReg, VT);
+    }
+  }
+  const unsigned Descriptor =
+      X86::mpxDescriptor(Kind, Bound, 0, Wide && Bits == 32, Prefix);
+  SmallVector<SDValue, 5> Operands = {
+      DAG.getTargetConstant(Descriptor, DL, MVT::i32), Base, Index, Chain};
+  if (Glue)
+    Operands.push_back(Glue);
+  return SDValue(DAG.getMachineNode(Wide ? X86::MPX_STATE64 : X86::MPX_STATE32,
+                                    DL, MVT::Other, Operands),
+                 0);
+}
+
 static SDValue lowerDescriptorAddress(SDValue Op, const X86Subtarget &Subtarget,
                                       SelectionDAG &DAG) {
   const unsigned ID = Op.getConstantOperandVal(1);
@@ -29617,6 +29800,33 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
           DAG.getMachineNode(IntNo == Intrinsic::x86_cli ? X86::CLI : X86::STI,
                              SDLoc(Op), MVT::Other, Op.getOperand(0)),
           0);
+
+    case Intrinsic::x86_bndmov_reg:
+    case Intrinsic::x86_bndcl_reg:
+    case Intrinsic::x86_bndcu_reg:
+    case Intrinsic::x86_bndcn_reg:
+    case Intrinsic::x86_bndmov_load:
+    case Intrinsic::x86_bndmov_store:
+    case Intrinsic::x86_bndmov_store_lock:
+    case Intrinsic::x86_bndcl_address:
+    case Intrinsic::x86_bndcu_address:
+    case Intrinsic::x86_bndcn_address:
+    case Intrinsic::x86_bndmk:
+    case Intrinsic::x86_bndldx:
+    case Intrinsic::x86_bndstx:
+    case Intrinsic::x86_bndcl_reg32:
+    case Intrinsic::x86_bndcu_reg32:
+    case Intrinsic::x86_bndcn_reg32:
+    case Intrinsic::x86_bndmov_load32:
+    case Intrinsic::x86_bndmov_store32:
+    case Intrinsic::x86_bndmov_store_lock32:
+    case Intrinsic::x86_bndcl_address32:
+    case Intrinsic::x86_bndcu_address32:
+    case Intrinsic::x86_bndcn_address32:
+    case Intrinsic::x86_bndmk32:
+    case Intrinsic::x86_bndldx32:
+    case Intrinsic::x86_bndstx32:
+      return lowerMPXState(Op, Subtarget, DAG);
 
     case Intrinsic::x86_lkgs_address:
     case Intrinsic::x86_lar_mem16_address:
