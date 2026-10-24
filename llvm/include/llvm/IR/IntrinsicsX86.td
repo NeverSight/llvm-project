@@ -407,6 +407,103 @@ let TargetPrefix = "x86" in {
   def int_x86_invd : Intrinsic<[], [], []>;
 }
 
+// Explicit descriptor-state addresses retain native fault ordering. The
+// address32 suffix denotes i386 code mode; the separate address width and
+// segment controls are architectural constants. The four *16.address32 APIs
+// also retain the legacy 16-bit descriptor-table operand-size attribute.
+let TargetPrefix = "x86" in {
+  def int_x86_verr_mem_address : Intrinsic<[llvm_i8_ty],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_verr_mem_address32 : Intrinsic<[llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_verw_mem_address : Intrinsic<[llvm_i8_ty],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_verw_mem_address32 : Intrinsic<[llvm_i8_ty],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_sldt_mem_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_sldt_mem_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_str_mem_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_str_mem_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_smsw_mem_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_smsw_mem_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_lldt_mem_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_lldt_mem_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_ltr_mem_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_ltr_mem_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_lmsw_mem_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_lmsw_mem_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_sgdt_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_sgdt_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_sidt_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_sidt_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_lgdt_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_lgdt_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_lidt_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_lidt_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_invlpg_address : Intrinsic<[],
+      [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_invlpg_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_sgdt16_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_sidt16_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_lgdt16_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  def int_x86_lidt16_address32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+      [ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+}
+
 //===----------------------------------------------------------------------===//
 // SGX supervisor/VMM fallthrough: {rAX, rBX, rCX, rDX, CF | (ZF << 1)}.
 // Inputs/outputs retain their full code-mode width. EAX selects the leaf;

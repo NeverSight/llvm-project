@@ -918,3 +918,97 @@ let Uses = [RAX, RBX, RCX, RDX], Defs = [RAX, RBX, RCX, RDX, EFLAGS] in
     def PCONFIG : I<0x01, MRM_C5, (outs), (ins), "pconfig", []>, TB,
                   Requires<[HasPCONFIG]>;
 } // SchedRW
+
+// Keep explicit descriptor-state address sizes until MC operand lowering.
+let SchedRW = [WriteSystem] in {
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0, Defs = [EFLAGS] in
+def VERRm_ADDR32 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0, Defs = [EFLAGS] in
+def VERRm_ADDR16 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0, Defs = [EFLAGS] in
+def VERWm_ADDR32 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0, Defs = [EFLAGS] in
+def VERWm_ADDR16 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def SLDT16m_ADDR32 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def SLDT16m_ADDR16 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def STRm_ADDR32 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def STRm_ADDR16 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def SMSW16m_ADDR32 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def SMSW16m_ADDR16 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0 in
+def LLDT16m_ADDR32 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0 in
+def LLDT16m_ADDR16 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in
+def LTRm_ADDR32 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in
+def LTRm_ADDR16 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0 in
+def LMSW16m_ADDR32 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0 in
+def LMSW16m_ADDR16 : PseudoI<(outs), (ins i16mem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def SGDT64m_ADDR32 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def SGDT32m_ADDR16 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def SIDT64m_ADDR32 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def SIDT32m_ADDR16 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0 in
+def LGDT64m_ADDR32 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0 in
+def LGDT32m_ADDR16 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0 in
+def LIDT64m_ADDR32 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0 in
+def LIDT32m_ADDR16 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 0 in
+def INVLPG_ADDR32 : PseudoI<(outs), (ins i8mem:$address), []>,
+    Requires<[In64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 0 in
+def INVLPG_ADDR16 : PseudoI<(outs), (ins i8mem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def SGDT16m_ADDR16 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 0, mayStore = 1 in
+def SIDT16m_ADDR16 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0 in
+def LGDT16m_ADDR16 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[Not64BitMode]>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 0 in
+def LIDT16m_ADDR16 : PseudoI<(outs), (ins opaquemem:$address), []>,
+    Requires<[Not64BitMode]>;
+} // SchedRW
