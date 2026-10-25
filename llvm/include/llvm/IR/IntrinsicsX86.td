@@ -5057,6 +5057,27 @@ let TargetPrefix = "x86" in {
                  ImmArg<ArgIndex<5>>]>;
 }
 
+// Four-register source groups are explicit SSA inputs. Memory, mask suppression
+// and the four sequential arithmetic/exception steps belong to one instruction.
+let TargetPrefix = "x86" in {
+  class X86FourSourceNativeIntrinsic<LLVMType V> :
+      Intrinsic<[V], [llvm_ptr_ty, V, V, V, V, V, llvm_i16_ty,
+                      llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<7>>, ImmArg<ArgIndex<8>>]>;
+  def int_x86_avx512_v4fmaddps_native :
+      X86FourSourceNativeIntrinsic<llvm_v16i32_ty>;
+  def int_x86_avx512_v4fnmaddps_native :
+      X86FourSourceNativeIntrinsic<llvm_v16i32_ty>;
+  def int_x86_avx512_v4fmaddss_native :
+      X86FourSourceNativeIntrinsic<llvm_v4i32_ty>;
+  def int_x86_avx512_v4fnmaddss_native :
+      X86FourSourceNativeIntrinsic<llvm_v4i32_ty>;
+  def int_x86_avx512_vp4dpwssd_native :
+      X86FourSourceNativeIntrinsic<llvm_v16i32_ty>;
+  def int_x86_avx512_vp4dpwssds_native :
+      X86FourSourceNativeIntrinsic<llvm_v16i32_ty>;
+}
+
 // Compress, Expand
 let TargetPrefix = "x86" in {
   def int_x86_avx512_mask_compress :
