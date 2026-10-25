@@ -5021,6 +5021,42 @@ let TargetPrefix = "x86" in {
                              ImmArg<ArgIndex<3>>]>;
 }
 
+// Native compact-memory operations retain zero-mask and dead-result effects.
+// The address is a native-width offset before the constant segment override.
+// Integer vector carriers transport raw bits; kind selects B/W/D/Q/PS/PD.
+let TargetPrefix = "x86" in {
+  def int_x86_avx512_compressstore128_native :
+      Intrinsic<[], [llvm_ptr_ty, llvm_i64_ty, llvm_v4i32_ty, llvm_i32_ty,
+                     llvm_i32_ty],
+                [ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>]>;
+  def int_x86_avx512_expandload128_native :
+      Intrinsic<[llvm_v4i32_ty],
+                [llvm_ptr_ty, llvm_i64_ty, llvm_v4i32_ty, llvm_i32_ty,
+                 llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>,
+                 ImmArg<ArgIndex<5>>]>;
+  def int_x86_avx512_compressstore256_native :
+      Intrinsic<[], [llvm_ptr_ty, llvm_i64_ty, llvm_v8i32_ty, llvm_i32_ty,
+                     llvm_i32_ty],
+                [ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>]>;
+  def int_x86_avx512_expandload256_native :
+      Intrinsic<[llvm_v8i32_ty],
+                [llvm_ptr_ty, llvm_i64_ty, llvm_v8i32_ty, llvm_i32_ty,
+                 llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>,
+                 ImmArg<ArgIndex<5>>]>;
+  def int_x86_avx512_compressstore512_native :
+      Intrinsic<[], [llvm_ptr_ty, llvm_i64_ty, llvm_v16i32_ty, llvm_i32_ty,
+                     llvm_i32_ty],
+                [ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>]>;
+  def int_x86_avx512_expandload512_native :
+      Intrinsic<[llvm_v16i32_ty],
+                [llvm_ptr_ty, llvm_i64_ty, llvm_v16i32_ty, llvm_i32_ty,
+                 llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>,
+                 ImmArg<ArgIndex<5>>]>;
+}
+
 // Compress, Expand
 let TargetPrefix = "x86" in {
   def int_x86_avx512_mask_compress :
