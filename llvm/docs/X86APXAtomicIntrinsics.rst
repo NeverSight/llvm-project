@@ -42,3 +42,11 @@ aliasing and nonvolatile registers. ATT/Intel assembly round trips compare
 every effective instruction's bytes and address, excluding alignment NOPs.
 These tests do not establish physical atomicity, coherence or CPU fault
 behavior on APX hardware.
+
+The older pointer-taking RAO-INT/CMPccXADD, atomic bit-test and conditional
+arithmetic intrinsics also carry no implicit alignment promise. Their machine
+memory operands use byte alignment, retain volatile read/write effects and
+leave architectural faults to the instruction. Previously the bit width was
+misinterpreted as byte alignment. The 48 cases in
+``CodeGen/X86/atomic-intrinsic-memory-alignment.ll`` cover 8/16/32/64-bit
+operations at O0/O2 and with APX register allocation enabled.

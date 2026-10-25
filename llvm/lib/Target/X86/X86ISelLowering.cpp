@@ -3363,7 +3363,9 @@ void X86TargetLowering::getTgtMemIntrinsic(
       Info.ptrVal = I.getArgOperand(0);
       unsigned Size = I.getType()->getScalarSizeInBits();
       Info.memVT = EVT::getIntegerVT(I.getType()->getContext(), Size);
-      Info.align = Align(Size);
+      // The pointer API promises no alignment. Native fault checks belong to
+      // the instruction; the integer bit width is not a byte alignment.
+      Info.align = Align(1);
       Info.flags |= MachineMemOperand::MOLoad | MachineMemOperand::MOStore |
                     MachineMemOperand::MOVolatile;
       Infos.push_back(Info);
@@ -3376,7 +3378,7 @@ void X86TargetLowering::getTgtMemIntrinsic(
       Info.ptrVal = I.getArgOperand(0);
       unsigned Size = I.getArgOperand(1)->getType()->getScalarSizeInBits();
       Info.memVT = EVT::getIntegerVT(I.getType()->getContext(), Size);
-      Info.align = Align(Size);
+      Info.align = Align(1);
       Info.flags |= MachineMemOperand::MOLoad | MachineMemOperand::MOStore |
                     MachineMemOperand::MOVolatile;
       Infos.push_back(Info);
@@ -3399,7 +3401,7 @@ void X86TargetLowering::getTgtMemIntrinsic(
       Info.ptrVal = I.getArgOperand(0);
       unsigned Size = I.getArgOperand(1)->getType()->getScalarSizeInBits();
       Info.memVT = EVT::getIntegerVT(I.getType()->getContext(), Size);
-      Info.align = Align(Size);
+      Info.align = Align(1);
       Info.flags |= MachineMemOperand::MOLoad | MachineMemOperand::MOStore |
                     MachineMemOperand::MOVolatile;
       Infos.push_back(Info);
