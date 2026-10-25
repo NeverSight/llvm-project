@@ -34,6 +34,23 @@ let SchedRW = [WriteXCHG], hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
              i32imm:$descriptor), []>;
 }
 
+// The native legacy encodings cannot name EGPRs. Constrain every data operand
+// before allocation; changing MC encoding alone could produce REX2/EVEX bytes.
+let SchedRW = [WriteXCHG], hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
+  def LEGACY_RAO_NATIVE32 : PseudoI<(outs),
+      (ins i32imm:$descriptor, i32mem:$address, GR32_NOREX2:$source), []>;
+  def LEGACY_RAO_NATIVE64 : PseudoI<(outs),
+      (ins i32imm:$descriptor, i64mem:$address, GR64_NOREX2:$source), []>;
+  let Defs = [EFLAGS], Constraints = "$compare = $dst" in {
+    def LEGACY_CMPCCXADD_NATIVE32 : PseudoI<(outs GR32_NOREX2:$dst),
+        (ins GR32_NOREX2:$compare, i32mem:$address, GR32_NOREX2:$add,
+             i32imm:$descriptor), []>;
+    def LEGACY_CMPCCXADD_NATIVE64 : PseudoI<(outs GR64_NOREX2:$dst),
+        (ins GR64_NOREX2:$compare, i64mem:$address, GR64_NOREX2:$add,
+             i32imm:$descriptor), []>;
+  }
+}
+
 
 // RAO arithmetic instructions.
 // OUTCHAIN = AADD(INCHAIN, PTR, RHS)

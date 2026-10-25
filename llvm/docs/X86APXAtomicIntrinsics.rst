@@ -1,5 +1,5 @@
-Native APX atomic intrinsics
-============================
+Native x86 atomic intrinsics
+===========================
 
 The fork provides ten fixed-signature intrinsics for EVEX-encoded RAO-INT and
 CMPccXADD in 64-bit code mode. They preserve native memory transactions instead
@@ -42,6 +42,33 @@ aliasing and nonvolatile registers. ATT/Intel assembly round trips compare
 every effective instruction's bytes and address, excluding alignment NOPs.
 These tests do not establish physical atomicity, coherence or CPU fault
 behavior on APX hardware.
+
+Legacy RAO and VEX CMPccXADD
+---------------------------
+
+Ten additional ``llvm.x86.{aadd,aand,aor,axor,cmpccxadd}{32,64}.legacy.address``
+intrinsics have the same x86-64 signatures, controls and effects as their APX
+counterparts. They preserve legacy RAO or VEX CMPccXADD encoding. Separate
+machine pseudos constrain every data operand to ``GR32_NOREX2`` or
+``GR64_NOREX2`` before register allocation; CMPccXADD's comparator is tied to
+its result. This remains true when inputs arrive in APX-only registers.
+Feature availability is determined by the retained instruction encoding.
+
+Four ``llvm.x86.{aadd,aand,aor,axor}32.legacy.address32`` interfaces support
+i386 code mode. They take ``(i32 offset, i32 source, i32 address_bits,
+i32 segment_prefix)`` and return void. Address width is 16 or 32; the offset
+wraps before segment-base addition. The address carrier is BX or EBX, with
+the same DS default and explicit segment controls as the x86-64 interfaces.
+Code mode and address width are independent: the x86-64 forms reject i386
+code mode, and the i386 forms reject x86-64 code mode.
+
+``CodeGen/X86/legacy-native-atomic{,-i386,-invalid,-egpr}.ll`` checks these
+contracts, including copies out of R20--R22 into encodable data registers.
+Use ``--legacy`` with NeverC's completion oracle to qualify the legacy/VEX
+matrix. Each x86-64 route checks 10,080 functions, 120,960 controlled
+completions and twelve assembly round trips across the six optimization and
+object-format profiles. These are encoding, transport and compiler-effect
+checks; hardware atomicity, memory-type behavior and faults remain unqualified.
 
 The older pointer-taking RAO-INT/CMPccXADD, atomic bit-test and conditional
 arithmetic intrinsics also carry no implicit alignment promise. Their machine

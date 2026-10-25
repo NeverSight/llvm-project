@@ -6654,6 +6654,59 @@ let TargetPrefix = "x86" in {
                  ImmArg<ArgIndex<5>>]>;
 }
 
+// Preserve legacy RAO and VEX CMPccXADD encoding, including under APX
+// register allocation. The address32 APIs select i386 code mode.
+let TargetPrefix = "x86" in {
+  def int_x86_aadd32_legacy_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aadd64_legacy_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aand32_legacy_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aand64_legacy_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aor32_legacy_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aor64_legacy_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_axor32_legacy_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_axor64_legacy_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_cmpccxadd32_legacy_address :
+      Intrinsic<[llvm_i32_ty],
+                [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty,
+                 llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>,
+                 ImmArg<ArgIndex<5>>]>;
+  def int_x86_cmpccxadd64_legacy_address :
+      Intrinsic<[llvm_i64_ty],
+                [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty,
+                 llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>,
+                 ImmArg<ArgIndex<5>>]>;
+  def int_x86_aadd32_legacy_address32 :
+      Intrinsic<[], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aand32_legacy_address32 :
+      Intrinsic<[], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aor32_legacy_address32 :
+      Intrinsic<[], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_axor32_legacy_address32 :
+      Intrinsic<[], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+}
+
 let TargetPrefix = "x86" in {
   def int_x86_aadd32
       : ClangBuiltin<"__builtin_ia32_aadd32">,
