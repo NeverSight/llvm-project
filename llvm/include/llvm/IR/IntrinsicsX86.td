@@ -6554,6 +6554,49 @@ let TargetPrefix = "x86" in {
 }
 //===----------------------------------------------------------------------===//
 // RAO-INT intrinsics
+
+// Explicit APX encoding and native offset/segment controls. Unknown memory
+// and synchronization effects retain faults, failed conditional writes, and
+// ordering even when the result is unused. Address width is 32 or 64.
+let TargetPrefix = "x86" in {
+  def int_x86_aadd32_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aadd64_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aand32_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aand64_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aor32_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_aor64_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_axor32_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_axor64_address :
+      Intrinsic<[], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_cmpccxadd32_address :
+      Intrinsic<[llvm_i32_ty],
+                [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty,
+                 llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>,
+                 ImmArg<ArgIndex<5>>]>;
+  def int_x86_cmpccxadd64_address :
+      Intrinsic<[llvm_i64_ty],
+                [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty,
+                 llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>,
+                 ImmArg<ArgIndex<5>>]>;
+}
+
 let TargetPrefix = "x86" in {
   def int_x86_aadd32
       : ClangBuiltin<"__builtin_ia32_aadd32">,

@@ -16,6 +16,25 @@
 
 def SDTRAOBinaryArith : SDTypeProfile<0, 2, [SDTCisPtrTy<0>, SDTCisInt<1>]>;
 
+// Native APX atomics retain EVEX and address-size controls until MC lowering.
+// These are indivisible memory effects; CMPccXADD always writes back, including
+// when its condition is false. RAO-INT preserves EFLAGS.
+let SchedRW = [WriteXCHG], hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
+  def APX_RAO_NATIVE32 : PseudoI<(outs),
+      (ins i32imm:$descriptor, i32mem:$address, GR32:$source), []>;
+  let Defs = [EFLAGS], Constraints = "$compare = $dst" in
+    def APX_CMPCCXADD_NATIVE32 : PseudoI<(outs GR32:$dst),
+        (ins GR32:$compare, i32mem:$address, GR32:$add,
+             i32imm:$descriptor), []>;
+  def APX_RAO_NATIVE64 : PseudoI<(outs),
+      (ins i32imm:$descriptor, i64mem:$address, GR64:$source), []>;
+  let Defs = [EFLAGS], Constraints = "$compare = $dst" in
+    def APX_CMPCCXADD_NATIVE64 : PseudoI<(outs GR64:$dst),
+        (ins GR64:$compare, i64mem:$address, GR64:$add,
+             i32imm:$descriptor), []>;
+}
+
+
 // RAO arithmetic instructions.
 // OUTCHAIN = AADD(INCHAIN, PTR, RHS)
 def X86rao_add  : SDNode<"X86ISD::AADD", SDTRAOBinaryArith,
