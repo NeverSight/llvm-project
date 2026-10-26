@@ -9,12 +9,14 @@ set(LLVM_LINK_COMPONENTS
   DebugInfoDWARF
   MC
   MCDisassembler
+  MCParser
   Object
   Support
   TargetParser
   )
 
 add_llvm_unittest(MCTests
+  BinaryRewriteRelocationTest.cpp
   BinaryRewriteTest.cpp
   Disassembler.cpp
   DwarfDebugFrameCIE.cpp
