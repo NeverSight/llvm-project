@@ -106,6 +106,7 @@ private:
   // the number of NOPs used for stackmap padding.
   void EmitAndCountInstruction(MCInst &Inst);
   bool emitRepStringState(const MachineInstr *MI);
+  bool emitRepStringSaveESI(const MachineInstr *MI);
   bool emitBoundedLeafState(const MachineInstr *MI);
   bool emitNativeLeafSaveRBX(const MachineInstr *MI);
   void emitSEHStateWrite(const MachineInstr &MI);

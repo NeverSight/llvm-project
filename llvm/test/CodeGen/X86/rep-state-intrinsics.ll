@@ -339,13 +339,15 @@ define { i32, i32, i32 } @movs(i32 %v0, i32 %v1, i32 %v2, i8 %v3) {
 ; X32-NEXT: je
 ; X32-NEXT: std
 ; X32-NEXT: .Ltmp
+; X32-NEXT: xchgl [[PAIR:.*]]
 ; X32-NEXT: rep{{.*}}movsb
 ; X32-NEXT: cld
+; X32-NEXT: xchgl [[PAIR]]
 ; X32: ret
 ; IR32-LABEL: define { i32, i32, i32 } @movs(
 ; IR32: call { i32, i32, i32 } @llvm.x86.rep.movs.state32(
 ; M32-LABEL: name: movs
-; M32: REP_MOVS_STATE32 {{.*}}implicit-def{{( dead)?}} $df
+; M32: REP_MOVS_STATE32_SAVE_ESI {{.*}}implicit-def{{( dead)?}} $df
   %result = call { i32, i32, i32 } @llvm.x86.rep.movs.state32(i32 %v0, i32 %v1, i32 %v2, i8 %v3, i32 1, i32 32, i32 0)
   ret { i32, i32, i32 } %result
 }
@@ -357,13 +359,15 @@ define { i32, i32, i32 } @movs_override(i32 %v0, i32 %v1, i32 %v2, i8 %v3) {
 ; X32-NEXT: je
 ; X32-NEXT: std
 ; X32-NEXT: .Ltmp
+; X32-NEXT: xchgl [[PAIR:.*]]
 ; X32-NEXT: rep{{.*}}movsl
 ; X32-NEXT: cld
+; X32-NEXT: xchgl [[PAIR]]
 ; X32: ret
 ; IR32-LABEL: define { i32, i32, i32 } @movs_override(
 ; IR32: call { i32, i32, i32 } @llvm.x86.rep.movs.state32(
 ; M32-LABEL: name: movs_override
-; M32: REP_MOVS_STATE32 {{.*}}implicit-def{{( dead)?}} $df
+; M32: REP_MOVS_STATE32_SAVE_ESI {{.*}}implicit-def{{( dead)?}} $df
   %result = call { i32, i32, i32 } @llvm.x86.rep.movs.state32(i32 %v0, i32 %v1, i32 %v2, i8 %v3, i32 4, i32 16, i32 100)
   ret { i32, i32, i32 } %result
 }
@@ -415,13 +419,15 @@ define { i32, i32, i32 } @lods(i32 %v0, i32 %v1, i32 %v2, i8 %v3) {
 ; X32-NEXT: je
 ; X32-NEXT: std
 ; X32-NEXT: .Ltmp
+; X32-NEXT: xchgl [[PAIR:.*]]
 ; X32-NEXT: rep{{.*}}lodsl
 ; X32-NEXT: cld
+; X32-NEXT: xchgl [[PAIR]]
 ; X32: ret
 ; IR32-LABEL: define { i32, i32, i32 } @lods(
 ; IR32: call { i32, i32, i32 } @llvm.x86.rep.lods.state32(
 ; M32-LABEL: name: lods
-; M32: REP_LODS_STATE32 {{.*}}implicit-def{{( dead)?}} $df
+; M32: REP_LODS_STATE32_SAVE_ESI {{.*}}implicit-def{{( dead)?}} $df
   %result = call { i32, i32, i32 } @llvm.x86.rep.lods.state32(i32 %v0, i32 %v1, i32 %v2, i8 %v3, i32 4, i32 32, i32 0)
   ret { i32, i32, i32 } %result
 }
@@ -433,13 +439,15 @@ define { i32, i32, i32 } @lods_override(i32 %v0, i32 %v1, i32 %v2, i8 %v3) {
 ; X32-NEXT: je
 ; X32-NEXT: std
 ; X32-NEXT: .Ltmp
+; X32-NEXT: xchgl [[PAIR:.*]]
 ; X32-NEXT: rep{{.*}}lodsw
 ; X32-NEXT: cld
+; X32-NEXT: xchgl [[PAIR]]
 ; X32: ret
 ; IR32-LABEL: define { i32, i32, i32 } @lods_override(
 ; IR32: call { i32, i32, i32 } @llvm.x86.rep.lods.state32(
 ; M32-LABEL: name: lods_override
-; M32: REP_LODS_STATE32 {{.*}}implicit-def{{( dead)?}} $df
+; M32: REP_LODS_STATE32_SAVE_ESI {{.*}}implicit-def{{( dead)?}} $df
   %result = call { i32, i32, i32 } @llvm.x86.rep.lods.state32(i32 %v0, i32 %v1, i32 %v2, i8 %v3, i32 2, i32 16, i32 100)
   ret { i32, i32, i32 } %result
 }
@@ -453,17 +461,19 @@ define { i32, i32, i32, i16 } @cmps(i32 %v0, i32 %v1, i32 %v2, i8 %v3, i16 %v4) 
 ; X32-NEXT: je
 ; X32-NEXT: std
 ; X32-NEXT: .Ltmp
+; X32-NEXT: xchgl [[PAIR:.*]]
 ; X32-NEXT: addb $127, %al
 ; X32-NEXT: sahf
 ; X32-NEXT: rep{{.*}}cmpsw
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
 ; X32-NEXT: cld
+; X32-NEXT: xchgl [[PAIR]]
 ; X32: ret
 ; IR32-LABEL: define { i32, i32, i32, i16 } @cmps(
 ; IR32: call { i32, i32, i32, i16 } @llvm.x86.rep.cmps.state32(
 ; M32-LABEL: name: cmps
-; M32: REP_CMPS_STATE32 {{.*}}implicit-def{{( dead)?}} $df
+; M32: REP_CMPS_STATE32_SAVE_ESI {{.*}}implicit-def{{( dead)?}} $df
   %result = call { i32, i32, i32, i16 } @llvm.x86.rep.cmps.state32(i32 %v0, i32 %v1, i32 %v2, i8 %v3, i16 %v4, i32 2, i32 32, i32 0, i32 0)
   ret { i32, i32, i32, i16 } %result
 }
@@ -475,17 +485,19 @@ define { i32, i32, i32, i16 } @cmps_override(i32 %v0, i32 %v1, i32 %v2, i8 %v3, 
 ; X32-NEXT: je
 ; X32-NEXT: std
 ; X32-NEXT: .Ltmp
+; X32-NEXT: xchgl [[PAIR:.*]]
 ; X32-NEXT: addb $127, %al
 ; X32-NEXT: sahf
 ; X32-NEXT: repne{{.*}}cmpsl
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
 ; X32-NEXT: cld
+; X32-NEXT: xchgl [[PAIR]]
 ; X32: ret
 ; IR32-LABEL: define { i32, i32, i32, i16 } @cmps_override(
 ; IR32: call { i32, i32, i32, i16 } @llvm.x86.rep.cmps.state32(
 ; M32-LABEL: name: cmps_override
-; M32: REP_CMPS_STATE32 {{.*}}implicit-def{{( dead)?}} $df
+; M32: REP_CMPS_STATE32_SAVE_ESI {{.*}}implicit-def{{( dead)?}} $df
   %result = call { i32, i32, i32, i16 } @llvm.x86.rep.cmps.state32(i32 %v0, i32 %v1, i32 %v2, i8 %v3, i16 %v4, i32 4, i32 16, i32 100, i32 1)
   ret { i32, i32, i32, i16 } %result
 }
@@ -587,13 +599,15 @@ define { i32, i32 } @outs(i32 %v0, i32 %v1, i16 %v2, i8 %v3) {
 ; X32-NEXT: je
 ; X32-NEXT: std
 ; X32-NEXT: .Ltmp
+; X32-NEXT: xchgl [[PAIR:.*]]
 ; X32-NEXT: rep{{.*}}outsw
 ; X32-NEXT: cld
+; X32-NEXT: xchgl [[PAIR]]
 ; X32: ret
 ; IR32-LABEL: define { i32, i32 } @outs(
 ; IR32: call { i32, i32 } @llvm.x86.rep.outs.state32(
 ; M32-LABEL: name: outs
-; M32: REP_OUTS_STATE32 {{.*}}implicit-def{{( dead)?}} $df
+; M32: REP_OUTS_STATE32_SAVE_ESI {{.*}}implicit-def{{( dead)?}} $df
   %result = call { i32, i32 } @llvm.x86.rep.outs.state32(i32 %v0, i32 %v1, i16 %v2, i8 %v3, i32 2, i32 32, i32 0)
   ret { i32, i32 } %result
 }
@@ -605,13 +619,15 @@ define { i32, i32 } @outs_override(i32 %v0, i32 %v1, i16 %v2, i8 %v3) {
 ; X32-NEXT: je
 ; X32-NEXT: std
 ; X32-NEXT: .Ltmp
+; X32-NEXT: xchgl [[PAIR:.*]]
 ; X32-NEXT: rep{{.*}}outsl
 ; X32-NEXT: cld
+; X32-NEXT: xchgl [[PAIR]]
 ; X32: ret
 ; IR32-LABEL: define { i32, i32 } @outs_override(
 ; IR32: call { i32, i32 } @llvm.x86.rep.outs.state32(
 ; M32-LABEL: name: outs_override
-; M32: REP_OUTS_STATE32 {{.*}}implicit-def{{( dead)?}} $df
+; M32: REP_OUTS_STATE32_SAVE_ESI {{.*}}implicit-def{{( dead)?}} $df
   %result = call { i32, i32 } @llvm.x86.rep.outs.state32(i32 %v0, i32 %v1, i16 %v2, i8 %v3, i32 4, i32 16, i32 100)
   ret { i32, i32 } %result
 }

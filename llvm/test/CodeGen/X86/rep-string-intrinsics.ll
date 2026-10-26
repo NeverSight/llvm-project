@@ -189,7 +189,7 @@ define void @movsb(ptr %first, ptr %second, i32 %count) {
 ; X32: rep;movsb
 ; X32: ret
 ; M32-LABEL: name: movsb
-; M32: REP_MOVSB_32 {{.*}}implicit $df
+; M32: REP_MOVS32_SAVE_ESI {{.*}}implicit $df
   call void @llvm.x86.movsb32(ptr %first, ptr %second, i32 %count)
   ret void
 }
@@ -200,7 +200,7 @@ define void @movsw(ptr %first, ptr %second, i32 %count) {
 ; X32: rep;movsw
 ; X32: ret
 ; M32-LABEL: name: movsw
-; M32: REP_MOVSW_32 {{.*}}implicit $df
+; M32: REP_MOVS32_SAVE_ESI {{.*}}implicit $df
   call void @llvm.x86.movsw32(ptr %first, ptr %second, i32 %count)
   ret void
 }
@@ -211,7 +211,7 @@ define void @movsd_rep(ptr %first, ptr %second, i32 %count) {
 ; X32: rep;movsl
 ; X32: ret
 ; M32-LABEL: name: movsd_rep
-; M32: REP_MOVSD_32 {{.*}}implicit $df
+; M32: REP_MOVS32_SAVE_ESI {{.*}}implicit $df
   call void @llvm.x86.movsd.rep32(ptr %first, ptr %second, i32 %count)
   ret void
 }
@@ -288,7 +288,7 @@ define void @outbytestring(i16 %first, ptr %second, i32 %count) {
 ; X32: rep;outsb
 ; X32: ret
 ; M32-LABEL: name: outbytestring
-; M32: REP_OUTSB_32 {{.*}}implicit $df
+; M32: REP_OUTS32_SAVE_ESI {{.*}}implicit $df
   call void @llvm.x86.outbytestring(i16 %first, ptr %second, i32 %count)
   ret void
 }
@@ -299,7 +299,7 @@ define void @outwordstring(i16 %first, ptr %second, i32 %count) {
 ; X32: rep;outsw
 ; X32: ret
 ; M32-LABEL: name: outwordstring
-; M32: REP_OUTSW_32 {{.*}}implicit $df
+; M32: REP_OUTS32_SAVE_ESI {{.*}}implicit $df
   call void @llvm.x86.outwordstring(i16 %first, ptr %second, i32 %count)
   ret void
 }
@@ -310,7 +310,7 @@ define void @outdwordstring(i16 %first, ptr %second, i32 %count) {
 ; X32: rep;outsl
 ; X32: ret
 ; M32-LABEL: name: outdwordstring
-; M32: REP_OUTSL_32 {{.*}}implicit $df
+; M32: REP_OUTS32_SAVE_ESI {{.*}}implicit $df
   call void @llvm.x86.outdwordstring(i16 %first, ptr %second, i32 %count)
   ret void
 }

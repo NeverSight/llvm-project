@@ -363,6 +363,24 @@ let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
   let Uses = [ESI,ECX,EDX], Defs = [ESI,ECX,EFLAGS,DF] in
   def REP_OUTS_STATE32 : PseudoI<(outs),
       (ins i32imm:$control, GR32:$direction), []>;
+
+  // ESI can be the compiler's reserved realignment base. The source/result
+  // carrier is exchanged with ESI only during final MC emission. Early-clobber
+  // also excludes input-only implicit operands, notably OUTS's DX port.
+  let Constraints = "@earlyclobber $result, $source = $result" in {
+    let Uses = [EDI,ECX], Defs = [EDI,ECX,EFLAGS,DF] in
+    def REP_MOVS_STATE32_SAVE_ESI : PseudoI<(outs GR32_ABCD:$result),
+        (ins GR32_ABCD:$source, i32imm:$control, GR32:$direction), []>;
+    let Uses = [ECX,EAX], Defs = [ECX,EAX,EFLAGS,DF] in
+    def REP_LODS_STATE32_SAVE_ESI : PseudoI<(outs GR32_ABCD:$result),
+        (ins GR32_ABCD:$source, i32imm:$control, GR32:$direction), []>;
+    let Uses = [EDI,ECX,EAX], Defs = [EDI,ECX,EAX,EFLAGS,DF] in
+    def REP_CMPS_STATE32_SAVE_ESI : PseudoI<(outs GR32_ABCD:$result),
+        (ins GR32_ABCD:$source, i32imm:$control, GR32:$direction), []>;
+    let Uses = [ECX,EDX], Defs = [ECX,EFLAGS,DF] in
+    def REP_OUTS_STATE32_SAVE_ESI : PseudoI<(outs GR32_ABCD:$result),
+        (ins GR32_ABCD:$source, i32imm:$control, GR32:$direction), []>;
+  }
 }
 
 let SchedRW = [WriteMicrocoded] in {

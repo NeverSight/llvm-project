@@ -30379,7 +30379,7 @@ static SDValue lowerRepStringState(SDValue Op, const X86Subtarget &Subtarget,
     break;
   case Intrinsic::x86_rep_movs_state32:
     Kind = RepStringKind::Move;
-    Opcode = X86::REP_MOVS_STATE32;
+    Opcode = X86::REP_MOVS_STATE32_SAVE_ESI;
     Wide = false;
     break;
   case Intrinsic::x86_rep_stos_state32:
@@ -30389,12 +30389,12 @@ static SDValue lowerRepStringState(SDValue Op, const X86Subtarget &Subtarget,
     break;
   case Intrinsic::x86_rep_lods_state32:
     Kind = RepStringKind::Load;
-    Opcode = X86::REP_LODS_STATE32;
+    Opcode = X86::REP_LODS_STATE32_SAVE_ESI;
     Wide = false;
     break;
   case Intrinsic::x86_rep_cmps_state32:
     Kind = RepStringKind::Compare;
-    Opcode = X86::REP_CMPS_STATE32;
+    Opcode = X86::REP_CMPS_STATE32_SAVE_ESI;
     Wide = false;
     break;
   case Intrinsic::x86_rep_scas_state32:
@@ -30409,7 +30409,7 @@ static SDValue lowerRepStringState(SDValue Op, const X86Subtarget &Subtarget,
     break;
   case Intrinsic::x86_rep_outs_state32:
     Kind = RepStringKind::Output;
-    Opcode = X86::REP_OUTS_STATE32;
+    Opcode = X86::REP_OUTS_STATE32_SAVE_ESI;
     Wide = false;
     break;
   default:
@@ -30419,6 +30419,7 @@ static SDValue lowerRepStringState(SDValue Op, const X86Subtarget &Subtarget,
     report_fatal_error(
         "explicit REP intrinsic does not match the target code mode");
   const bool Compare = X86::repStringCompares(Kind);
+  const bool SaveSI = !Wide && X86::repStringHasSource(Kind);
   if (Compare && !Subtarget.canUseLAHFSAHF())
     report_fatal_error(
         "explicit REP comparison requires the sahf target feature");
@@ -30468,19 +30469,27 @@ static SDValue lowerRepStringState(SDValue Op, const X86Subtarget &Subtarget,
     Glue = Chain.getValue(1);
   };
   for (unsigned I = 0; I != Registers.size(); ++I)
-    SetRegister(Registers[I], Op.getOperand(I + 2));
+    if (!SaveSI || Registers[I] != SI)
+      SetRegister(Registers[I], Op.getOperand(I + 2));
   if (Compare) {
     auto Flags =
         DAG.getNode(ISD::AND, DL, MVT::i16, Op.getOperand(6),
                     DAG.getConstant(X86::RepStringFlagsMask, DL, MVT::i16));
     SetRegister(Kind == RepStringKind::Scan ? DX : AX, Flags);
   }
-  auto *Access = DAG.getMachineNode(
-      Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue),
-      {DAG.getTargetConstant(Descriptor, DL, MVT::i32),
-       DAG.getZExtOrTrunc(Op.getOperand(5), DL, MVT::i32), Chain, Glue});
-  Chain = SDValue(Access, 0);
-  Glue = SDValue(Access, 1);
+  SmallVector<SDValue, 5> Operands;
+  if (SaveSI)
+    Operands.push_back(Op.getOperand(2));
+  Operands.append({DAG.getTargetConstant(Descriptor, DL, MVT::i32),
+                   DAG.getZExtOrTrunc(Op.getOperand(5), DL, MVT::i32), Chain,
+                   Glue});
+  auto *Access =
+      DAG.getMachineNode(Opcode, DL,
+                         SaveSI ? DAG.getVTList(Word, MVT::Other, MVT::Glue)
+                                : DAG.getVTList(MVT::Other, MVT::Glue),
+                         Operands);
+  Chain = SDValue(Access, SaveSI ? 1 : 0);
+  Glue = SDValue(Access, SaveSI ? 2 : 1);
   SmallVector<SDValue, 5> Results;
   auto GetRegister = [&](unsigned Register, MVT Type) {
     auto Value = DAG.getCopyFromReg(Chain, DL, Register, Type, Glue);
@@ -30494,7 +30503,9 @@ static SDValue lowerRepStringState(SDValue Op, const X86Subtarget &Subtarget,
           ? 3
           : 2;
   for (unsigned I = 0; I != Count; ++I)
-    Results.push_back(GetRegister(Registers[I], Word));
+    Results.push_back(SaveSI && Registers[I] == SI
+                          ? SDValue(Access, 0)
+                          : GetRegister(Registers[I], Word));
   if (Compare)
     Results.push_back(
         DAG.getNode(ISD::AND, DL, MVT::i16, GetRegister(X86::AX, MVT::i16),
@@ -30559,6 +30570,8 @@ static SDValue lowerRepString(SDValue Op, const X86Subtarget &Subtarget,
         "REP memory-string intrinsic does not match the target code mode");
   const unsigned Opcode = Is64 ? Selected->Opcode64 : Selected->Opcode32;
   assert(Opcode && "qword string operation requires 64-bit mode");
+  const bool SaveSI =
+      !Is64 && (Selected->Operation == Move || Selected->Operation == Output);
   const SDLoc DL(Op);
   SDValue Chain = Op.getOperand(0), Glue;
   auto SetRegister = [&](unsigned Register, SDValue Value) {
@@ -30573,15 +30586,26 @@ static SDValue lowerRepString(SDValue Op, const X86Subtarget &Subtarget,
     const unsigned PointerRegister = Selected->Operation == Input
                                          ? (Is64 ? X86::RDI : X86::EDI)
                                          : (Is64 ? X86::RSI : X86::ESI);
-    SetRegister(PointerRegister, Address(Op.getOperand(3)));
+    if (!SaveSI)
+      SetRegister(PointerRegister, Address(Op.getOperand(3)));
   } else {
     SetRegister(Is64 ? X86::RDI : X86::EDI, Address(Op.getOperand(2)));
-    if (Selected->Operation == Move)
-      SetRegister(Is64 ? X86::RSI : X86::ESI, Address(Op.getOperand(3)));
-    else
+    if (Selected->Operation == Move) {
+      if (!SaveSI)
+        SetRegister(Is64 ? X86::RSI : X86::ESI, Address(Op.getOperand(3)));
+    } else
       SetRegister(Selected->ValueRegister, Op.getOperand(3));
   }
   SetRegister(Is64 ? X86::RCX : X86::ECX, Address(Op.getOperand(4)));
+  if (SaveSI)
+    return SDValue(
+        DAG.getMachineNode(
+            Selected->Operation == Move ? X86::REP_MOVS32_SAVE_ESI
+                                        : X86::REP_OUTS32_SAVE_ESI,
+            DL, DAG.getVTList(MVT::i32, MVT::Other, MVT::Glue),
+            {Address(Op.getOperand(3)),
+             DAG.getTargetConstant(Opcode, DL, MVT::i32), Chain, Glue}),
+        1);
   return SDValue(DAG.getMachineNode(Opcode, DL,
                                     DAG.getVTList(MVT::Other, MVT::Glue),
                                     {Chain, Glue}),

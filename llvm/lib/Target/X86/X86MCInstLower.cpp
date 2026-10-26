@@ -2913,10 +2913,47 @@ bool X86AsmPrinter::emitBoundedLeafState(const MachineInstr *MI) {
   return true;
 }
 
+static unsigned nativeStringESICarrier(const MachineInstr *MI,
+                                       X86::RepStringKind Kind) {
+  if (!MI->getOperand(0).isReg() || !MI->getOperand(1).isReg() ||
+      MI->getOperand(0).getReg() != MI->getOperand(1).getReg())
+    report_fatal_error("invalid REP ESI carrier operands");
+  const unsigned Reg = MI->getOperand(0).getReg();
+  if (!X86::GR32_ABCDRegClass.contains(Reg) || Reg == X86::ECX ||
+      (Reg == X86::EAX && (Kind == X86::RepStringKind::Load ||
+                           Kind == X86::RepStringKind::Compare)) ||
+      (Reg == X86::EDX && Kind == X86::RepStringKind::Output))
+    report_fatal_error("invalid REP ESI carrier register");
+  return Reg;
+}
+
+bool X86AsmPrinter::emitRepStringSaveESI(const MachineInstr *MI) {
+  const bool Move = MI->getOpcode() == X86::REP_MOVS32_SAVE_ESI;
+  if (!Move && MI->getOpcode() != X86::REP_OUTS32_SAVE_ESI)
+    return false;
+  if (Subtarget->is64Bit() || MI->getNumExplicitOperands() != 3 ||
+      !MI->getOperand(2).isImm())
+    report_fatal_error("invalid raw REP ESI carrier operands or target");
+  const unsigned Opcode = MI->getOperand(2).getImm();
+  if (Move ? (Opcode != X86::REP_MOVSB_32 && Opcode != X86::REP_MOVSW_32 &&
+              Opcode != X86::REP_MOVSD_32)
+           : (Opcode != X86::REP_OUTSB_32 && Opcode != X86::REP_OUTSW_32 &&
+              Opcode != X86::REP_OUTSL_32))
+    report_fatal_error("invalid raw REP ESI carrier opcode");
+  const unsigned Carrier = nativeStringESICarrier(
+      MI, Move ? X86::RepStringKind::Move : X86::RepStringKind::Output);
+  SMShadowTracker.emitShadowPadding(*OutStreamer, getSubtargetInfo());
+  NoAutoPaddingScope NoPadScope(*OutStreamer);
+  EmitAndCountInstruction(nativeRegisterExchange(X86::ESI, Carrier, false));
+  EmitAndCountInstruction(MCInstBuilder(Opcode));
+  EmitAndCountInstruction(nativeRegisterExchange(X86::ESI, Carrier, false));
+  return true;
+}
+
 bool X86AsmPrinter::emitRepStringState(const MachineInstr *MI) {
   using X86::RepStringKind;
   RepStringKind Kind;
-  bool Wide;
+  bool Wide, SaveSI = false;
   switch (MI->getOpcode()) {
 #define REP_STATE(OP, KIND)                                                    \
   case X86::REP_##OP##_STATE64:                                                \
@@ -2935,14 +2972,28 @@ bool X86AsmPrinter::emitRepStringState(const MachineInstr *MI) {
     REP_STATE(INS, Input)
     REP_STATE(OUTS, Output)
 #undef REP_STATE
+#define REP_STATE_SAVE_ESI(OP, KIND)                                           \
+  case X86::REP_##OP##_STATE32_SAVE_ESI:                                       \
+    Kind = RepStringKind::KIND;                                                \
+    Wide = false;                                                              \
+    SaveSI = true;                                                             \
+    break;
+    REP_STATE_SAVE_ESI(MOVS, Move)
+    REP_STATE_SAVE_ESI(LODS, Load)
+    REP_STATE_SAVE_ESI(CMPS, Compare)
+    REP_STATE_SAVE_ESI(OUTS, Output)
+#undef REP_STATE_SAVE_ESI
   default:
     return false;
   }
-  if (MI->getNumExplicitOperands() != 2 || !MI->getOperand(0).isImm() ||
-      !MI->getOperand(1).isReg() ||
-      !X86::GR32RegClass.contains(MI->getOperand(1).getReg()))
+  const unsigned ControlIndex = SaveSI ? 2 : 0;
+  if (MI->getNumExplicitOperands() != ControlIndex + 2 ||
+      !MI->getOperand(ControlIndex).isImm() ||
+      !MI->getOperand(ControlIndex + 1).isReg() ||
+      !X86::GR32RegClass.contains(MI->getOperand(ControlIndex + 1).getReg()))
     report_fatal_error("invalid REP machine-state operands");
-  const uint64_t Control = MI->getOperand(0).getImm();
+  const unsigned Carrier = SaveSI ? nativeStringESICarrier(MI, Kind) : 0;
+  const uint64_t Control = MI->getOperand(ControlIndex).getImm();
   const unsigned ElementLog = (Control >> X86::RepStringElementShift) & 3;
   const unsigned Prefix = (Control >> X86::RepStringSegmentShift) & 0xff;
   const bool NotEqual = Control & X86::RepStringNotEqual;
@@ -3002,7 +3053,7 @@ bool X86AsmPrinter::emitRepStringState(const MachineInstr *MI) {
   SMShadowTracker.emitShadowPadding(*OutStreamer, getSubtargetInfo());
   NoAutoPaddingScope NoPadScope(*OutStreamer);
   EmitAndCountInstruction(MCInstBuilder(X86::CLD));
-  const auto Direction = MI->getOperand(1).getReg();
+  const auto Direction = MI->getOperand(ControlIndex + 1).getReg();
   EmitAndCountInstruction(
       MCInstBuilder(X86::TEST32rr).addReg(Direction).addReg(Direction));
   MCSymbol *Ready = OutContext.createTempSymbol();
@@ -3012,14 +3063,15 @@ bool X86AsmPrinter::emitRepStringState(const MachineInstr *MI) {
           .addImm(X86::COND_E));
   EmitAndCountInstruction(MCInstBuilder(X86::STD));
   OutStreamer->emitLabel(Ready);
+  if (SaveSI)
+    EmitAndCountInstruction(nativeRegisterExchange(X86::ESI, Carrier, false));
   if (Compare) {
     // Incoming flags have already been masked to AH's arithmetic bits and
     // AL bit zero. ADD restores OF; SAHF restores the other five flags.
     // SCAS needs its full accumulator restored before the actual access.
     if (Kind == RepStringKind::Scan)
       EmitAndCountInstruction(nativeRegisterExchange(AX, DX, Wide));
-    EmitAndCountInstruction(
-        MCInstBuilder(X86::ADD8ri).addReg(X86::AL).addReg(X86::AL).addImm(127));
+    EmitAndCountInstruction(MCInstBuilder(X86::ADD8i8).addImm(127));
     EmitAndCountInstruction(MCInstBuilder(X86::SAHF));
     if (Kind == RepStringKind::Scan)
       EmitAndCountInstruction(MCInstBuilder(Wide ? X86::MOV64rr : X86::MOV32rr)
@@ -3042,6 +3094,8 @@ bool X86AsmPrinter::emitRepStringState(const MachineInstr *MI) {
         MCInstBuilder(X86::SETCCr).addReg(X86::AL).addImm(X86::COND_O));
   }
   EmitAndCountInstruction(MCInstBuilder(X86::CLD));
+  if (SaveSI)
+    EmitAndCountInstruction(nativeRegisterExchange(X86::ESI, Carrier, false));
   return true;
 }
 
@@ -3049,6 +3103,8 @@ void X86AsmPrinter::emitInstruction(const MachineInstr *MI) {
   if (emitNativeLeafSaveRBX(MI))
     return;
   if (emitBoundedLeafState(MI))
+    return;
+  if (emitRepStringSaveESI(MI))
     return;
   if (emitRepStringState(MI))
     return;

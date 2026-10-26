@@ -447,6 +447,18 @@ def SETB_C64r : I<0, Pseudo, (outs GR64:$dst), (ins), "", []>;
 //===----------------------------------------------------------------------===//
 // String Pseudo Instructions
 //
+// Raw intrinsics preserve ambient DF and arithmetic flags. Borrow ESI only
+// inside final MC emission, including when it is the realignment base.
+let SchedRW = [WriteMicrocoded], hasSideEffects = 1, mayLoad = 1,
+    Constraints = "@earlyclobber $result, $source = $result" in {
+  let Uses = [EDI,ECX,DF], Defs = [EDI,ECX], mayStore = 1 in
+  def REP_MOVS32_SAVE_ESI : PseudoI<(outs GR32_ABCD:$result),
+      (ins GR32_ABCD:$source, i32imm:$opcode), []>, Requires<[Not64BitMode]>;
+  let Uses = [DX,ECX,DF], Defs = [ECX], mayStore = 0 in
+  def REP_OUTS32_SAVE_ESI : PseudoI<(outs GR32_ABCD:$result),
+      (ins GR32_ABCD:$source, i32imm:$opcode), []>, Requires<[Not64BitMode]>;
+}
+
 let SchedRW = [WriteMicrocoded] in {
 let Defs = [ECX,EDI,ESI], Uses = [ECX,EDI,ESI,DF], isCodeGenOnly = 1 in {
 def REP_MOVSB_32 : I<0xA4, RawFrm, (outs), (ins),
