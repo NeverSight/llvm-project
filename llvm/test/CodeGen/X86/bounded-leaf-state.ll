@@ -40,13 +40,12 @@ define { i64, i64, i64, i64, i16 } @enclu_0(i64 %b, i64 %c, i64 %d, i16 %flags) 
 ; X64-LABEL: enclu_0:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: enclu
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @enclu_0(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(i64 12379814829207060480, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -57,13 +56,12 @@ define { i64, i64, i64, i64, i16 } @enclu_1(i64 %b, i64 %c, i64 %d, i16 %flags) 
 ; X64-LABEL: enclu_1:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: enclu
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @enclu_1(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(i64 12379814829207060481, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -74,13 +72,12 @@ define { i64, i64, i64, i64, i16 } @enclu_5(i64 %b, i64 %c, i64 %d, i16 %flags) 
 ; X64-LABEL: enclu_5:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: enclu
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @enclu_5(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(i64 12379814829207060485, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -91,13 +88,12 @@ define { i64, i64, i64, i64, i16 } @enclu_6(i64 %b, i64 %c, i64 %d, i16 %flags) 
 ; X64-LABEL: enclu_6:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: enclu
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @enclu_6(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(i64 12379814829207060486, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -108,13 +104,12 @@ define { i64, i64, i64, i64, i16 } @enclu_7(i64 %b, i64 %c, i64 %d, i16 %flags) 
 ; X64-LABEL: enclu_7:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: enclu
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @enclu_7(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(i64 12379814829207060487, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -125,13 +120,12 @@ define { i64, i64, i64, i64, i16 } @enclu_8(i64 %b, i64 %c, i64 %d, i16 %flags) 
 ; X64-LABEL: enclu_8:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: enclu
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @enclu_8(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(i64 12379814829207060488, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -142,13 +136,12 @@ define { i64, i64, i64, i64, i16 } @enclu_9(i64 %b, i64 %c, i64 %d, i16 %flags) 
 ; X64-LABEL: enclu_9:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: enclu
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @enclu_9(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(i64 12379814829207060489, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -159,13 +152,12 @@ define { i64, i64, i64, i64, i16 } @enclu_10(i64 %b, i64 %c, i64 %d, i16 %flags)
 ; X64-LABEL: enclu_10:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: enclu
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @enclu_10(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(i64 12379814829207060490, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -176,13 +168,12 @@ define { i64, i64, i64, i64, i16 } @enclu_11(i64 %b, i64 %c, i64 %d, i16 %flags)
 ; X64-LABEL: enclu_11:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: enclu
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @enclu_11(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.enclu.bounded.state(i64 12379814829207060491, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -193,13 +184,12 @@ define { i64, i64, i64, i64, i16 } @getsec_0(i64 %b, i64 %c, i64 %d, i16 %flags)
 ; X64-LABEL: getsec_0:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: getsec
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @getsec_0(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.getsec.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.getsec.bounded.state(i64 12379814829207060480, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -210,13 +200,12 @@ define { i64, i64, i64, i64, i16 } @getsec_6(i64 %b, i64 %c, i64 %d, i16 %flags)
 ; X64-LABEL: getsec_6:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: getsec
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @getsec_6(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.getsec.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.getsec.bounded.state(i64 12379814829207060486, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -227,13 +216,12 @@ define { i64, i64, i64, i64, i16 } @getsec_7(i64 %b, i64 %c, i64 %d, i16 %flags)
 ; X64-LABEL: getsec_7:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: getsec
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @getsec_7(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.getsec.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.getsec.bounded.state(i64 12379814829207060487, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -244,13 +232,12 @@ define { i64, i64, i64, i64, i16 } @getsec_8(i64 %b, i64 %c, i64 %d, i16 %flags)
 ; X64-LABEL: getsec_8:
 ; X64: addb $127, %al
 ; X64-NEXT: sahf
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: getsec
-; X64-NEXT: movq %rax, %rsi
+; X64-NEXT: xchgq %rdi, %rax
 ; X64-NEXT: lahf
 ; X64-NEXT: seto %al
-; X64-NEXT: movw %ax, %di
-; X64-NEXT: movq %rsi, %rax
+; X64-NEXT: xchgq %rdi, %rax
 ; IR64-LABEL: define { i64, i64, i64, i64, i16 } @getsec_8(
 ; IR64: call { i64, i64, i64, i64, i16 } @llvm.x86.getsec.bounded.state(
   %r = call { i64, i64, i64, i64, i16 } @llvm.x86.getsec.bounded.state(i64 12379814829207060488, i64 %b, i64 %c, i64 %d, i16 %flags)
@@ -274,13 +261,12 @@ define { i32, i32, i32, i32, i16 } @enclu_0(i32 %b, i32 %c, i32 %d, i16 %flags) 
 ; X32-LABEL: enclu_0:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: enclu
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @enclu_0(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(i32 0, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -291,13 +277,12 @@ define { i32, i32, i32, i32, i16 } @enclu_1(i32 %b, i32 %c, i32 %d, i16 %flags) 
 ; X32-LABEL: enclu_1:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: enclu
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @enclu_1(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(i32 1, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -308,13 +293,12 @@ define { i32, i32, i32, i32, i16 } @enclu_5(i32 %b, i32 %c, i32 %d, i16 %flags) 
 ; X32-LABEL: enclu_5:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: enclu
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @enclu_5(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(i32 5, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -325,13 +309,12 @@ define { i32, i32, i32, i32, i16 } @enclu_6(i32 %b, i32 %c, i32 %d, i16 %flags) 
 ; X32-LABEL: enclu_6:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: enclu
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @enclu_6(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(i32 6, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -342,13 +325,12 @@ define { i32, i32, i32, i32, i16 } @enclu_7(i32 %b, i32 %c, i32 %d, i16 %flags) 
 ; X32-LABEL: enclu_7:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: enclu
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @enclu_7(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(i32 7, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -359,13 +341,12 @@ define { i32, i32, i32, i32, i16 } @enclu_8(i32 %b, i32 %c, i32 %d, i16 %flags) 
 ; X32-LABEL: enclu_8:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: enclu
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @enclu_8(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(i32 8, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -376,13 +357,12 @@ define { i32, i32, i32, i32, i16 } @enclu_9(i32 %b, i32 %c, i32 %d, i16 %flags) 
 ; X32-LABEL: enclu_9:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: enclu
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @enclu_9(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(i32 9, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -393,13 +373,12 @@ define { i32, i32, i32, i32, i16 } @enclu_10(i32 %b, i32 %c, i32 %d, i16 %flags)
 ; X32-LABEL: enclu_10:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: enclu
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @enclu_10(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(i32 10, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -410,13 +389,12 @@ define { i32, i32, i32, i32, i16 } @enclu_11(i32 %b, i32 %c, i32 %d, i16 %flags)
 ; X32-LABEL: enclu_11:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: enclu
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @enclu_11(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.enclu.bounded.state32(i32 11, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -427,13 +405,12 @@ define { i32, i32, i32, i32, i16 } @getsec_0(i32 %b, i32 %c, i32 %d, i16 %flags)
 ; X32-LABEL: getsec_0:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: getsec
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @getsec_0(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.getsec.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.getsec.bounded.state32(i32 0, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -444,13 +421,12 @@ define { i32, i32, i32, i32, i16 } @getsec_6(i32 %b, i32 %c, i32 %d, i16 %flags)
 ; X32-LABEL: getsec_6:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: getsec
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @getsec_6(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.getsec.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.getsec.bounded.state32(i32 6, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -461,13 +437,12 @@ define { i32, i32, i32, i32, i16 } @getsec_7(i32 %b, i32 %c, i32 %d, i16 %flags)
 ; X32-LABEL: getsec_7:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: getsec
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @getsec_7(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.getsec.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.getsec.bounded.state32(i32 7, i32 %b, i32 %c, i32 %d, i16 %flags)
@@ -478,13 +453,12 @@ define { i32, i32, i32, i32, i16 } @getsec_8(i32 %b, i32 %c, i32 %d, i16 %flags)
 ; X32-LABEL: getsec_8:
 ; X32: addb $127, %al
 ; X32-NEXT: sahf
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: getsec
-; X32-NEXT: movl %eax, %esi
+; X32-NEXT: xchgl %edi, %eax
 ; X32-NEXT: lahf
 ; X32-NEXT: seto %al
-; X32-NEXT: movw %ax, %di
-; X32-NEXT: movl %esi, %eax
+; X32-NEXT: xchgl %edi, %eax
 ; IR32-LABEL: define { i32, i32, i32, i32, i16 } @getsec_8(
 ; IR32: call { i32, i32, i32, i32, i16 } @llvm.x86.getsec.bounded.state32(
   %r = call { i32, i32, i32, i32, i16 } @llvm.x86.getsec.bounded.state32(i32 8, i32 %b, i32 %c, i32 %d, i16 %flags)

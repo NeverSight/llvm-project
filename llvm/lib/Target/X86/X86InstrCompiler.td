@@ -46,6 +46,34 @@ let hasSideEffects = 0, mayLoad = 0, mayStore = 0,
                          Requires<[Not64BitMode]>;
 }
 
+// Native implicit-RBX operations must not overwrite a reserved realignment
+// base. Keep the input/result in a tied carrier until MC emission, where a
+// pair of XCHGs borrows RBX without an intervening compiler stack access.
+// RBX is preserved by the complete pseudo. Its carrier excludes RBX and its
+// other implicit operands, including after coalescing and copy propagation.
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    SchedRW = [WriteMicrocoded], Constraints = "$src = $dst" in {
+  let Uses = [RAX, RCX, RDX], Defs = [RAX, RCX, RDX, EFLAGS] in {
+    def ENCLS64_SAVE_RBX : PseudoI<(outs GR64_TCW64:$dst),
+        (ins GR64_TCW64:$src), []>, Requires<[HasSGX, In64BitMode]>;
+    def ENCLV64_SAVE_RBX : PseudoI<(outs GR64_TCW64:$dst),
+        (ins GR64_TCW64:$src), []>, Requires<[HasSGX, In64BitMode]>;
+    def ENCLU64_SAVE_RBX : PseudoI<(outs GR64_TCW64:$dst),
+        (ins GR64_TCW64:$src), []>, Requires<[HasSGX, In64BitMode]>;
+    def GETSEC64_SAVE_RBX : PseudoI<(outs GR64_TCW64:$dst),
+        (ins GR64_TCW64:$src), []>, Requires<[In64BitMode]>;
+  }
+  let Uses = [RAX, RCX, RDX, RDI], Defs = [RAX, RCX, RDX, RDI, EFLAGS] in {
+    def ENCLU_STATE64_SAVE_RBX : PseudoI<(outs GR64_TCW64:$dst),
+        (ins GR64_TCW64:$src), []>, Requires<[HasSGX, In64BitMode]>;
+    def GETSEC_STATE64_SAVE_RBX : PseudoI<(outs GR64_TCW64:$dst),
+        (ins GR64_TCW64:$src), []>, Requires<[In64BitMode]>;
+  }
+  let Uses = [EAX, ECX], Defs = [EAX, ECX, EDX] in
+    def CPUID64_SAVE_RBX : PseudoI<(outs GR64_TCW64:$dst),
+        (ins GR64_TCW64:$src), []>, Requires<[In64BitMode]>;
+}
+
 // PIC base construction.  This expands to code that looks like this:
 //     call  $next_inst
 //     popl %destreg"

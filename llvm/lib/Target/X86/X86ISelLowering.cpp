@@ -28438,6 +28438,8 @@ static SDValue lowerSGXFallthrough(SDValue Op, const X86Subtarget &Subtarget,
       Wide ? X86::RCX : X86::ECX, Wide ? X86::RDX : X86::EDX};
   SDValue Chain = Op.getOperand(0), Glue;
   for (unsigned I = 0; I != 4; ++I) {
+    if (Wide && I == 1)
+      continue;
     SDValue Input = Op.getOperand(I + 2);
     // ImmArg becomes a TargetConstant in SelectionDAGBuilder. rAX still
     // needs an ordinary constant that instruction selection can materialize.
@@ -28449,18 +28451,29 @@ static SDValue lowerSGXFallthrough(SDValue Op, const X86Subtarget &Subtarget,
   }
   const bool System =
       ID == Intrinsic::x86_encls || ID == Intrinsic::x86_encls32;
-  const unsigned Opcode = Wide ? (User     ? X86::ENCLU
-                                  : System ? X86::ENCLS
-                                           : X86::ENCLV)
+  const unsigned Opcode = Wide ? (User     ? X86::ENCLU64_SAVE_RBX
+                                  : System ? X86::ENCLS64_SAVE_RBX
+                                           : X86::ENCLV64_SAVE_RBX)
                                : (User     ? X86::ENCLU32
                                   : System ? X86::ENCLS32
                                            : X86::ENCLV32);
-  auto *Access = DAG.getMachineNode(
-      Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue), {Chain, Glue});
-  Chain = SDValue(Access, 0);
-  Glue = SDValue(Access, 1);
+  SmallVector<SDValue, 3> Operands;
+  if (Wide)
+    Operands.push_back(Op.getOperand(3));
+  Operands.append({Chain, Glue});
+  auto *Access =
+      DAG.getMachineNode(Opcode, DL,
+                         Wide ? DAG.getVTList(VT, MVT::Other, MVT::Glue)
+                              : DAG.getVTList(MVT::Other, MVT::Glue),
+                         Operands);
+  Chain = SDValue(Access, Wide ? 1 : 0);
+  Glue = SDValue(Access, Wide ? 2 : 1);
   SmallVector<SDValue, 6> Results;
   for (unsigned Register : Registers) {
+    if (Wide && Register == X86::RBX) {
+      Results.push_back(SDValue(Access, 0));
+      continue;
+    }
     SDValue Value = DAG.getCopyFromReg(Chain, DL, Register, VT, Glue);
     Results.push_back(Value);
     Chain = Value.getValue(1);
@@ -28512,21 +28525,31 @@ static SDValue lowerBoundedLeafState(SDValue Op, const X86Subtarget &Subtarget,
     Chain = DAG.getCopyToReg(Chain, DL, Register, Value, Glue);
     Glue = Chain.getValue(1);
   };
-  for (unsigned I = 0; I != 4; ++I)
+  for (unsigned I = 0; I != 4; ++I) {
+    if (Wide && I == 1)
+      continue;
     SetRegister(Registers[I],
                 I == 0 ? DAG.getConstant(Control->getAPIntValue(), DL, Word)
                        : Op.getOperand(I + 2));
+  }
   auto Flags = DAG.getNode(
       ISD::AND, DL, MVT::i16, Op.getOperand(6),
       DAG.getConstant(X86::NativeArithmeticFlagsMask, DL, MVT::i16));
   SetRegister(Wide ? X86::RDI : X86::EDI, DAG.getZExtOrTrunc(Flags, DL, Word));
   const unsigned Opcode =
-      Wide ? (User ? X86::ENCLU_STATE64 : X86::GETSEC_STATE64)
+      Wide ? (User ? X86::ENCLU_STATE64_SAVE_RBX : X86::GETSEC_STATE64_SAVE_RBX)
            : (User ? X86::ENCLU_STATE32 : X86::GETSEC_STATE32);
-  auto *Access = DAG.getMachineNode(
-      Opcode, DL, DAG.getVTList(MVT::Other, MVT::Glue), {Chain, Glue});
-  Chain = SDValue(Access, 0);
-  Glue = SDValue(Access, 1);
+  SmallVector<SDValue, 3> Operands;
+  if (Wide)
+    Operands.push_back(Op.getOperand(3));
+  Operands.append({Chain, Glue});
+  auto *Access =
+      DAG.getMachineNode(Opcode, DL,
+                         Wide ? DAG.getVTList(Word, MVT::Other, MVT::Glue)
+                              : DAG.getVTList(MVT::Other, MVT::Glue),
+                         Operands);
+  Chain = SDValue(Access, Wide ? 1 : 0);
+  Glue = SDValue(Access, Wide ? 2 : 1);
   auto GetRegister = [&](unsigned Register, MVT Type) {
     auto Value = DAG.getCopyFromReg(Chain, DL, Register, Type, Glue);
     Chain = Value.getValue(1);
@@ -28535,7 +28558,9 @@ static SDValue lowerBoundedLeafState(SDValue Op, const X86Subtarget &Subtarget,
   };
   SmallVector<SDValue, 6> Results;
   for (const auto Register : Registers)
-    Results.push_back(GetRegister(Register, Word));
+    Results.push_back(Wide && Register == X86::RBX
+                          ? SDValue(Access, 0)
+                          : GetRegister(Register, Word));
   Results.push_back(DAG.getNode(
       ISD::AND, DL, MVT::i16, GetRegister(X86::DI, MVT::i16),
       DAG.getConstant(X86::NativeArithmeticFlagsMask, DL, MVT::i16)));
@@ -28563,19 +28588,31 @@ static SDValue lowerGetsecBounded(SDValue Op, const X86Subtarget &Subtarget,
       Wide ? X86::RCX : X86::ECX, Wide ? X86::RDX : X86::EDX};
   SDValue Chain = Op.getOperand(0), Glue;
   for (unsigned I = 0; I != 4; ++I) {
+    if (Wide && I == 1)
+      continue;
     SDValue Input = Op.getOperand(I + 2);
     if (I == 0)
       Input = DAG.getConstant(Control->getAPIntValue(), DL, VT);
     Chain = DAG.getCopyToReg(Chain, DL, Registers[I], Input, Glue);
     Glue = Chain.getValue(1);
   }
+  SmallVector<SDValue, 3> Operands;
+  if (Wide)
+    Operands.push_back(Op.getOperand(3));
+  Operands.append({Chain, Glue});
   auto *Access =
-      DAG.getMachineNode(Wide ? X86::GETSEC : X86::GETSEC32, DL,
-                         DAG.getVTList(MVT::Other, MVT::Glue), {Chain, Glue});
-  Chain = SDValue(Access, 0);
-  Glue = SDValue(Access, 1);
+      DAG.getMachineNode(Wide ? X86::GETSEC64_SAVE_RBX : X86::GETSEC32, DL,
+                         Wide ? DAG.getVTList(VT, MVT::Other, MVT::Glue)
+                              : DAG.getVTList(MVT::Other, MVT::Glue),
+                         Operands);
+  Chain = SDValue(Access, Wide ? 1 : 0);
+  Glue = SDValue(Access, Wide ? 2 : 1);
   SmallVector<SDValue, 5> Results;
   for (unsigned Register : Registers) {
+    if (Wide && Register == X86::RBX) {
+      Results.push_back(SDValue(Access, 0));
+      continue;
+    }
     SDValue Value = DAG.getCopyFromReg(Chain, DL, Register, VT, Glue);
     Results.push_back(Value);
     Chain = Value.getValue(1);
@@ -30623,19 +30660,34 @@ static SDValue lowerDescriptorAccess(SDValue Op, const X86Subtarget &Subtarget,
                  0);
 }
 
-static SDValue lowerCPUID(SDValue Op, SelectionDAG &DAG) {
+static SDValue lowerCPUID(SDValue Op, const X86Subtarget &Subtarget,
+                          SelectionDAG &DAG) {
+  const bool Wide = Subtarget.is64Bit();
   const SDLoc DL(Op);
   SDValue Chain = DAG.getCopyToReg(Op.getOperand(0), DL, X86::EAX,
                                    Op.getOperand(3), SDValue());
   Chain = DAG.getCopyToReg(Chain, DL, X86::ECX, Op.getOperand(4),
                            Chain.getValue(1));
+  // CPUID zero-extends EBX, but the compiler's complete RBX value must
+  // survive. Its unused input only supplies the tied exchange carrier.
+  SmallVector<SDValue, 3> Operands;
+  if (Wide)
+    Operands.push_back(DAG.getUNDEF(MVT::i64));
+  Operands.append({Chain, Chain.getValue(1)});
   auto *Access =
-      DAG.getMachineNode(X86::CPUID, DL, DAG.getVTList(MVT::Other, MVT::Glue),
-                         {Chain, Chain.getValue(1)});
-  Chain = SDValue(Access, 0);
-  SDValue Glue = SDValue(Access, 1);
+      DAG.getMachineNode(Wide ? X86::CPUID64_SAVE_RBX : X86::CPUID, DL,
+                         Wide ? DAG.getVTList(MVT::i64, MVT::Other, MVT::Glue)
+                              : DAG.getVTList(MVT::Other, MVT::Glue),
+                         Operands);
+  Chain = SDValue(Access, Wide ? 1 : 0);
+  SDValue Glue = SDValue(Access, Wide ? 2 : 1);
   SmallVector<SDValue, 4> Values;
   for (unsigned Register : {X86::EAX, X86::EBX, X86::ECX, X86::EDX}) {
+    if (Wide && Register == X86::EBX) {
+      Values.push_back(
+          DAG.getNode(ISD::TRUNCATE, DL, MVT::i32, SDValue(Access, 0)));
+      continue;
+    }
     SDValue Value = DAG.getCopyFromReg(Chain, DL, Register, MVT::i32, Glue);
     Values.push_back(Value);
     Chain = Value.getValue(1);
@@ -30777,7 +30829,7 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
       return lowerDescriptorAccess(Op, Subtarget, DAG);
 
     case Intrinsic::x86_cpuidex:
-      return lowerCPUID(Op, DAG);
+      return lowerCPUID(Op, Subtarget, DAG);
 
     case Intrinsic::x86_cli:
     case Intrinsic::x86_sti:
