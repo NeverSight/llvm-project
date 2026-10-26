@@ -3429,6 +3429,18 @@ let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
 // ADX
 
 let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
+  // Explicit ADX value APIs keep CF and OF as separate SSA carry chains.
+  // Any nonzero carry byte supplies one; the result is {carry, sum}.
+  foreach op = ["adcx", "adox"] in {
+    def int_x86_#op#_32:
+        DefaultAttrsIntrinsic<[llvm_i8_ty, llvm_i32_ty],
+                              [llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
+                              [IntrNoMem]>;
+    def int_x86_#op#_64:
+        DefaultAttrsIntrinsic<[llvm_i8_ty, llvm_i64_ty],
+                              [llvm_i8_ty, llvm_i64_ty, llvm_i64_ty],
+                              [IntrNoMem]>;
+  }
   def int_x86_addcarry_32:
       DefaultAttrsIntrinsic<[llvm_i8_ty, llvm_i32_ty],
                             [llvm_i8_ty, llvm_i32_ty, llvm_i32_ty],
