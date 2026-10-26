@@ -32,6 +32,11 @@
 #include <limits>
 
 namespace {
+#define REWRITE_FIXUP_STRING(Name, Value)                                      \
+  constexpr llvm::StringLiteral Name = Value;
+#define REWRITE_FIXUP_INTEGER(Name, Value) constexpr uint64_t Name = Value;
+#include "AddressModelFixups.def"
+
 // Detect AArch64 ADRP and ADD/LDR imm12 fixup kinds by name rather than
 // numeric value — the target-specific fixup kind enum starts at
 // FirstTargetFixupKind for every backend, so raw integer comparisons
@@ -272,6 +277,18 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
   const Triple &TT = Asm->getContext().getTargetTriple();
   const bool IsX86GOTPCRel = isX86GOTPCRelSpecifier(
       Asm->getContext().getAsmInfo(), TT, Target.getSpecifier());
+  const bool IsI386ELF = TT.getArch() == Triple::x86 && TT.isOSBinFormatELF();
+  const StringRef SpecifierName =
+      Asm->getContext().getAsmInfo().getSpecifierNameOrEmpty(
+          Target.getSpecifier());
+  const bool IsI386GOTPC =
+      IsI386ELF && Target.getAddSym() &&
+      Target.getAddSym()->getName() == GOTSymbolName &&
+      (Fixup.getKind() == FK_Data_4 ||
+       Wrapped->getFixupKindInfo(Fixup.getKind()).Name == I386GOTPCFixupName);
+  const bool IsI386GOTOffset =
+      IsI386ELF && (SpecifierName == GOTOFFSpecifierName ||
+                    SpecifierName == GOTSpecifierName);
   const std::optional<uint32_t> ArmNoneSpecifier =
       Asm->getContext().getAsmInfo().getSpecifierForName("none");
   const bool IsArmNone = (TT.isARM() || TT.isThumb()) &&
@@ -392,6 +409,24 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
   const bool IsArmPrel31 = (TT.isARM() || TT.isThumb()) &&
                            Fixup.getKind() == FK_Data_4 && Prel31Specifier &&
                            Target.getSpecifier() == *Prel31Specifier;
+  // i386 PIC first materializes a GOT anchor, then addresses data and slots
+  // relative to that anchor. These fixups need base-relative arithmetic even
+  // when their generic MC fixup does not carry a PC-relative flag.
+  if (IsI386GOTOffset) {
+    auto Base = resolveSymVA(resolveSymVA,
+                             Asm->getContext().getOrCreateSymbol(GOTSymbolName),
+                             0, false);
+    auto GOTVA = Base ? encode64(*Base) : std::nullopt;
+    if (!GOTVA) {
+      // Returning to generic fixup evaluation would drop the implicit GOT
+      // subtraction and could still produce a seemingly valid final image.
+      Result.ImageValid = false;
+      Asm->getContext().reportError(Fixup.getLoc(), UnresolvedI386GOTAnchor);
+      Value = 0;
+      return true;
+    }
+    Value -= *GOTVA;
+  }
   if (IsArmPrel31) {
     const uint64_t SecVA = getSectionImageVA(*F.getParent());
     const uint64_t FixupPC =
@@ -408,9 +443,14 @@ std::optional<bool> AddressModelBackend::evaluateFixup(const MCFragment &F,
       return true;
     }
     Value = Delta & 0x7fffffffu;
-  } else if (Fixup.isPCRel() || IsX86GOTPCRel) {
+  } else if (Fixup.isPCRel() || IsX86GOTPCRel || IsI386GOTPC) {
     uint64_t SecVA = getSectionImageVA(*F.getParent());
     uint64_t FixupPC = SecVA + Asm->getFragmentOffset(F) + Fixup.getOffset();
+    // Mach-O's data GOTPCREL relocation is measured from the end of its word.
+    // Instruction fixups already carry their own PC bias.
+    if (IsX86GOTPCRel && TT.isOSBinFormatMachO() && FK == FK_Data_4 &&
+        !Fixup.isPCRel())
+      FixupPC += MachOGOTPCRelDataBias;
     if (IsPage) {
       uint64_t PageDelta =
           (Value & ~uint64_t(0xFFF)) - (FixupPC & ~uint64_t(0xFFF));

@@ -1,0 +1,65 @@
+//===- BinaryRewriteRelocationFixtures.def - Rewrite relocation cases ----===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifdef REWRITE_TEST_STRING
+REWRITE_TEST_STRING(X64ELF, "x86_64-unknown-linux-gnu")
+REWRITE_TEST_STRING(I386ELF, "i386-unknown-linux-gnu")
+REWRITE_TEST_STRING(X64MachO, "x86_64-apple-macosx14.0.0")
+REWRITE_TEST_STRING(AArch64ELF, "aarch64-unknown-linux-gnu")
+REWRITE_TEST_STRING(TextSection, ".text")
+REWRITE_TEST_STRING(MachOTextSection, "__text")
+REWRITE_TEST_STRING(MachODataSection, "__data")
+REWRITE_TEST_STRING(DataSectionSelector, "data")
+REWRITE_TEST_STRING(Symbol, "target")
+REWRITE_TEST_STRING(MachOSymbol, "_target")
+REWRITE_TEST_STRING(GOTSymbol, "_GLOBAL_OFFSET_TABLE_")
+REWRITE_TEST_STRING(GOTSpecifier, "GOT")
+REWRITE_TEST_STRING(PLTAssembly, ".text\ncall target@PLT\n")
+REWRITE_TEST_STRING(GOTPCAssembly, ".text\n.long _GLOBAL_OFFSET_TABLE_\n")
+REWRITE_TEST_STRING(GOTPCInstructionAssembly,
+                    ".text\naddl $_GLOBAL_OFFSET_TABLE_, %ebx\n")
+REWRITE_TEST_STRING(GOTPCFixupName, "reloc_global_offset_table")
+REWRITE_TEST_STRING(GOTOffsetsAssembly,
+                    ".text\n.long target@GOTOFF\n.long target@GOT\n")
+REWRITE_TEST_STRING(MachOGOTAssembly,
+                    ".text\nmovq _target@GOTPCREL(%rip), %rax\n"
+                    ".section __DATA,__data\n.long _target@GOTPCREL+4\n"
+                    ".long _target@GOTPCREL\n")
+REWRITE_TEST_STRING(AArch64Assembly,
+                    ".text\nadrp x0, target\nadd x0, x0, :lo12:target\n")
+#undef REWRITE_TEST_STRING
+#endif
+
+#ifdef REWRITE_TEST_INTEGER
+REWRITE_TEST_INTEGER(FirstBase, 0x100173)
+REWRITE_TEST_INTEGER(SecondBase, 0x100ffb)
+REWRITE_TEST_INTEGER(AArch64FirstBase, 0x100174)
+REWRITE_TEST_INTEGER(AArch64SecondBase, 0x100ffc)
+REWRITE_TEST_INTEGER(ForwardTarget, 0x108bad)
+REWRITE_TEST_INTEGER(BackwardTarget, 0xff5a3)
+REWRITE_TEST_INTEGER(GOTBase, 0x10418d)
+REWRITE_TEST_INTEGER(GOTSlot, 0x1042a7)
+REWRITE_TEST_INTEGER(DataOffset, 0x2000)
+REWRITE_TEST_INTEGER(WordBytes, 4)
+REWRITE_TEST_INTEGER(CallBytes, 5)
+REWRITE_TEST_INTEGER(CallFieldOffset, 1)
+REWRITE_TEST_INTEGER(MovBytes, 7)
+REWRITE_TEST_INTEGER(MovFieldOffset, 3)
+REWRITE_TEST_INTEGER(AddBytes, 6)
+REWRITE_TEST_INTEGER(AddFieldOffset, 2)
+REWRITE_TEST_INTEGER(PageMask, 0xfff)
+REWRITE_TEST_INTEGER(PageBytes, 0x1000)
+REWRITE_TEST_INTEGER(ADRPImmediateLowShift, 29)
+REWRITE_TEST_INTEGER(ADRPImmediateLowMask, 3)
+REWRITE_TEST_INTEGER(ADRPImmediateHighShift, 5)
+REWRITE_TEST_INTEGER(ADRPImmediateHighMask, 0x7ffff)
+REWRITE_TEST_INTEGER(ADRPImmediateHighOffset, 2)
+REWRITE_TEST_INTEGER(ADRPSignBit, 0x100000)
+REWRITE_TEST_INTEGER(AddImmediateShift, 10)
+#undef REWRITE_TEST_INTEGER
+#endif
