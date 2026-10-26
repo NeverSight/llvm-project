@@ -26,8 +26,8 @@
 declare { i16, i8 } @llvm.x86.lar.mem16.address(i64, i32, i32, i16)
 define { i16, i8 } @lar_mem16(i64 %offset, i16 %prior) {
 ; X64-LABEL: lar_mem16:
-; X64: larw{{[ \t]+}}(%rbx),
-; X64: larw{{[ \t]+}}%gs:(%ebx),
+; X64: larw{{[ \t]+}}(%r{{[abcd]}}x),
+; X64: larw{{[ \t]+}}%gs:(%e{{[abcd]}}x),
   %dead = call { i16, i8 } @llvm.x86.lar.mem16.address(i64 %offset, i32 64, i32 0, i16 %prior)
   %live = call { i16, i8 } @llvm.x86.lar.mem16.address(i64 %offset, i32 32, i32 101, i16 %prior)
   ret { i16, i8 } %live
@@ -36,8 +36,8 @@ define { i16, i8 } @lar_mem16(i64 %offset, i16 %prior) {
 declare { i32, i8 } @llvm.x86.lar.mem32.address(i64, i32, i32, i32)
 define { i32, i8 } @lar_mem32(i64 %offset, i32 %prior) {
 ; X64-LABEL: lar_mem32:
-; X64: larl{{[ \t]+}}(%rbx),
-; X64: larl{{[ \t]+}}%gs:(%ebx),
+; X64: larl{{[ \t]+}}(%r{{[abcd]}}x),
+; X64: larl{{[ \t]+}}%gs:(%e{{[abcd]}}x),
   %dead = call { i32, i8 } @llvm.x86.lar.mem32.address(i64 %offset, i32 64, i32 0, i32 %prior)
   %live = call { i32, i8 } @llvm.x86.lar.mem32.address(i64 %offset, i32 32, i32 101, i32 %prior)
   ret { i32, i8 } %live
@@ -46,8 +46,8 @@ define { i32, i8 } @lar_mem32(i64 %offset, i32 %prior) {
 declare { i64, i8 } @llvm.x86.lar.mem64.address(i64, i32, i32, i64)
 define { i64, i8 } @lar_mem64(i64 %offset, i64 %prior) {
 ; X64-LABEL: lar_mem64:
-; X64: larq{{[ \t]+}}(%rbx),
-; X64: larq{{[ \t]+}}%gs:(%ebx),
+; X64: larq{{[ \t]+}}(%r{{[abcd]}}x),
+; X64: larq{{[ \t]+}}%gs:(%e{{[abcd]}}x),
   %dead = call { i64, i8 } @llvm.x86.lar.mem64.address(i64 %offset, i32 64, i32 0, i64 %prior)
   %live = call { i64, i8 } @llvm.x86.lar.mem64.address(i64 %offset, i32 32, i32 101, i64 %prior)
   ret { i64, i8 } %live
@@ -56,8 +56,8 @@ define { i64, i8 } @lar_mem64(i64 %offset, i64 %prior) {
 declare { i16, i8 } @llvm.x86.lsl.mem16.address(i64, i32, i32, i16)
 define { i16, i8 } @lsl_mem16(i64 %offset, i16 %prior) {
 ; X64-LABEL: lsl_mem16:
-; X64: lslw{{[ \t]+}}(%rbx),
-; X64: lslw{{[ \t]+}}%gs:(%ebx),
+; X64: lslw{{[ \t]+}}(%r{{[abcd]}}x),
+; X64: lslw{{[ \t]+}}%gs:(%e{{[abcd]}}x),
   %dead = call { i16, i8 } @llvm.x86.lsl.mem16.address(i64 %offset, i32 64, i32 0, i16 %prior)
   %live = call { i16, i8 } @llvm.x86.lsl.mem16.address(i64 %offset, i32 32, i32 101, i16 %prior)
   ret { i16, i8 } %live
@@ -66,8 +66,8 @@ define { i16, i8 } @lsl_mem16(i64 %offset, i16 %prior) {
 declare { i32, i8 } @llvm.x86.lsl.mem32.address(i64, i32, i32, i32)
 define { i32, i8 } @lsl_mem32(i64 %offset, i32 %prior) {
 ; X64-LABEL: lsl_mem32:
-; X64: lsll{{[ \t]+}}(%rbx),
-; X64: lsll{{[ \t]+}}%gs:(%ebx),
+; X64: lsll{{[ \t]+}}(%r{{[abcd]}}x),
+; X64: lsll{{[ \t]+}}%gs:(%e{{[abcd]}}x),
   %dead = call { i32, i8 } @llvm.x86.lsl.mem32.address(i64 %offset, i32 64, i32 0, i32 %prior)
   %live = call { i32, i8 } @llvm.x86.lsl.mem32.address(i64 %offset, i32 32, i32 101, i32 %prior)
   ret { i32, i8 } %live
@@ -76,8 +76,8 @@ define { i32, i8 } @lsl_mem32(i64 %offset, i32 %prior) {
 declare { i64, i8 } @llvm.x86.lsl.mem64.address(i64, i32, i32, i64)
 define { i64, i8 } @lsl_mem64(i64 %offset, i64 %prior) {
 ; X64-LABEL: lsl_mem64:
-; X64: lslq{{[ \t]+}}(%rbx),
-; X64: lslq{{[ \t]+}}%gs:(%ebx),
+; X64: lslq{{[ \t]+}}(%r{{[abcd]}}x),
+; X64: lslq{{[ \t]+}}%gs:(%e{{[abcd]}}x),
   %dead = call { i64, i8 } @llvm.x86.lsl.mem64.address(i64 %offset, i32 64, i32 0, i64 %prior)
   %live = call { i64, i8 } @llvm.x86.lsl.mem64.address(i64 %offset, i32 32, i32 101, i64 %prior)
   ret { i64, i8 } %live
@@ -86,8 +86,8 @@ define { i64, i8 } @lsl_mem64(i64 %offset, i64 %prior) {
 declare void @llvm.x86.lkgs.address(i64, i32, i32)
 define void @lkgs(i64 %offset) {
 ; X64-LABEL: lkgs:
-; X64: lkgs{{[ \t]+}}(%rbx)
-; X64: lkgs{{[ \t]+}}%fs:(%ebx)
+; X64: lkgs{{[ \t]+}}(%r{{[abcd]}}x)
+; X64: lkgs{{[ \t]+}}%fs:(%e{{[abcd]}}x)
   call void @llvm.x86.lkgs.address(i64 %offset, i32 64, i32 0)
   call void @llvm.x86.lkgs.address(i64 %offset, i32 32, i32 100)
   ret void
@@ -97,8 +97,8 @@ define void @lkgs(i64 %offset) {
 declare { i16, i8 } @llvm.x86.lar.mem16.address32(i32, i32, i32, i16)
 define { i16, i8 } @lar_mem16(i32 %offset, i16 %prior) {
 ; X32-LABEL: lar_mem16:
-; X32: larw{{[ \t]+}}(%ebx),
-; X32: larw{{[ \t]+}}%gs:(%bx),
+; X32: larw{{[ \t]+}}(%e{{[abcd]}}x),
+; X32: larw{{[ \t]+}}%gs:(%{{[sd]}}i),
   %dead = call { i16, i8 } @llvm.x86.lar.mem16.address32(i32 %offset, i32 32, i32 0, i16 %prior)
   %live = call { i16, i8 } @llvm.x86.lar.mem16.address32(i32 %offset, i32 16, i32 101, i16 %prior)
   ret { i16, i8 } %live
@@ -107,8 +107,8 @@ define { i16, i8 } @lar_mem16(i32 %offset, i16 %prior) {
 declare { i32, i8 } @llvm.x86.lar.mem32.address32(i32, i32, i32, i32)
 define { i32, i8 } @lar_mem32(i32 %offset, i32 %prior) {
 ; X32-LABEL: lar_mem32:
-; X32: larl{{[ \t]+}}(%ebx),
-; X32: larl{{[ \t]+}}%gs:(%bx),
+; X32: larl{{[ \t]+}}(%e{{[abcd]}}x),
+; X32: larl{{[ \t]+}}%gs:(%{{[sd]}}i),
   %dead = call { i32, i8 } @llvm.x86.lar.mem32.address32(i32 %offset, i32 32, i32 0, i32 %prior)
   %live = call { i32, i8 } @llvm.x86.lar.mem32.address32(i32 %offset, i32 16, i32 101, i32 %prior)
   ret { i32, i8 } %live
@@ -117,8 +117,8 @@ define { i32, i8 } @lar_mem32(i32 %offset, i32 %prior) {
 declare { i16, i8 } @llvm.x86.lsl.mem16.address32(i32, i32, i32, i16)
 define { i16, i8 } @lsl_mem16(i32 %offset, i16 %prior) {
 ; X32-LABEL: lsl_mem16:
-; X32: lslw{{[ \t]+}}(%ebx),
-; X32: lslw{{[ \t]+}}%gs:(%bx),
+; X32: lslw{{[ \t]+}}(%e{{[abcd]}}x),
+; X32: lslw{{[ \t]+}}%gs:(%{{[sd]}}i),
   %dead = call { i16, i8 } @llvm.x86.lsl.mem16.address32(i32 %offset, i32 32, i32 0, i16 %prior)
   %live = call { i16, i8 } @llvm.x86.lsl.mem16.address32(i32 %offset, i32 16, i32 101, i16 %prior)
   ret { i16, i8 } %live
@@ -127,8 +127,8 @@ define { i16, i8 } @lsl_mem16(i32 %offset, i16 %prior) {
 declare { i32, i8 } @llvm.x86.lsl.mem32.address32(i32, i32, i32, i32)
 define { i32, i8 } @lsl_mem32(i32 %offset, i32 %prior) {
 ; X32-LABEL: lsl_mem32:
-; X32: lsll{{[ \t]+}}(%ebx),
-; X32: lsll{{[ \t]+}}%gs:(%bx),
+; X32: lsll{{[ \t]+}}(%e{{[abcd]}}x),
+; X32: lsll{{[ \t]+}}%gs:(%{{[sd]}}i),
   %dead = call { i32, i8 } @llvm.x86.lsl.mem32.address32(i32 %offset, i32 32, i32 0, i32 %prior)
   %live = call { i32, i8 } @llvm.x86.lsl.mem32.address32(i32 %offset, i32 16, i32 101, i32 %prior)
   ret { i32, i8 } %live

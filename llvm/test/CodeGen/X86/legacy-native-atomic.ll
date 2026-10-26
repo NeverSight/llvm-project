@@ -8,7 +8,7 @@
 declare void @llvm.x86.aadd32.legacy.address(i64, i32, i32 immarg, i32 immarg)
 ; CHECK-LABEL: aadd32:
 ; CHECK-NOT: {evex}
-; CHECK: aaddl{{.*}}%fs:(%ebx)
+; CHECK: aaddl{{.*}}%fs:(%e{{[abcd]}}x)
 ; MIR: LEGACY_RAO_NATIVE32
 define void @aadd32(i64 %address, i32 %value) {
   call void @llvm.x86.aadd32.legacy.address(i64 %address, i32 %value, i32 32, i32 100)
@@ -17,7 +17,7 @@ define void @aadd32(i64 %address, i32 %value) {
 declare void @llvm.x86.aand32.legacy.address(i64, i32, i32 immarg, i32 immarg)
 ; CHECK-LABEL: aand32:
 ; CHECK-NOT: {evex}
-; CHECK: aandl{{.*}}%fs:(%ebx)
+; CHECK: aandl{{.*}}%fs:(%e{{[abcd]}}x)
 ; MIR: LEGACY_RAO_NATIVE32
 define void @aand32(i64 %address, i32 %value) {
   call void @llvm.x86.aand32.legacy.address(i64 %address, i32 %value, i32 32, i32 100)
@@ -26,7 +26,7 @@ define void @aand32(i64 %address, i32 %value) {
 declare void @llvm.x86.aor32.legacy.address(i64, i32, i32 immarg, i32 immarg)
 ; CHECK-LABEL: aor32:
 ; CHECK-NOT: {evex}
-; CHECK: aorl{{.*}}%fs:(%ebx)
+; CHECK: aorl{{.*}}%fs:(%e{{[abcd]}}x)
 ; MIR: LEGACY_RAO_NATIVE32
 define void @aor32(i64 %address, i32 %value) {
   call void @llvm.x86.aor32.legacy.address(i64 %address, i32 %value, i32 32, i32 100)
@@ -35,7 +35,7 @@ define void @aor32(i64 %address, i32 %value) {
 declare void @llvm.x86.axor32.legacy.address(i64, i32, i32 immarg, i32 immarg)
 ; CHECK-LABEL: axor32:
 ; CHECK-NOT: {evex}
-; CHECK: axorl{{.*}}%fs:(%ebx)
+; CHECK: axorl{{.*}}%fs:(%e{{[abcd]}}x)
 ; MIR: LEGACY_RAO_NATIVE32
 define void @axor32(i64 %address, i32 %value) {
   call void @llvm.x86.axor32.legacy.address(i64 %address, i32 %value, i32 32, i32 100)
@@ -44,7 +44,7 @@ define void @axor32(i64 %address, i32 %value) {
 declare i32 @llvm.x86.cmpccxadd32.legacy.address(i64, i32, i32, i32 immarg, i32 immarg, i32 immarg)
 ; CHECK-LABEL: compare32:
 ; CHECK-NOT: {evex}
-; CHECK-COUNT-2: cmpgxadd{{.*}}%gs:(%rbx)
+; CHECK-COUNT-2: cmpgxadd{{.*}}%gs:(%r{{[abcd]}}x)
 ; MIR: LEGACY_CMPCCXADD_NATIVE32 {{.*}} implicit-def {{(dead )?}}$eflags
 define i32 @compare32(i64 %address, i32 %compare, i32 %add) {
   %first = call i32 @llvm.x86.cmpccxadd32.legacy.address(i64 %address, i32 %compare, i32 %add, i32 15, i32 64, i32 101)
@@ -54,7 +54,7 @@ define i32 @compare32(i64 %address, i32 %compare, i32 %add) {
 declare void @llvm.x86.aadd64.legacy.address(i64, i64, i32 immarg, i32 immarg)
 ; CHECK-LABEL: aadd64:
 ; CHECK-NOT: {evex}
-; CHECK: aaddq{{.*}}%fs:(%ebx)
+; CHECK: aaddq{{.*}}%fs:(%e{{[abcd]}}x)
 ; MIR: LEGACY_RAO_NATIVE64
 define void @aadd64(i64 %address, i64 %value) {
   call void @llvm.x86.aadd64.legacy.address(i64 %address, i64 %value, i32 32, i32 100)
@@ -63,7 +63,7 @@ define void @aadd64(i64 %address, i64 %value) {
 declare void @llvm.x86.aand64.legacy.address(i64, i64, i32 immarg, i32 immarg)
 ; CHECK-LABEL: aand64:
 ; CHECK-NOT: {evex}
-; CHECK: aandq{{.*}}%fs:(%ebx)
+; CHECK: aandq{{.*}}%fs:(%e{{[abcd]}}x)
 ; MIR: LEGACY_RAO_NATIVE64
 define void @aand64(i64 %address, i64 %value) {
   call void @llvm.x86.aand64.legacy.address(i64 %address, i64 %value, i32 32, i32 100)
@@ -72,7 +72,7 @@ define void @aand64(i64 %address, i64 %value) {
 declare void @llvm.x86.aor64.legacy.address(i64, i64, i32 immarg, i32 immarg)
 ; CHECK-LABEL: aor64:
 ; CHECK-NOT: {evex}
-; CHECK: aorq{{.*}}%fs:(%ebx)
+; CHECK: aorq{{.*}}%fs:(%e{{[abcd]}}x)
 ; MIR: LEGACY_RAO_NATIVE64
 define void @aor64(i64 %address, i64 %value) {
   call void @llvm.x86.aor64.legacy.address(i64 %address, i64 %value, i32 32, i32 100)
@@ -81,7 +81,7 @@ define void @aor64(i64 %address, i64 %value) {
 declare void @llvm.x86.axor64.legacy.address(i64, i64, i32 immarg, i32 immarg)
 ; CHECK-LABEL: axor64:
 ; CHECK-NOT: {evex}
-; CHECK: axorq{{.*}}%fs:(%ebx)
+; CHECK: axorq{{.*}}%fs:(%e{{[abcd]}}x)
 ; MIR: LEGACY_RAO_NATIVE64
 define void @axor64(i64 %address, i64 %value) {
   call void @llvm.x86.axor64.legacy.address(i64 %address, i64 %value, i32 32, i32 100)
@@ -90,7 +90,7 @@ define void @axor64(i64 %address, i64 %value) {
 declare i64 @llvm.x86.cmpccxadd64.legacy.address(i64, i64, i64, i32 immarg, i32 immarg, i32 immarg)
 ; CHECK-LABEL: compare64:
 ; CHECK-NOT: {evex}
-; CHECK-COUNT-2: cmpgxadd{{.*}}%gs:(%rbx)
+; CHECK-COUNT-2: cmpgxadd{{.*}}%gs:(%r{{[abcd]}}x)
 ; MIR: LEGACY_CMPCCXADD_NATIVE64 {{.*}} implicit-def {{(dead )?}}$eflags
 define i64 @compare64(i64 %address, i64 %compare, i64 %add) {
   %first = call i64 @llvm.x86.cmpccxadd64.legacy.address(i64 %address, i64 %compare, i64 %add, i32 15, i32 64, i32 101)

@@ -9,11 +9,11 @@
 ; RUN: not --crash llc %t/row.ll -mtriple=x86_64 -mattr=+amx-avx512,+avx10.2 -o /dev/null 2>&1 | FileCheck %s --check-prefix=CONTROL
 ; RUN: not --crash llc %t/mixed.ll -mtriple=x86_64 -mattr=+amx-tile -o /dev/null 2>&1 | FileCheck %s --check-prefix=MIXED
 ; CHECK-LABEL: good:
-; CHECK: {vex} ldtilecfg %fs:(%ebx)
-; CHECK: {evex} sttilecfg %gs:(%rbx)
-; CHECK: {evex} tileloadd %ss:(%ebx,%ecx), %tmm7
-; CHECK: {vex} tileloaddrst1 (%rbx,%rcx), %tmm1
-; CHECK: {vex} tilestored %tmm7, %ds:(%rbx,%rcx)
+; CHECK: {vex} ldtilecfg %fs:(%e{{[abcd]}}x)
+; CHECK: {evex} sttilecfg %gs:(%r{{[abcd]}}x)
+; CHECK: {evex} tileloadd %ss:(%e{{[abcd]}}x,%ecx), %tmm7
+; CHECK: {vex} tileloaddrst1 (%r{{[abcd]}}x,%rcx), %tmm1
+; CHECK: {vex} tilestored %tmm7, %ds:(%r{{[abcd]}}x,%rcx)
 ; CHECK: tilemovrow %r16d, %tmm7,
 ; CHECK: tcvtrowd2ps %ecx, %tmm0,
 ; CHECK: tilemovrow %r16d, %tmm0,

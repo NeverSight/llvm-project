@@ -33,6 +33,19 @@ let hasSideEffects = 1, mayLoad = 0, mayStore = 0,
                       Requires<[In64BitMode]>;
 }
 
+// A plain COPY's register class can be widened by coalescing. Preserve the
+// native address carrier constraint through allocation and copy propagation.
+// MC lowering emits an ordinary MOV without changing flags or touching memory.
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0,
+    SchedRW = [WriteMove] in {
+  def NATIVE_ADDRESS64 : PseudoI<(outs GR64_ABCD:$dst), (ins GR64:$src), []>,
+                         Requires<[In64BitMode]>;
+  def NATIVE_ADDRESS32 : PseudoI<(outs GR32_ABCD:$dst), (ins GR32:$src), []>,
+                         Requires<[Not64BitMode]>;
+  def NATIVE_ADDRESS16 : PseudoI<(outs GR32_SIDI:$dst), (ins GR32:$src), []>,
+                         Requires<[Not64BitMode]>;
+}
+
 // PIC base construction.  This expands to code that looks like this:
 //     call  $next_inst
 //     popl %destreg"

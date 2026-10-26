@@ -376,12 +376,12 @@ attributes #0 = { "target-features"="+avx512f,+avx512vl,+avx512bw,+avx512vbmi2,+
 
 ; CHECK-LABEL: segment_prefixes:
 ; CHECK: vpcompressd
-; CHECK: vpcompressd{{.*}}%es:(%{{[er]}}bx)
-; CHECK: vpcompressd{{.*}}%cs:(%{{[er]}}bx)
-; CHECK: vpcompressd{{.*}}%ss:(%{{[er]}}bx)
-; CHECK: vpcompressd{{.*}}%ds:(%{{[er]}}bx)
-; CHECK: vpcompressd{{.*}}%fs:(%{{[er]}}bx)
-; CHECK: vpcompressd{{.*}}%gs:(%{{[er]}}bx)
+; CHECK: vpcompressd{{.*}}%es:(%{{[er][abcd]}}x)
+; CHECK: vpcompressd{{.*}}%cs:(%{{[er][abcd]}}x)
+; CHECK: vpcompressd{{.*}}%ss:(%{{[er][abcd]}}x)
+; CHECK: vpcompressd{{.*}}%ds:(%{{[er][abcd]}}x)
+; CHECK: vpcompressd{{.*}}%fs:(%{{[er][abcd]}}x)
+; CHECK: vpcompressd{{.*}}%gs:(%{{[er][abcd]}}x)
 define void @segment_prefixes(ptr %p, i64 %k, <4 x i32> %v) #0 {
   call void @llvm.x86.avx512.compressstore128.native(ptr %p, i64 %k, <4 x i32> %v, i32 2, i32 0)
   call void @llvm.x86.avx512.compressstore128.native(ptr %p, i64 %k, <4 x i32> %v, i32 2, i32 38)

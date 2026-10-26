@@ -14,9 +14,9 @@ declare i64 @llvm.x86.cmpccxadd64.legacy.address(i64, i64, i64, i32 immarg, i32 
 ; MIR: LEGACY_CMPCCXADD_NATIVE64 [[CMP]]{{.*}}[[ADD]]
 ; CHECK-LABEL: <pressure>:
 ; CHECK-NOT: {evex}
-; CHECK: aaddq %r{{(ax|bx|cx|dx|si|di|bp|8|9|10|11|12|13|14|15)}}, (%rbx)
+; CHECK: aaddq %r{{(ax|bx|cx|dx|si|di|bp|8|9|10|11|12|13|14|15)}}, (%r{{[abcd]}}x)
 ; CHECK-NOT: {evex}
-; CHECK: cmpexadd %r{{(ax|bx|cx|dx|si|di|bp|8|9|10|11|12|13|14|15)}}, %r{{(ax|bx|cx|dx|si|di|bp|8|9|10|11|12|13|14|15)}}, (%rbx)
+; CHECK: cmpexadd %r{{(ax|bx|cx|dx|si|di|bp|8|9|10|11|12|13|14|15)}}, %r{{(ax|bx|cx|dx|si|di|bp|8|9|10|11|12|13|14|15)}}, (%r{{[abcd]}}x)
 define i64 @pressure() {
   %add = call i64 asm sideeffect "", "={r20}"()
   %compare = call i64 asm sideeffect "", "={r21}"()

@@ -16,8 +16,8 @@ declare i64 @llvm.x86.cmpccxadd64.address(i64, i64, i64, i32 immarg, i32 immarg,
 
 ; CHECK-LABEL: atomic_effects:
 ; CHECK: {evex} aaddl
-; CHECK: {evex} aandq{{.*}}%fs:(%ebx)
-; CHECK: {evex} aorl{{.*}}%gs:(%rbx)
+; CHECK: {evex} aandq{{.*}}%fs:(%e{{[abcd]}}x)
+; CHECK: {evex} aorl{{.*}}%gs:(%r{{[abcd]}}x)
 ; CHECK: {evex} axorq
 ; MIR: APX_RAO_NATIVE32
 ; MIR: APX_RAO_NATIVE64
@@ -30,7 +30,7 @@ define void @atomic_effects(i64 %address, i32 %x, i64 %y) {
 }
 
 ; CHECK-LABEL: conditional:
-; CHECK: {evex} cmpgxadd{{.*}}%gs:(%ebx)
+; CHECK: {evex} cmpgxadd{{.*}}%gs:(%e{{[abcd]}}x)
 ; MIR: APX_CMPCCXADD_NATIVE64 {{.*}} implicit-def {{(dead )?}}$eflags
 define i64 @conditional(i64 %address, i64 %compare, i64 %add) {
   %old = call i64 @llvm.x86.cmpccxadd64.address(i64 %address, i64 %compare, i64 %add, i32 15, i32 32, i32 101)
