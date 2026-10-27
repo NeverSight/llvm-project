@@ -3776,7 +3776,7 @@ void printInsnOpMapEntry(
   if (InsOps.size() > 15) {
     for (OpData const &OD : InsOps) {
       PrintNote(OD.str());
-      OD.Rec->dump();
+      errs() << *OD.Rec;
     }
     PrintFatalNote("Inst has more then 15 operands: " + CGI->AsmString);
   }
@@ -4654,7 +4654,7 @@ unsigned getEnumValue(Record *Entry) {
       return BitsInitToUInt(BI);
     }
     PrintWarning("Couldn't find an enum value for the following entry, returning a dummy 0 value");
-    Entry->dump();
+    errs() << *Entry;
     PrintWarning("Which of those fields above are the encoding/enum value?");
     return 0;
   }

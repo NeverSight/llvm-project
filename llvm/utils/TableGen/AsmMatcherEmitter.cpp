@@ -109,8 +109,6 @@ static cl::opt<std::string>
                 cl::desc("Only match instructions with the given prefix"),
                 cl::cat(AsmMatcherEmitterCat));
 
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-
 //
 // ClassInfo implementation
 //
@@ -375,6 +373,7 @@ return any_of(Classes,
               [](const ClassInfo &Class) { return Class.IsOptional; });
 }
 
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 LLVM_DUMP_METHOD void MatchableInfo::dump() const {
   errs() << TheDef->getName() << " -- " << "flattened:\"" << AsmString <<"\"\n";
 
