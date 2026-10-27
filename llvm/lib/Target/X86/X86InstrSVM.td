@@ -27,7 +27,8 @@ let hasSideEffects = 1 in
 def CLGI : I<0x01, MRM_DD, (outs), (ins), "clgi", []>, TB;
 
 // 0F 01 DE
-let Uses = [EAX] in
+let Uses = [EAX], hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    isTerminator = 1, isBarrier = 1 in
 def SKINIT : I<0x01, MRM_DE, (outs), (ins), "skinit", []>, TB;
 
 // 0F 01 D8

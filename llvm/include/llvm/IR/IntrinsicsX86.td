@@ -280,6 +280,11 @@ let TargetPrefix = "x86" in {
   def int_x86_invlpga_addr32 : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty], []>;
   def int_x86_stgi : Intrinsic<[], [], []>;
   def int_x86_clgi : Intrinsic<[], [], []>;
+  // EAX is a physical SLB address, not a compiler-dereferenced pointer.
+  // SKINIT resets processor state and transfers into the secure loader; no
+  // normal continuation in the calling function retains its old ABI state.
+  def int_x86_skinit : Intrinsic<[], [llvm_i32_ty],
+      [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
   def int_x86_swapgs : Intrinsic<[], [], []>;
   def int_x86_clac : Intrinsic<[], [], []>;
   def int_x86_stac : Intrinsic<[], [], []>;
