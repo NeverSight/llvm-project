@@ -919,6 +919,9 @@ lltok::Kind LLLexer::LexIdentifier() {
   TYPEKEYWORD("float",     Type::getFloatTy(Context));
   TYPEKEYWORD("double",    Type::getDoubleTy(Context));
   TYPEKEYWORD("x86_fp80",  Type::getX86_FP80Ty(Context));
+  // Match the existing TYPE_CODE_X86_MMX bitcode upgrade for textual IR
+  // produced by older frontends, including NeverC's embedded LLVM backend.
+  TYPEKEYWORD("x86_mmx", FixedVectorType::get(Type::getInt64Ty(Context), 1));
   TYPEKEYWORD("fp128",     Type::getFP128Ty(Context));
   TYPEKEYWORD("ppc_fp128", Type::getPPC_FP128Ty(Context));
   TYPEKEYWORD("label",     Type::getLabelTy(Context));

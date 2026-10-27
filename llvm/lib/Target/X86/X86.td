@@ -99,6 +99,14 @@ def FeatureSSE42   : SubtargetFeature<"sse4.2", "X86SSELevel", "SSE42",
 // turn it off explicitly while allowing SSE+ to be on.
 def FeatureMMX     : SubtargetFeature<"mmx","HasMMX", "true",
                                       "Enable MMX instructions">;
+// Preserve the feature annotations emitted by legacy MMX/3DNow frontends.
+// Native instruction interfaces decide which operations can be selected.
+def Feature3DNow   : SubtargetFeature<"3dnow", "Has3DNow", "true",
+                                      "Enable native 3DNow instructions",
+                                      [FeatureMMX]>;
+def Feature3DNowA  : SubtargetFeature<"3dnowa", "Has3DNowA", "true",
+                                      "Enable native enhanced 3DNow instructions",
+                                      [Feature3DNow]>;
 // All x86-64 hardware has SSE2, but we don't mark SSE2 as an implied
 // feature, because SSE2 can be disabled (e.g. for compiling OS kernels)
 // without disabling 64-bit mode. Nothing should imply this feature bit. It

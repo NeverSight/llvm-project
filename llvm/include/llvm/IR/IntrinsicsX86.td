@@ -2951,6 +2951,11 @@ let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
 let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
   def int_x86_mmx_emms  : ClangBuiltin<"__builtin_ia32_emms">,
               Intrinsic<[], [], []>;
+  // FEMMS also leaves the MMX/x87 register payloads undefined. Keep the
+  // original instruction and its state effects, including unused/repeated
+  // calls; replacing it with EMMS changes the architectural contract.
+  def int_x86_mmx_femms : ClangBuiltin<"__builtin_ia32_femms">,
+              Intrinsic<[], [], []>;
 }
 
 // Integer arithmetic ops.
