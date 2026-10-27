@@ -2117,16 +2117,18 @@ void PrinterCapstone::asmWriterEmitPrintAliasInstrHeader(
 }
 
 void PrinterCapstone::asmWriterEmitPrintAliasInstrBodyRetFalse() const {
-  OS << "  return false;\n";
   OS << "#endif // CAPSTONE_DIET\n";
+  OS << "  return false;\n";
   OS << "}\n\n";
 }
 
 void PrinterCapstone::asmWriterEmitDeclValid(std::string const &TargetName,
                                              StringRef const &ClassName) const {
-  OS << "static bool " << TargetName << ClassName
+  OS << "#ifndef CAPSTONE_DIET\n"
+     << "static bool " << TargetName << ClassName
      << "ValidateMCOperand(const MCOperand *MCOp,\n"
-     << "                  unsigned PredicateIndex);\n";
+     << "                  unsigned PredicateIndex);\n"
+     << "#endif // CAPSTONE_DIET\n";
 }
 
 void PrinterCapstone::asmWriterEmitPrintAliasInstrBody(
@@ -2235,11 +2237,11 @@ void PrinterCapstone::asmWriterEmitPrintAliasOp(
     std::string const &TargetName, StringRef const &ClassName,
     std::vector<std::pair<std::string, bool>> const &PrintMethods,
     bool PassSubtarget) const {
-  OS << "static void printCustomAliasOperand(\n"
+  OS << "#ifndef CAPSTONE_DIET\n"
+     << "static void printCustomAliasOperand(\n"
      << "         MCInst *MI, uint64_t Address, unsigned OpIdx,\n"
      << "         unsigned PrintMethodIdx,\n"
-     << "         SStream *OS) {\n"
-     << "#ifndef CAPSTONE_DIET\n";
+     << "         SStream *OS) {\n";
   if (PrintMethods.empty())
     OS << "  CS_ASSERT_RET(0 && \"Unknown PrintMethod kind\");\n";
   else {
@@ -2259,15 +2261,16 @@ void PrinterCapstone::asmWriterEmitPrintAliasOp(
     }
     OS << "  }\n";
   }
-  OS << "#endif // CAPSTONE_DIET\n";
-  OS << "}\n\n";
+  OS << "}\n";
+  OS << "#endif // CAPSTONE_DIET\n\n";
 }
 
 void PrinterCapstone::asmWriterEmitPrintMC(
     std::string const &TargetName, StringRef const &ClassName,
     std::vector<const Record *> const &MCOpPredicates) const {
   if (!MCOpPredicates.empty()) {
-    OS << "static bool " << TargetName << ClassName
+    OS << "#ifndef CAPSTONE_DIET\n"
+       << "static bool " << TargetName << ClassName
        << "ValidateMCOperand(const MCOperand *MCOp,\n"
        << "                  unsigned PredicateIndex) {\n"
        << "  switch (PredicateIndex) {\n"
@@ -2286,7 +2289,8 @@ void PrinterCapstone::asmWriterEmitPrintMC(
          << "    }\n";
     }
     OS << "  }\n"
-       << "}\n\n";
+       << "}\n"
+       << "#endif // CAPSTONE_DIET\n\n";
   }
 }
 
