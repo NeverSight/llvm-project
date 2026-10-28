@@ -38,6 +38,7 @@ def FooAlias : InstAlias<"alias $imm", (foo IntOperand:$imm)>;
 // NOALIAS-NEXT: return false;
 // NOALIAS-NEXT: }
 // NOALIAS-NOT: printCustomAliasOperand
+// NOALIAS-NOT: SStream_concat0_substr
 
 // PRED-LABEL: #undef PRINT_ALIAS_INSTR
 // PRED:      #ifndef CAPSTONE_DIET
@@ -59,6 +60,13 @@ def FooAlias : InstAlias<"alias $imm", (foo IntOperand:$imm)>;
 // The whole static helper must disappear in DIET, including its declaration.
 // An empty, unused definition still fails Capstone's warning-as-error build.
 // CHECK-LABEL: static bool printAliasInstr(
+// CHECK:      unsigned I = 0;
+// CHECK-NEXT: while (AsmString[I] != ' ' && AsmString[I] != '\t' &&
+// CHECK-NEXT: AsmString[I] != '$' && AsmString[I] != '\0')
+// CHECK-NEXT: ++I;
+// CHECK-NEXT: SStream_concat1(OS, '\t');
+// CHECK-NEXT: SStream_concat0_substr(OS, AsmString, I);
+// CHECK-NEXT: if (AsmString[I] != '\0') {
 // CHECK:      #else
 // CHECK-NEXT: return false;
 // CHECK-NEXT: #endif // CAPSTONE_DIET
