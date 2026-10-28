@@ -3053,15 +3053,28 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
-// MMX
+// x87 control state
 
-// Empty MMX state op.
-let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
+let TargetPrefix = "x86" in {
   // FNOP is a waiting x87 operation, not an integer NOP. It can report a
   // pending exception and changes x87 instruction/status state. Keep repeated
   // calls and their order relative to environment saves and memory accesses.
   def int_x86_fnop : ClangBuiltin<"__builtin_ia32_fnop">,
                     Intrinsic<[], [], []>;
+  // Preserve the two-byte memory access, ambient control/status dependencies
+  // and faults. FNSTCW is nonwaiting; FLDCW checks pending x87 exceptions.
+  // Neither is an ordinary load/store of a compiler-managed scalar value.
+  def int_x86_fnstcw : ClangBuiltin<"__builtin_ia32_fnstcw">,
+                      Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_fldcw : ClangBuiltin<"__builtin_ia32_fldcw">,
+                     Intrinsic<[], [llvm_ptr_ty], []>;
+}
+
+//===----------------------------------------------------------------------===//
+// MMX
+
+// Empty MMX state op.
+let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
   def int_x86_mmx_emms  : ClangBuiltin<"__builtin_ia32_emms">,
               Intrinsic<[], [], []>;
   // FEMMS also leaves the MMX/x87 register payloads undefined. Keep the

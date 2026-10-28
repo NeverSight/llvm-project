@@ -619,7 +619,8 @@ def FNSTCW16m : I<0xD9, MRM7m,                   // [mem16] = X87 control world
                   (outs), (ins i16mem:$dst), "fnstcw\t$dst",
                   [(X86fp_cwd_get16 addr:$dst)]>;
 } // SchedRW
-let Defs = [FPSW,FPCW], mayLoad = 1 in
+let Defs = [FPSW, FPCW], Uses = [FPCW, FPSW], mayLoad = 1,
+    hasSideEffects = 1, mayRaiseFPException = 1 in
 def FLDCW16m  : I<0xD9, MRM5m,                   // X87 control world = [mem16]
                   (outs), (ins i16mem:$dst), "fldcw\t$dst",
                   [(X86fp_cwd_set16 addr:$dst)]>,
