@@ -317,7 +317,7 @@ def FSTENVm  : I<0xD9, MRM6m, (outs), (ins anymem:$dst), "fnstenv\t$dst",
                  [(X86fpenv_get addr:$dst)]>;
 }
 
-let Uses = [FPSW], mayStore = 1 in
+let Uses = [FPSW], Defs = [FPSW], mayStore = 1, hasSideEffects = 1 in
 def FNSTSWm  : FPI<0xDD, MRM7m, (outs), (ins i16mem:$dst), "fnstsw\t$dst">;
 
 let mayLoad = 1 in
@@ -611,7 +611,7 @@ def COM_FIPr : FPI<0xDF, MRM6r, (outs), (ins RSTi:$reg),
 
 // Floating point flag ops.
 let SchedRW = [WriteALU] in {
-let Defs = [AX, FPSW], Uses = [FPSW], hasSideEffects = 0 in
+let Defs = [AX, FPSW], Uses = [FPSW], hasSideEffects = 1 in
 def FNSTSW16r : I<0xDF, MRM_E0,                  // AX = fp flags
                   (outs), (ins), "fnstsw\t{%ax|ax}", []>;
 let Defs = [FPSW], Uses = [FPCW] in
@@ -631,10 +631,15 @@ let SchedRW = [WriteMicrocoded] in {
 def FFREE : FPI<0xDD, MRM0r, (outs), (ins RSTi:$reg), "ffree\t$reg">;
 def FFREEP : FPI<0xDF, MRM0r, (outs), (ins RSTi:$reg), "ffreep\t$reg">;
 
-let Defs = [FPSW, FPCW] in
+// Invalidate allocator-owned x87/MMX values as well as the architectural bank.
+// Pseudo FP registers are distinct from ST registers before stackification.
+let Defs = [FPSW, FPCW, FP0, FP1, FP2, FP3, FP4, FP5, FP6, FP7,
+            ST0, ST1, ST2, ST3, ST4, ST5, ST6, ST7,
+            MM0, MM1, MM2, MM3, MM4, MM5, MM6, MM7],
+    hasSideEffects = 1 in
 def FNINIT : I<0xDB, MRM_E3, (outs), (ins), "fninit", []>;
 // Clear exceptions
-let Defs = [FPSW] in
+let Defs = [FPSW], Uses = [FPSW], hasSideEffects = 1 in
 def FNCLEX : I<0xDB, MRM_E2, (outs), (ins), "fnclex", []>;
 } // SchedRW
 
@@ -645,8 +650,10 @@ let Uses = [FPCW, FPSW], Defs = [FPSW], hasSideEffects = 1,
 def FNOP : I<0xD9, MRM_D0, (outs), (ins), "fnop", []>, Sched<[WriteNop]>;
 
 let SchedRW = [WriteMicrocoded] in {
-let Defs = [FPSW] in {
+let Uses = [FPCW, FPSW], Defs = [FPSW], hasSideEffects = 1,
+    mayRaiseFPException = 1 in
 def WAIT : I<0x9B, RawFrm, (outs), (ins), "wait", []>;
+let Defs = [FPSW] in {
 def FDECSTP : I<0xD9, MRM_F6, (outs), (ins), "fdecstp", []>;
 def FINCSTP : I<0xD9, MRM_F7, (outs), (ins), "fincstp", []>;
 let Uses = [FPCW], mayRaiseFPException = 1 in {

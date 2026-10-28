@@ -3068,6 +3068,19 @@ let TargetPrefix = "x86" in {
                       Intrinsic<[], [llvm_ptr_ty], []>;
   def int_x86_fldcw : ClangBuiltin<"__builtin_ia32_fldcw">,
                      Intrinsic<[], [llvm_ptr_ty], []>;
+  // Nonwaiting status reads retain both native operand forms. The memory
+  // form must not become an AX read followed by an ordinary compiler store.
+  def int_x86_fnstsw : ClangBuiltin<"__builtin_ia32_fnstsw">,
+                      Intrinsic<[llvm_i16_ty], [], []>;
+  def int_x86_fnstsw_mem : ClangBuiltin<"__builtin_ia32_fnstsw_mem">,
+                          Intrinsic<[], [llvm_ptr_ty], []>;
+  def int_x86_fnclex : ClangBuiltin<"__builtin_ia32_fnclex">,
+                      Intrinsic<[], [], []>;
+  def int_x86_fninit : ClangBuiltin<"__builtin_ia32_fninit">,
+                      Intrinsic<[], [], []>;
+  // FWAIT checks pending unmasked exceptions; it is not a compiler fence.
+  def int_x86_fwait : ClangBuiltin<"__builtin_ia32_fwait">,
+                     Intrinsic<[], [], []>;
 }
 
 //===----------------------------------------------------------------------===//
