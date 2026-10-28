@@ -3057,6 +3057,11 @@ let TargetPrefix = "x86" in {
 
 // Empty MMX state op.
 let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
+  // FNOP is a waiting x87 operation, not an integer NOP. It can report a
+  // pending exception and changes x87 instruction/status state. Keep repeated
+  // calls and their order relative to environment saves and memory accesses.
+  def int_x86_fnop : ClangBuiltin<"__builtin_ia32_fnop">,
+                    Intrinsic<[], [], []>;
   def int_x86_mmx_emms  : ClangBuiltin<"__builtin_ia32_emms">,
               Intrinsic<[], [], []>;
   // FEMMS also leaves the MMX/x87 register payloads undefined. Keep the

@@ -637,8 +637,10 @@ let Defs = [FPSW] in
 def FNCLEX : I<0xDB, MRM_E2, (outs), (ins), "fnclex", []>;
 } // SchedRW
 
-// Operand-less floating-point instructions for the disassembler.
-let Defs = [FPSW] in
+// Waiting x87 state operation; FIP and pending exceptions are observable even
+// when no ordinary floating-point result is live.
+let Uses = [FPCW, FPSW], Defs = [FPSW], hasSideEffects = 1,
+    mayLoad = 1, mayStore = 1, mayRaiseFPException = 1 in
 def FNOP : I<0xD9, MRM_D0, (outs), (ins), "fnop", []>, Sched<[WriteNop]>;
 
 let SchedRW = [WriteMicrocoded] in {
