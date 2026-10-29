@@ -52,3 +52,33 @@ cover native encodings, effects, malformed signatures, ordering and live x87/
 MMX values. Physical exception qualification is a separate Linux x64 harness
 in NeverC and does not establish privileged #NM, alignment-check delivery,
 i386 execution or behavior of historical x87 implementations.
+
+Legacy environment and register images
+--------------------------------------
+
+``llvm.x86.fnstenv16/32``, ``llvm.x86.fldenv16/32``,
+``llvm.x86.fnsave16/32`` and ``llvm.x86.frstor16/32`` each return void and take
+one address-space-zero pointer. The suffix chooses the operand-size format:
+14 or 28 bytes for the environment, 94 or 108 bytes for the environment plus
+eight 80-bit registers. It does not select an address width. These interfaces
+support i386 and x86-64 code and do not substitute FXSAVE images.
+
+FNSTENV saves the incoming environment and then masks exceptions. FNSAVE also
+saves register payloads and initializes the FPU. FLDENV replaces the environment
+(including TOP and tags) while leaving physical payloads intact; FRSTOR also
+loads the register payloads. The loads check an already pending unmasked x87
+exception before accessing memory. An unmasked exception loaded from the image
+is deferred until a later waiting instruction. Stores are nonwaiting; the
+waiting FSTENV/FSAVE spellings require a separate FWAIT before the operation.
+The Intel SDM Volume 2A instruction entries and Volume 1 section 8.7.1 describe
+these behaviors. Reserved image fields and undefined condition codes remain
+processor-defined; a fault partway through a restore need not expose the old
+environment unchanged.
+
+The DAG retains the exact volatile memory extent and byte alignment. All eight
+instructions are scheduling boundaries. Loads and FNSAVE clobber compiler
+FP/ST/MMX values, so an allocator cannot retain a value across a replaced or
+emptied register stack. Existing default-format FLDENV/FNSTENV machine records
+used by floating-point environment IR share these dependencies. The existing
+restrictions on unconstrained floating-point IR and atomic context ownership
+continue to apply.

@@ -303,18 +303,38 @@ def FICOMP32m: FPI<0xDA, MRM3m, (outs), (ins i32mem:$src), "ficomp{l}\t$src">;
 } // SchedRW
 
 let SchedRW = [WriteMicrocoded] in {
-let Defs = [FPSW, FPCW], mayLoad = 1 in {
+// Restoring TOP/tags invalidates compiler-owned stack values even when FLDENV
+// leaves physical payload bits intact. FNSAVE empties the same aliased bank.
+let Defs = [FPSW, FPCW, FP0, FP1, FP2, FP3, FP4, FP5, FP6, FP7,
+            ST0, ST1, ST2, ST3, ST4, ST5, ST6, ST7,
+            MM0, MM1, MM2, MM3, MM4, MM5, MM6, MM7],
+    Uses = [FPCW, FPSW], mayLoad = 1, hasSideEffects = 1,
+    mayRaiseFPException = 1 in {
 def FRSTORm  : FPI<0xDD, MRM4m, (outs), (ins anymem:$src), "frstor\t$src">;
+def FRSTOR16m : FPI<0xDD, MRM4m, (outs), (ins anymem:$src),
+                    "frstors\t$src">, OpSize16;
 let Predicates = [HasX87] in
 def FLDENVm  : I<0xD9, MRM4m, (outs), (ins anymem:$src), "fldenv\t$src",
                  [(X86fpenv_set addr:$src)]>;
+def FLDENV16m : FPI<0xD9, MRM4m, (outs), (ins anymem:$src),
+                    "fldenvs\t$src">, OpSize16;
 }
 
-let Defs = [FPSW, FPCW], Uses = [FPSW, FPCW], mayStore = 1 in {
+let Defs = [FPSW, FPCW, FP0, FP1, FP2, FP3, FP4, FP5, FP6, FP7,
+            ST0, ST1, ST2, ST3, ST4, ST5, ST6, ST7,
+            MM0, MM1, MM2, MM3, MM4, MM5, MM6, MM7],
+    Uses = [FPSW, FPCW], mayStore = 1, hasSideEffects = 1 in {
 def FSAVEm   : FPI<0xDD, MRM6m, (outs), (ins anymem:$dst), "fnsave\t$dst">;
+def FSAVE16m : FPI<0xDD, MRM6m, (outs), (ins anymem:$dst),
+                   "fnsaves\t$dst">, OpSize16;
+}
+let Defs = [FPSW, FPCW], Uses = [FPSW, FPCW], mayStore = 1,
+    hasSideEffects = 1 in {
 let Predicates = [HasX87] in
 def FSTENVm  : I<0xD9, MRM6m, (outs), (ins anymem:$dst), "fnstenv\t$dst",
                  [(X86fpenv_get addr:$dst)]>;
+def FSTENV16m : FPI<0xD9, MRM6m, (outs), (ins anymem:$dst),
+                    "fnstenvs\t$dst">, OpSize16;
 }
 
 let Uses = [FPSW], Defs = [FPSW], mayStore = 1, hasSideEffects = 1 in

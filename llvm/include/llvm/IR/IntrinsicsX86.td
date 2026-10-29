@@ -3081,6 +3081,18 @@ let TargetPrefix = "x86" in {
   // FWAIT checks pending unmasked exceptions; it is not a compiler fence.
   def int_x86_fwait : ClangBuiltin<"__builtin_ia32_fwait">,
                      Intrinsic<[], [], []>;
+  // The suffix selects the operand-size format, not the address width:
+  // 14/28-byte environments and 94/108-byte complete legacy x87 images.
+  foreach Size = [16, 32] in {
+    def int_x86_fnstenv#Size : ClangBuiltin<"__builtin_ia32_fnstenv"#Size>,
+                              Intrinsic<[], [llvm_ptr_ty], []>;
+    def int_x86_fldenv#Size : ClangBuiltin<"__builtin_ia32_fldenv"#Size>,
+                             Intrinsic<[], [llvm_ptr_ty], []>;
+    def int_x86_fnsave#Size : ClangBuiltin<"__builtin_ia32_fnsave"#Size>,
+                             Intrinsic<[], [llvm_ptr_ty], []>;
+    def int_x86_frstor#Size : ClangBuiltin<"__builtin_ia32_frstor"#Size>,
+                             Intrinsic<[], [llvm_ptr_ty], []>;
+  }
 }
 
 //===----------------------------------------------------------------------===//
