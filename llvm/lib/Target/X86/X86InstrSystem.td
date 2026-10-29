@@ -391,41 +391,57 @@ def POPGS32 : I<0xa9, RawFrm, (outs), (ins), "pop{l}\t{%gs|gs}", []>, TB,
 def POPGS64 : I<0xa9, RawFrm, (outs), (ins), "pop{q}\t{%gs|gs}", []>, TB,
                 OpSize32, Requires<[In64BitMode]>;
 
+// Pointer-image reads and descriptor accessed-bit writes are instruction-owned.
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
+let Defs = [DS] in
 def LDS16rm : I<0xc5, MRMSrcMem, (outs GR16:$dst), (ins opaquemem:$src),
                 "lds{w}\t{$src, $dst|$dst, $src}", []>, OpSize16,
                 Requires<[Not64BitMode]>;
+let Defs = [DS] in
 def LDS32rm : I<0xc5, MRMSrcMem, (outs GR32:$dst), (ins opaquemem:$src),
                 "lds{l}\t{$src, $dst|$dst, $src}", []>, OpSize32,
                 Requires<[Not64BitMode]>;
 
+let Defs = [SS] in
 def LSS16rm : I<0xb2, MRMSrcMem, (outs GR16:$dst), (ins opaquemem:$src),
                 "lss{w}\t{$src, $dst|$dst, $src}", []>, TB, OpSize16;
+let Defs = [SS] in
 def LSS32rm : I<0xb2, MRMSrcMem, (outs GR32:$dst), (ins opaquemem:$src),
                 "lss{l}\t{$src, $dst|$dst, $src}", []>, TB, OpSize32;
+let Defs = [SS] in
 def LSS64rm : RI<0xb2, MRMSrcMem, (outs GR64:$dst), (ins opaquemem:$src),
                  "lss{q}\t{$src, $dst|$dst, $src}", []>, TB;
 
+let Defs = [ES] in
 def LES16rm : I<0xc4, MRMSrcMem, (outs GR16:$dst), (ins opaquemem:$src),
                 "les{w}\t{$src, $dst|$dst, $src}", []>, OpSize16,
                 Requires<[Not64BitMode]>;
+let Defs = [ES] in
 def LES32rm : I<0xc4, MRMSrcMem, (outs GR32:$dst), (ins opaquemem:$src),
                 "les{l}\t{$src, $dst|$dst, $src}", []>, OpSize32,
                 Requires<[Not64BitMode]>;
 
+let Defs = [FS] in
 def LFS16rm : I<0xb4, MRMSrcMem, (outs GR16:$dst), (ins opaquemem:$src),
                 "lfs{w}\t{$src, $dst|$dst, $src}", []>, TB, OpSize16;
+let Defs = [FS] in
 def LFS32rm : I<0xb4, MRMSrcMem, (outs GR32:$dst), (ins opaquemem:$src),
                 "lfs{l}\t{$src, $dst|$dst, $src}", []>, TB, OpSize32;
+let Defs = [FS] in
 def LFS64rm : RI<0xb4, MRMSrcMem, (outs GR64:$dst), (ins opaquemem:$src),
                  "lfs{q}\t{$src, $dst|$dst, $src}", []>, TB;
 
+let Defs = [GS] in
 def LGS16rm : I<0xb5, MRMSrcMem, (outs GR16:$dst), (ins opaquemem:$src),
                 "lgs{w}\t{$src, $dst|$dst, $src}", []>, TB, OpSize16;
+let Defs = [GS] in
 def LGS32rm : I<0xb5, MRMSrcMem, (outs GR32:$dst), (ins opaquemem:$src),
                 "lgs{l}\t{$src, $dst|$dst, $src}", []>, TB, OpSize32;
 
+let Defs = [GS] in
 def LGS64rm : RI<0xb5, MRMSrcMem, (outs GR64:$dst), (ins opaquemem:$src),
                  "lgs{q}\t{$src, $dst|$dst, $src}", []>, TB;
+} // far-pointer segment loads
 
 let Defs = [EFLAGS], hasSideEffects = 1, mayLoad = 1 in {
 def VERRr : I<0x00, MRM4r, (outs), (ins GR16:$seg), "verr\t$seg", []>, TB;

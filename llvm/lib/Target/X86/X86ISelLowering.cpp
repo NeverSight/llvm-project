@@ -28622,6 +28622,60 @@ static SDValue lowerGetsecBounded(SDValue Op, const X86Subtarget &Subtarget,
   return DAG.getMergeValues(Results, DL);
 }
 
+// Keep the coupled offset/selector load and descriptor validation in one
+// native instruction. The returned integer is only the offset; the selected
+// segment (including its hidden descriptor) remains ambient machine state.
+static SDValue lowerFarPointerLoad(SDValue Op, const X86Subtarget &Subtarget,
+                                   SelectionDAG &DAG) {
+  unsigned Opcode;
+  bool LegacyOnly;
+  switch (Op.getConstantOperandVal(1)) {
+  default:
+    llvm_unreachable("unexpected far-pointer load intrinsic");
+#define X86_FAR_POINTER_LOAD(Name, Inst, Bits, Segment, Legacy)                \
+  case Intrinsic::x86_##Name:                                                  \
+    Opcode = X86::Inst;                                                        \
+    LegacyOnly = Legacy;                                                       \
+    break;
+#include "X86FarPointerLoads.def"
+#undef X86_FAR_POINTER_LOAD
+  }
+  if (Subtarget.is16Bit())
+    report_fatal_error(
+        "far-pointer load intrinsic requires 32- or 64-bit code mode");
+  if (LegacyOnly && Subtarget.is64Bit())
+    report_fatal_error("LDS/LES intrinsic requires 32-bit code mode");
+  const MVT VT = Op.getSimpleValueType();
+  if (VT == MVT::i64 && !Subtarget.is64Bit())
+    report_fatal_error(
+        "64-bit far-pointer load intrinsic requires 64-bit code mode");
+  const SDLoc DL(Op);
+  const MVT PtrVT = Subtarget.is64Bit() ? MVT::i64 : MVT::i32;
+  const SDValue Operands[] = {Op.getOperand(2),
+                              DAG.getTargetConstant(1, DL, MVT::i8),
+                              DAG.getRegister(0, PtrVT),
+                              DAG.getTargetConstant(0, DL, MVT::i32),
+                              DAG.getRegister(0, MVT::i16),
+                              Op.getOperand(0)};
+  auto *Access =
+      DAG.getMachineNode(Opcode, DL, DAG.getVTList(VT, MVT::Other), Operands);
+  // The pointer image is packed: offset followed by a 16-bit selector.
+  // Descriptor-table reads and accessed-bit writes are separate unknown
+  // memory effects, never a store to the pointer image.
+  auto &MF = DAG.getMachineFunction();
+  auto *Image = MF.getMachineMemOperand(MachinePointerInfo(),
+                                        MachineMemOperand::MOLoad |
+                                            MachineMemOperand::MOVolatile,
+                                        VT.getSizeInBits() / 8 + 2, Align(1));
+  auto *Descriptor = MF.getMachineMemOperand(
+      MachinePointerInfo(),
+      MachineMemOperand::MOLoad | MachineMemOperand::MOStore |
+          MachineMemOperand::MOVolatile,
+      LocationSize::beforeOrAfterPointer(), Align(1));
+  DAG.setNodeMemRefs(Access, {Image, Descriptor});
+  return DAG.getMergeValues({SDValue(Access, 0), SDValue(Access, 1)}, DL);
+}
+
 // Preserve native widths and keep every memory operand inside its instruction.
 static SDValue lowerDescriptorState(SDValue Op, const X86Subtarget &Subtarget,
                                     SelectionDAG &DAG) {
@@ -31013,6 +31067,12 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_getsec_bounded_state:
     case Intrinsic::x86_getsec_bounded_state32:
       return lowerBoundedLeafState(Op, Subtarget, DAG);
+
+#define X86_FAR_POINTER_LOAD(Name, Opcode, Bits, Segment, Legacy)              \
+  case Intrinsic::x86_##Name:
+#include "X86FarPointerLoads.def"
+#undef X86_FAR_POINTER_LOAD
+      return lowerFarPointerLoad(Op, Subtarget, DAG);
 
     case Intrinsic::x86_verr_reg:
     case Intrinsic::x86_verr_mem:
@@ -38841,6 +38901,11 @@ void X86TargetLowering::ReplaceNodeResults(SDNode *N,
     switch (IntNo) {
     default : llvm_unreachable("Do not know how to custom type "
                                "legalize this intrinsic operation!");
+    case Intrinsic::x86_lfs64:
+    case Intrinsic::x86_lgs64:
+    case Intrinsic::x86_lss64:
+      report_fatal_error(
+          "64-bit far-pointer load intrinsic requires 64-bit code mode");
     case Intrinsic::x86_rdtsc:
       return getReadTimeStampCounter(N, dl, X86::RDTSC, DAG, Subtarget,
                                      Results);

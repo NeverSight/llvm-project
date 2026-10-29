@@ -147,6 +147,32 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
+// Coupled far-pointer loads. The packed image holds a 16/32/64-bit offset
+// followed immediately by a 16-bit selector. Hardware owns the descriptor
+// validation, accessed-bit update and segment installation before returning
+// the offset. These are ambient segment-state operations, not ordinary loads.
+// LDS/LES require 32-bit code; 64-bit results require 64-bit code. Code16 is
+// unsupported. The caller must preserve the compiler ABI's segment invariants;
+// in particular this is not a stack-switch or a TLS-restoration interface.
+// The pointer uses compiler-selected addressing; an original binary's source
+// segment, address-size prefix and default-stack fault provenance are not inputs.
+let TargetPrefix = "x86" in {
+  def int_x86_lds16 : Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
+  def int_x86_lds32 : Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
+  def int_x86_les16 : Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
+  def int_x86_les32 : Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
+  def int_x86_lss16 : Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
+  def int_x86_lss32 : Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
+  def int_x86_lss64 : Intrinsic<[llvm_i64_ty], [llvm_ptr_ty], []>;
+  def int_x86_lfs16 : Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
+  def int_x86_lfs32 : Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
+  def int_x86_lfs64 : Intrinsic<[llvm_i64_ty], [llvm_ptr_ty], []>;
+  def int_x86_lgs16 : Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
+  def int_x86_lgs32 : Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
+  def int_x86_lgs64 : Intrinsic<[llvm_i64_ty], [llvm_ptr_ty], []>;
+}
+
+//===----------------------------------------------------------------------===//
 // Descriptor queries return {value, ZF}. ZF=1 means the native LAR/LSL
 // succeeded; ZF=0 returns the supplied prior destination. Memory forms own
 // their m16 selector read, including fault ordering. Result width names the

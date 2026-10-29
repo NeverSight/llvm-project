@@ -9096,6 +9096,17 @@ bool X86InstrInfo::isSchedulingBoundary(const MachineInstr &MI,
       Opcode == X86::FSTENV16m)
     return true;
 
+  // The hidden segment descriptor changes the meaning of later accesses.
+  // Keep scheduling on each side of the native segment-load boundary.
+  switch (Opcode) {
+#define X86_FAR_POINTER_LOAD(Name, Inst, Bits, Segment, Legacy) case X86::Inst:
+#include "X86FarPointerLoads.def"
+#undef X86_FAR_POINTER_LOAD
+    return true;
+  default:
+    break;
+  }
+
   // Frame setup and destroy can't be scheduled around.
   if (MI.getFlag(MachineInstr::FrameSetup) ||
       MI.getFlag(MachineInstr::FrameDestroy))

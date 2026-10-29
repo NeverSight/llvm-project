@@ -1,6 +1,6 @@
-; RUN: llc -mtriple=x86_64-unknown-linux-gnu -verify-machineinstrs < %s | FileCheck %s
-; RUN: llc -mtriple=x86_64-unknown-linux-gnu -O0 -verify-machineinstrs < %s | FileCheck %s
-; RUN: opt -passes='default<O2>' -S < %s | llc -mtriple=x86_64-unknown-linux-gnu -verify-machineinstrs | FileCheck %s
+; RUN: llc -mtriple=x86_64-unknown-linux-gnu -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,X64
+; RUN: llc -mtriple=x86_64-unknown-linux-gnu -O0 -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,X64
+; RUN: opt -passes='default<O2>' -S < %s | llc -mtriple=x86_64-unknown-linux-gnu -verify-machineinstrs | FileCheck %s --check-prefixes=CHECK,X64
 ; RUN: llc -mtriple=i386-unknown-linux-gnu -verify-machineinstrs < %s | FileCheck %s
 ; RUN: llc -mtriple=i386-unknown-linux-gnu -O0 -verify-machineinstrs < %s | FileCheck %s
 ; RUN: opt -passes='default<O2>' -S < %s | llc -mtriple=i386-unknown-linux-gnu -verify-machineinstrs | FileCheck %s
@@ -147,9 +147,11 @@ define void @interrupt_control() {
 declare void @llvm.x86.cpuidex(ptr, i32, i32)
 define void @processor_query(ptr %output, i32 %leaf, i32 %subleaf) {
 ; CHECK-LABEL: processor_query:
+; X64: xchgq %[[CPUID_SCRATCH:r[0-9]+]], %rbx
 ; CHECK: cpuid
+; X64: xchgq %[[CPUID_SCRATCH]], %rbx
 ; CHECK-DAG: movl %eax,
-; CHECK-DAG: movl %ebx,
+; CHECK-DAG: movl %{{[a-z0-9]+}}, 4(
 ; CHECK-DAG: movl %ecx,
 ; CHECK-DAG: movl %edx,
 ; CHECK: ret
