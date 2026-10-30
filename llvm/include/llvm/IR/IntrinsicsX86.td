@@ -17,6 +17,27 @@ let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
 }
 
 //===----------------------------------------------------------------------===//
+// Native system-call returns. These abandon the compiler's frame and never
+// resume its C ABI. SYSRET explicitly installs RSP before the instruction;
+// SYSEXIT obtains its new stack from ECX/RCX in the instruction itself.
+// The API guarantees these operands, not a complete saved GPR/vector context.
+// STAR/SYSENTER MSRs, privilege, feature and segment state remain ambient.
+// The suffix is operand size. SYSRET and every 64-bit form require long mode;
+// SYSEXIT32 also permits protected 32-bit code. Code16 is unsupported.
+let TargetPrefix = "x86" in {
+  def int_x86_sysret32 : Intrinsic<[],
+      [llvm_i32_ty, llvm_i32_ty, llvm_i64_ty],
+      [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+  def int_x86_sysret64 : Intrinsic<[],
+      [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty],
+      [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+  def int_x86_sysexit32 : Intrinsic<[], [llvm_i32_ty, llvm_i32_ty],
+      [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+  def int_x86_sysexit64 : Intrinsic<[], [llvm_i64_ty, llvm_i64_ty],
+      [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+}
+
+//===----------------------------------------------------------------------===//
 // SEH intrinsics for Windows
 let TargetPrefix = "x86" in {
   def int_x86_seh_lsda : Intrinsic<[llvm_ptr_ty], [llvm_ptr_ty], [IntrNoMem]>;

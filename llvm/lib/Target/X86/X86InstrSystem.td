@@ -60,15 +60,28 @@ def INT : Ii8<0xcd, RawFrm, (outs), (ins u8imm:$trap), "int\t$trap",
 
 
 def SYSCALL  : I<0x05, RawFrm, (outs), (ins), "syscall", []>, TB;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    isTerminator = 1, isBarrier = 1 in {
+let Uses = [ECX, R11D, RSP],
+    Defs = [CS, SS, EFLAGS, RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI] in
 def SYSRET   : I<0x07, RawFrm, (outs), (ins), "sysret{l}", []>, TB;
+let Uses = [RCX, R11, RSP], Defs = [CS, SS, EFLAGS] in
 def SYSRET64 :RI<0x07, RawFrm, (outs), (ins), "sysretq", []>, TB,
                Requires<[In64BitMode]>;
+}
 
 def SYSENTER : I<0x34, RawFrm, (outs), (ins), "sysenter", []>, TB;
 
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    isTerminator = 1, isBarrier = 1 in {
+// Long-to-compatibility transitions leave legacy GPR high halves undefined.
+let Uses = [EDX, ECX],
+    Defs = [CS, SS, RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI] in
 def SYSEXIT   : I<0x35, RawFrm, (outs), (ins), "sysexit{l}", []>, TB;
+let Uses = [RDX, RCX], Defs = [CS, SS, RSP] in
 def SYSEXIT64 :RI<0x35, RawFrm, (outs), (ins), "sysexitq", []>, TB,
                   Requires<[In64BitMode]>;
+}
 
 // FRED Instructions
 let hasSideEffects = 1, Defs = [RSP, EFLAGS] in {

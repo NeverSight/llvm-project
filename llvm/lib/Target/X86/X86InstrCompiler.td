@@ -33,6 +33,20 @@ let hasSideEffects = 1, mayLoad = 0, mayStore = 0,
                       Requires<[In64BitMode]>;
 }
 
+// Keep the destination stack out of RSP until final MC emission. A glued
+// CopyToReg can still move ahead of frame accesses during machine scheduling.
+// These terminals abandon the compiler frame; they are not ABI returns.
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    isTerminator = 1, isBarrier = 1, SchedRW = [WriteSystem] in {
+  let Uses = [ECX, R11D],
+      Defs = [CS, SS, EFLAGS, RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI] in
+  def SYSRET32_STACK : PseudoI<(outs), (ins GR64:$sp), []>,
+                      Requires<[In64BitMode]>;
+  let Uses = [RCX, R11], Defs = [CS, SS, EFLAGS, RSP] in
+  def SYSRET64_STACK : PseudoI<(outs), (ins GR64:$sp), []>,
+                      Requires<[In64BitMode]>;
+}
+
 // A plain COPY's register class can be widened by coalescing. Preserve the
 // native address carrier constraint through allocation and copy propagation.
 // MC lowering emits an ordinary MOV without changing flags or touching memory.
