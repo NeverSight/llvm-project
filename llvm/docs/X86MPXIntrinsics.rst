@@ -43,8 +43,19 @@ Append ``32`` to each name except ``bndmov.reg`` and ``bnd.branch`` for i386, re
 with ``i32``. The code modes must match the API; code16 is rejected.
 The allowed address encodings are 32 or 64 in long mode, and 32 in i386.
 Segment controls are 0, 0x26, 0x2e, 0x36, 0x3e, 0x64 or 0x65.
-These are prefix bytes, not LLVM address spaces. The base uses BX/EBX/RBX so
-the default memory segment is DS. Register-only APIs have no memory controls.
+These are prefix bytes, not LLVM address spaces. The base uses an allocated
+legacy register with the DS default; it cannot overwrite a reserved frame or
+PIC base. Register checks and MIB indices also use legacy-encodable carriers.
+Register-only APIs have no memory controls.
+
+``LLVM_X86_MPX_STACK_MEMORY=1`` advertises stack-default BNDMOV memory access.
+For ``bndmov.load``, ``bndmov.store`` and ``bndmov.store.lock``, OR ``0x100``
+into a segment control other than FS/GS. The unmodified RBP frame plus a
+computed index retains the complete address and its SS fault provenance.
+Both long-mode encoding widths are accepted because MPX ignores 67H. This
+does not read or probe the bounds operand before the native instruction.
+The control is rejected for i386, register/effective-address checks, BNDMK and
+MIB table operations; those APIs have distinct operand roles.
 
 Intel specifies that MPX ignores 67H in long mode. Thus ``bits=32`` retains
 the prefix while still consuming the full 64-bit register values. BNDMK and
@@ -82,6 +93,12 @@ NeverC's ``tests/verify-mpx-encoding.py`` adds
 independent opcode/prefix checks and controlled GPR/ABI transport, including
 high address bits with 67H, over 520 long-mode or 268 i386 combinations at
 O0/O2 for ELF, COFF and Mach-O. It does not execute MPX semantics.
+``--frame`` adds aligned locals and a dynamic allocation to every wrapper and
+checks both local canaries through return. ``--stack-memory`` checks 120
+long-mode BNDMOV controls, including each bank, both encoding widths and all
+five stack-compatible segment controls. The options compose. Assembly
+roundtrips require identical per-function instruction bytes and offsets;
+inter-function placement is not part of the contract.
 
 NeverC's ``tests/verify-mpx-state.py`` executes an isolated supervisor guest.
 It tests enable/disable state, all banks, bounds checks, table hit/miss/fault,
@@ -94,6 +111,10 @@ translation omits BNDINIT; strict mode rejects the unchanged bounds. Native
 bytes still require E9. Tables use a zero directory base, so nonzero
 BNDCFG directory-base translation is not qualified. These are processor-model
 tests; successful execution on physical MPX hardware remains unqualified.
+The state verifier's ``--stack-memory --frame`` profile executes 40 BNDMOV
+controls per optimization level and explicitly skips 80 under the same model
+limitations. It checks enabled memory effects and disabled operand suppression,
+not physical stack-segment fault delivery.
 
 Architectural reference: `Intel SDM Volume 1, Appendix E
 <https://cdrdv2-public.intel.com/671436/253665-sdm-vol-1.pdf>`_.

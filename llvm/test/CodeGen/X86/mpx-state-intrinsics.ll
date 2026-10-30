@@ -56,9 +56,9 @@
 ; NARROW: bndcl
 ; NARROW: repne{{[ \t]+}}ret
 ; WIDE-LABEL: narrow_encoding:
-; WIDE: movq %rdi, %rbx
+; WIDE: movq %rdi, %r[[CARRIER:ax|bx|cx|dx]]
 ; WIDE-NOT: movl
-; WIDE: bndcl %fs:(%ebx), %bnd2
+; WIDE: bndcl %fs:(%e[[CARRIER]]), %bnd2
 ; WIDE: repne{{[ \t]+}}ret
 ; WIDE-LABEL: across_branch:
 ; WIDE: bndmov

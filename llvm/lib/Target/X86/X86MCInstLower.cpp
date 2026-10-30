@@ -587,12 +587,16 @@ static void lowerMPXState(MCInst &Inst, bool Is64Bit) {
   const bool Move = Kind == MpxOperation::Move;
   const bool Register = X86::mpxIsCheckRegister(Kind);
   const bool Address32 = Descriptor & X86::MpxAddress32;
+  const bool Stack = Descriptor & X86::MpxStackMemory;
   const unsigned Prefix = (Descriptor >> 16) & 255;
   if ((Descriptor & ~uint64_t(X86::MpxDescriptorMask)) ||
       (!Move && (Descriptor & X86::MpxSourceMask)) ||
       Kind >= MpxOperation::Count ||
       !X86::isNativeMemorySegmentPrefix(Prefix) || (Address32 && !Is64Bit) ||
-      ((Move || Register) && (Address32 || Prefix)) ||
+      ((Move || Register) && (Address32 || Prefix || Stack)) ||
+      (Stack && !X86::isMpxMemoryAddressControl(
+                    Is64Bit, Kind, Address32 ? 32 : 64,
+                    Prefix | X86::NativeMemoryStackReference)) ||
       (Move != (Inst.getOpcode() == X86::MPX_MOVE_BOUNDS)) ||
       (!Move && Is64Bit != (Inst.getOpcode() == X86::MPX_STATE64)))
     report_fatal_error("invalid MPX machine-state descriptor");
@@ -677,8 +681,9 @@ static void lowerMPXState(MCInst &Inst, bool Is64Bit) {
     if (!Store)
       Native.addOperand(Bound);
     MCRegister Base = Inst.getOperand(1).getReg();
-    MCRegister Index =
-        X86::mpxHasIndex(Kind) ? Inst.getOperand(2).getReg() : MCRegister();
+    MCRegister Index = X86::mpxHasIndex(Kind) || Stack
+                           ? Inst.getOperand(2).getReg()
+                           : MCRegister();
     if (Address32) {
       // Narrow the MC encoding only. MPX still reads the full 64-bit registers.
       Base = getX86SubSuperRegister(Base, 32);
