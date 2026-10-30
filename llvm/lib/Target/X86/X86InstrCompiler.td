@@ -45,6 +45,16 @@ let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
   let Uses = [RCX, R11], Defs = [CS, SS, EFLAGS, RSP] in
   def SYSRET64_STACK : PseudoI<(outs), (ins GR64:$sp), []>,
                       Requires<[In64BitMode]>;
+  let Defs = [CS, SS, DS, ES, FS, GS, EFLAGS,
+              EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI] in
+  def NATIVE_FRAME_RETURN32 : PseudoI<(outs),
+      (ins GR32:$frame, i32imm:$kind, i16imm:$adjust), []>,
+      Requires<[Not64BitMode]>;
+  let Defs = [CS, SS, DS, ES, FS, GS, EFLAGS,
+              RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI] in
+  def NATIVE_FRAME_RETURN64 : PseudoI<(outs),
+      (ins GR64:$frame, i32imm:$kind, i16imm:$adjust), []>,
+      Requires<[In64BitMode]>;
 }
 
 // A plain COPY's register class can be widened by coalescing. Preserve the

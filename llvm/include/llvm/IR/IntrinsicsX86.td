@@ -35,6 +35,20 @@ let TargetPrefix = "x86" in {
       [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
   def int_x86_sysexit64 : Intrinsic<[], [llvm_i64_ty, llvm_i64_ty],
       [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+  def int_x86_sysenter : Intrinsic<[], [],
+      [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+  def int_x86_rsm : Intrinsic<[], [],
+      [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+  // The supplied frame replaces the compiler stack immediately before the
+  // native transfer. The CPU owns all frame reads, descriptor/CET state and
+  // faults. The old C ABI continuation is abandoned, including in code32.
+  foreach Name = ["iret16", "iret32", "iret64", "retf16", "retf32", "retf64",
+                  "erets", "eretu", "uiret"] in
+    def "int_x86_" # Name : Intrinsic<[], [llvm_ptr_ty],
+        [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+  foreach Name = ["retf16", "retf32", "retf64"] in
+    def "int_x86_" # Name # "_imm" : Intrinsic<[], [llvm_ptr_ty, llvm_i16_ty],
+        [IntrNoReturn, IntrConvergent, IntrNoDuplicate, ImmArg<ArgIndex<1>>]>;
 }
 
 //===----------------------------------------------------------------------===//

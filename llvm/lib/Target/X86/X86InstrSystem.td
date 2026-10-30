@@ -42,6 +42,11 @@ let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
 // HLT can resume at the next instruction; it is not a CFG terminator.
 let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in
   def HLT : I<0xF4, RawFrm, (outs), (ins), "hlt", []>;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    isTerminator = 1, isBarrier = 1,
+    Defs = [CS, SS, DS, ES, FS, GS, EFLAGS,
+            RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI,
+            R8, R9, R10, R11, R12, R13, R14, R15] in
 def RSM : I<0xAA, RawFrm, (outs), (ins), "rsm", []>, TB;
 
 // Interrupt and SysCall Instructions.
@@ -70,6 +75,8 @@ def SYSRET64 :RI<0x07, RawFrm, (outs), (ins), "sysretq", []>, TB,
                Requires<[In64BitMode]>;
 }
 
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    isTerminator = 1, isBarrier = 1, Defs = [CS, SS, RSP, EFLAGS] in
 def SYSENTER : I<0x34, RawFrm, (outs), (ins), "sysenter", []>, TB;
 
 let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
@@ -84,12 +91,14 @@ def SYSEXIT64 :RI<0x35, RawFrm, (outs), (ins), "sysexitq", []>, TB,
 }
 
 // FRED Instructions
-let hasSideEffects = 1, Defs = [RSP, EFLAGS] in {
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    isTerminator = 1, isBarrier = 1,
+    Uses = [RSP], Defs = [CS, SS, RSP, EFLAGS] in {
   def ERETS: I<0x01, MRM_CA, (outs), (ins), "erets",
               []>, TB, XD, Requires<[In64BitMode]>;
   def ERETU: I<0x01, MRM_CA, (outs), (ins), "eretu",
               []>, TB, XS, Requires<[In64BitMode]>;
-} // hasSideEffects = 1, Defs = [RSP, EFLAGS]
+}
 } // SchedRW
 
 def : Pat<(debugtrap),
