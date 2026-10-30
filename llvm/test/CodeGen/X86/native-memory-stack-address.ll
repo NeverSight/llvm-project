@@ -12,9 +12,15 @@
 ; RUN: not --crash llc -mtriple=x86_64 %t/gs.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=CONTROL
 ; RUN: not --crash llc -mtriple=x86_64 %t/bits.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=CONTROL
 ; RUN: not --crash llc -mtriple=i386 %t/mode.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=CONTROL
-; RUN: not --crash llc -mtriple=x86_64 -mattr=+amx-tile %t/stride.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=STRIDE
+; RUN: llc -mtriple=x86_64 -mattr=+amx-tile -verify-machineinstrs %t/stride.ll -o - | FileCheck %s --check-prefix=STRIDE
 ; CONTROL: invalid native memory segment prefix or stack-reference control
-; STRIDE: native stack address requires an ordinary SIB index
+; STRIDE: callq __llvm_x86_amx_stack
+; STRIDE-LABEL: __llvm_x86_amx_stack:
+; STRIDE: pushq %rbp
+; STRIDE: .cfi_offset %rbp,
+; STRIDE-NOT: movq %rsp, %rbp
+; STRIDE: tileloadd (%rbp,%rcx), %tmm0
+; STRIDE: popq %rbp
 
 ; 0x100 requests a real stack-default operand. Low segment bytes retain their
 ; independent meaning: an ignored SS prefix alone still has DS fault identity.
