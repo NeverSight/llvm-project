@@ -50,7 +50,8 @@ Caller responsibilities
   XSAVE buffers. Initialize reserved header bytes to zero. The mask must cover
   all enabled XCR0 user components, and the guest must leave XCR0 unchanged.
 * Keep the context, both buffers and compiler stack mapped and accessible in
-  the returning host context, disjoint from guest-writable memory. Loaded
+  the returning host context, disjoint from guest-writable memory and the
+  hardware-written VMCB/VM_HSAVE_PA pages. Loaded
   xstate, including protection state, must permit the helper's memory accesses.
 * Own software-managed supervisor state and any required VMLOAD/VMSAVE.
   Changes to FS/GS, MSRs, debug/control registers or supervisor xstate must
