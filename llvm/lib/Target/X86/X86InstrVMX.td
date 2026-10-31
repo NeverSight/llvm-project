@@ -41,6 +41,13 @@ def INVVPID64_EVEX : I<0xF1, MRMSrcMem, (outs), (ins GR64:$src1, i128mem:$src2),
 
 // 0F 01 C1
 def VMCALL : I<0x01, MRM_C1, (outs), (ins), "vmcall", []>, TB;
+// The named ABI keeps the fixed inputs live through register allocation.
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
+let Uses = [RAX, RBX, RCX, RDX, RSI], Defs = [RAX, EFLAGS] in
+def VMCALL_KVM64 : PseudoI<(outs), (ins), []>, Requires<[In64BitMode]>;
+let Uses = [EAX, EBX, ECX, EDX, ESI], Defs = [EAX, EFLAGS] in
+def VMCALL_KVM32 : PseudoI<(outs), (ins), []>, Requires<[Not64BitMode]>;
+}
 let Defs = [EFLAGS], hasSideEffects = 1, mayLoad = 1 in
 def VMCLEARm : I<0xC7, MRM6m, (outs), (ins i64mem:$vmcs),
   "vmclear\t$vmcs", []>, TB, PD;

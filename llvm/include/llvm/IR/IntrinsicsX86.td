@@ -78,6 +78,18 @@ let TargetPrefix = "x86" in {
 // the instruction itself, only on success; it must not become an eager store.
 // The unsuffixed forms require 64-bit mode; the 32 forms require 32-bit mode.
 let TargetPrefix = "x86" in {
+  // Explicit Linux KVM hypercall ABI: rAX number, rBX/rCX/rDX/rSI arguments,
+  // rAX result. Other registers are preserved by the bound hypervisor. These
+  // returning calls may read/write arbitrary guest memory; calls that alter
+  // additional register or execution state are outside this interface.
+  foreach Name = ["vmcall", "vmmcall"] in {
+    def "int_x86_" # Name # "_kvm" : Intrinsic<[llvm_i64_ty],
+        [llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty, llvm_i64_ty],
+        [IntrConvergent, IntrNoDuplicate]>;
+    def "int_x86_" # Name # "_kvm32" : Intrinsic<[llvm_i32_ty],
+        [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+        [IntrConvergent, IntrNoDuplicate]>;
+  }
   def int_x86_vmread : Intrinsic<[llvm_i8_ty],
                                 [llvm_i64_ty, llvm_ptr_ty], []>;
   def int_x86_vmread32 : Intrinsic<[llvm_i8_ty],

@@ -21,6 +21,7 @@ LLVM and API reference documentation.
    FuzzingLLVM
    LangRef
    X86MPXIntrinsics
+   X86KVMHypercalls
    UndefinedBehavior
    InAlloca
    BitCodeFormat
@@ -73,6 +74,9 @@ API Reference
 
 :doc:`X86MPXIntrinsics`
   Architectural MPX bounds-bank intrinsics in the NeverSight LLVM fork.
+
+:doc:`X86KVMHypercalls`
+  Native returning hypercalls with the explicit KVM register ABI.
 
 `Doxygen generated documentation <https://llvm.org/doxygen/>`_
   (`classes <https://llvm.org/doxygen/inherits.html>`_)

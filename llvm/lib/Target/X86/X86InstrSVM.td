@@ -17,6 +17,12 @@
 let SchedRW = [WriteSystem] in {
 // 0F 01 D9
 def VMMCALL : I<0x01, MRM_D9, (outs), (ins), "vmmcall", []>, TB;
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
+let Uses = [RAX, RBX, RCX, RDX, RSI], Defs = [RAX, EFLAGS] in
+def VMMCALL_KVM64 : PseudoI<(outs), (ins), []>, Requires<[In64BitMode]>;
+let Uses = [EAX, EBX, ECX, EDX, ESI], Defs = [EAX, EFLAGS] in
+def VMMCALL_KVM32 : PseudoI<(outs), (ins), []>, Requires<[Not64BitMode]>;
+}
 
 // 0F 01 DC
 let hasSideEffects = 1 in

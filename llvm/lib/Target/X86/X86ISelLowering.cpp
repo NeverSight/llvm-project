@@ -18,6 +18,7 @@
 #include "X86FrameLowering.h"
 #include "X86InstrBuilder.h"
 #include "X86IntrinsicsInfo.h"
+#include "X86KVMHypercall.h"
 #include "X86MachineFunctionInfo.h"
 #include "X86NativeFrameReturn.h"
 #include "X86SEHState.h"
@@ -30893,6 +30894,12 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
   if (!IntrData) {
     switch (IntNo) {
 
+    case Intrinsic::x86_vmcall_kvm:
+    case Intrinsic::x86_vmcall_kvm32:
+    case Intrinsic::x86_vmmcall_kvm:
+    case Intrinsic::x86_vmmcall_kvm32:
+      return X86::lowerKVMHypercall(Op, Subtarget, DAG);
+
     case Intrinsic::x86_ldtilecfg_address:
     case Intrinsic::x86_sttilecfg_address:
     case Intrinsic::x86_tileloadd64_address:
@@ -39099,6 +39106,9 @@ void X86TargetLowering::ReplaceNodeResults(SDNode *N,
           "explicit REP intrinsic does not match the target code mode");
     case Intrinsic::x86_vmread_reg:
       report_fatal_error("64-bit VMCS intrinsic requires 64-bit mode");
+    case Intrinsic::x86_vmcall_kvm:
+    case Intrinsic::x86_vmmcall_kvm:
+      report_fatal_error("KVM hypercall intrinsic does not match target code mode");
     case Intrinsic::x86_rdpru:
       expandIntrinsicWChainHelper(N, dl, DAG, X86::RDPRU, X86::ECX, Subtarget,
         Results);
