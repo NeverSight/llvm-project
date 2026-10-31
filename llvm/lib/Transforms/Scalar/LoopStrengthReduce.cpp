@@ -2187,7 +2187,8 @@ class LSRInstance {
   // Inserting instructions in the loop and using them as PHI's input could
   // break LCSSA in case if PHI's parent block is not a loop exit (i.e. the
   // corresponding incoming block is not loop exiting). So collect all such
-  // instructions to form LCSSA for them later.
+  // instructions to form LCSSA for them later. Splitting exit predecessors can
+  // also move existing PHI inputs outside their defining loops.
   SmallSetVector<Instruction *, 4> InsertedNonLCSSAInsts;
 
   void OptimizeShadowIV();
@@ -5901,6 +5902,17 @@ void LSRInstance::RewriteForPHI(PHINode *PN, const LSRUse &LU,
         BasicBlock *Parent = PN->getParent();
         Loop *PNLoop = LI.getLoopFor(Parent);
         if (!PNLoop || Parent != PNLoop->getHeader()) {
+          // Splitting an exit edge also moves uses of unrelated PHI operands
+          // outside their defining loops, including other incoming edges split
+          // to retain LoopSimplify form. Repair those values with the rewritten
+          // operands after all fixups, so old IVs remain available to LSR's
+          // existing fixup tracking and dead-instruction cleanup.
+          for (PHINode &ExitPhi : Parent->phis())
+            for (Value *Incoming : ExitPhi.incoming_values())
+              if (auto *I = dyn_cast<Instruction>(Incoming))
+                if (LI.getLoopFor(I->getParent()))
+                  InsertedNonLCSSAInsts.insert(I);
+
           // Split the critical edge.
           BasicBlock *NewBB = nullptr;
           if (!Parent->isLandingPad()) {
