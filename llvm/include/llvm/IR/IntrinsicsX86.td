@@ -90,6 +90,13 @@ let TargetPrefix = "x86" in {
         [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
         [IntrConvergent, IntrNoDuplicate]>;
   }
+  // Returning Hyper-V page ABI. Arguments: registered executable entry,
+  // sixteen-u64 GPR bank in encoding order, six XMM slots, byte stride.
+  // RCX/RDX/R8 and XMM0..5 are inputs; RAX/RCX/RDX/R8 and XMM0..5 outputs.
+  // Other state and the compiler execution environment must be preserved.
+  def int_x86_hyperv_call : Intrinsic<[],
+      [llvm_ptr_ty, llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty],
+      [IntrConvergent, IntrNoDuplicate, ImmArg<ArgIndex<3>>]>;
   def int_x86_vmread : Intrinsic<[llvm_i8_ty],
                                 [llvm_i64_ty, llvm_ptr_ty], []>;
   def int_x86_vmread32 : Intrinsic<[llvm_i8_ty],

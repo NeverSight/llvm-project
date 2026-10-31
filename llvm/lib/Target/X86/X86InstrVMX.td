@@ -41,6 +41,11 @@ def INVVPID64_EVEX : I<0xF1, MRMSrcMem, (outs), (ins GR64:$src1, i128mem:$src2),
 
 // 0F 01 C1
 def VMCALL : I<0x01, MRM_C1, (outs), (ins), "vmcall", []>, TB;
+let Uses = [R9, R10, R11, RSP],
+    Defs = [RAX, RCX, RDX, R8, XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, EFLAGS],
+    isCall = 1, hasSideEffects = 1, mayLoad = 1, mayStore = 1 in
+def HYPERV_CALL64 : PseudoI<(outs), (ins i32imm:$stride), []>,
+                   Requires<[In64BitMode]>;
 // The named ABI keeps the fixed inputs live through register allocation.
 let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
 let Uses = [RAX, RBX, RCX, RDX, RSI], Defs = [RAX, EFLAGS] in

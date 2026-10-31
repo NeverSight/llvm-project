@@ -22,6 +22,7 @@ LLVM and API reference documentation.
    LangRef
    X86MPXIntrinsics
    X86KVMHypercalls
+   X86HyperVContext
    UndefinedBehavior
    InAlloca
    BitCodeFormat

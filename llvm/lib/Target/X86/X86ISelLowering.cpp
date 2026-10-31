@@ -16,6 +16,7 @@
 #include "X86.h"
 #include "X86AMXStackMemory.h"
 #include "X86FrameLowering.h"
+#include "X86HyperVContext.h"
 #include "X86InstrBuilder.h"
 #include "X86IntrinsicsInfo.h"
 #include "X86KVMHypercall.h"
@@ -30894,6 +30895,8 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
   if (!IntrData) {
     switch (IntNo) {
 
+    case Intrinsic::x86_hyperv_call:
+      return X86::lowerHyperVCall(Op, Subtarget, DAG);
     case Intrinsic::x86_vmcall_kvm:
     case Intrinsic::x86_vmcall_kvm32:
     case Intrinsic::x86_vmmcall_kvm:
