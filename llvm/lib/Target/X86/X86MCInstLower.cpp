@@ -3106,6 +3106,8 @@ bool X86AsmPrinter::emitRepStringState(const MachineInstr *MI) {
 }
 
 void X86AsmPrinter::emitInstruction(const MachineInstr *MI) {
+  if (emitSVMContext(MI))
+    return;
   if (MI->getOpcode() == X86::NATIVE_FRAME_RETURN32 ||
       MI->getOpcode() == X86::NATIVE_FRAME_RETURN64) {
     const bool Wide = MI->getOpcode() == X86::NATIVE_FRAME_RETURN64;

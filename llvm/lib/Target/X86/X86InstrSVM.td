@@ -32,12 +32,24 @@ let Uses = [EAX], hasSideEffects = 1, mayLoad = 1, mayStore = 1,
 def SKINIT : I<0x01, MRM_DE, (outs), (ins), "skinit", []>, TB;
 
 // 0F 01 D8
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
 let Uses = [EAX] in
 def VMRUN32 : I<0x01, MRM_D8, (outs), (ins), "vmrun", []>, TB,
                 Requires<[Not64BitMode]>;
 let Uses = [RAX] in
 def VMRUN64 : I<0x01, MRM_D8, (outs), (ins), "vmrun", []>, TB,
                 Requires<[In64BitMode]>;
+}
+
+// The context pointer is saved in a compiler-owned RSP-relative spill slot;
+// no guest GPR is borrowed to retain it across VMEXIT. XSAVE/XRSTOR restore
+// the host's enabled user xstate before the ordinary compiler epilogue.
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1, Uses = [RSP],
+    Defs = [RAX, RBX, RCX, RDX, RSI, RDI, RBP, R8, R9, R10, R11, R12,
+            R13, R14, R15, EFLAGS] in
+def VMRUN_CONTEXT64 : PseudoI<(outs),
+    (ins GR64:$context, i64mem:$spill, i32imm:$width), []>,
+    Requires<[In64BitMode]>;
 
 // 0F 01 DA
 let hasSideEffects = 1, mayLoad = 1 in {

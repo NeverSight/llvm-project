@@ -13,6 +13,7 @@
 #include "X86.h"
 #include "X86AsmPrinter.h"
 #include "X86ISelDAGToDAG.h"
+#include "X86SVMContext.h"
 #include "X86TargetMachine.h"
 
 #include "llvm/CodeGen/AtomicExpand.h"
@@ -65,6 +66,7 @@ public:
 };
 
 void X86CodeGenPassBuilder::addIRPasses(PassManagerWrapper &PMW) const {
+  addFunctionPass(X86SVMContextLoweringPass(), PMW);
   addFunctionPass(AtomicExpandPass(TM), PMW);
 
   // We add both pass anyway and when these two passes run, one will be a

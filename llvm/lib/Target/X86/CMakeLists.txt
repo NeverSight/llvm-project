@@ -39,6 +39,8 @@ set(sources
   X86GlobalBaseReg.cpp
   X86LowerTileCopy.cpp
   X86LowerAMXType.cpp
+  X86SVMContext.cpp
+  X86SVMContextEmitter.cpp
   X86LowerAMXIntrinsics.cpp
   X86TileConfig.cpp
   X86FastPreTileConfig.cpp

@@ -325,6 +325,17 @@ let TargetPrefix = "x86" in {
   // Bounded SVM effects: physical VMCB addresses and linear INVLPGA addresses
   // are integers, never compiler-dereferenced pointers. These forms use the
   // code mode's default address size; the 32 forms require 32-bit mode.
+  // Explicit software-managed state around one VMRUN. The 144-byte context
+  // has {VMCB physical address, guest XSAVE address, host XSAVE scratch address,
+  // XSAVE mask, RBX, RCX, RDX, RSI, RDI, RBP, R8..R15}, all u64 fields.
+  // Address width is 32 or 64 in long mode. The mask must cover XCR0 and remain
+  // enabled across the guest; both 64-byte-aligned buffers use standard XSAVE
+  // format and have CPUID-sized storage. Supervisor state, VMLOAD/VMSAVE,
+  // host HSAVE/GIF setup and intercept policy remain the VMM's responsibility.
+  // The guest must retain the host's software-managed system ABI. This is a
+  // returning transition, not a normal call to the guest entry point.
+  def int_x86_vmrun_context : Intrinsic<[], [llvm_ptr_ty, llvm_i32_ty],
+      [IntrConvergent, IntrNoDuplicate, ImmArg<ArgIndex<1>>]>;
   def int_x86_vmload : Intrinsic<[], [llvm_i64_ty], []>;
   def int_x86_vmload32 : Intrinsic<[], [llvm_i32_ty], []>;
   def int_x86_vmsave : Intrinsic<[], [llvm_i64_ty], []>;
