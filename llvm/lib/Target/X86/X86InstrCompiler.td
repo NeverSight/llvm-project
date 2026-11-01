@@ -67,6 +67,27 @@ let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
   def RSM_CONTEXT64 : PseudoI<(outs), (ins GR64:$context), []>,
                      Requires<[In64BitMode, HasXSAVE]>;
 
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    isTerminator = 1, isBarrier = 1, SchedRW = [WriteSystem] in {
+  let Uses = [ESP],
+      Defs = [FS, GS, EFLAGS, EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI] in {
+    def ENCLU_TRANSFER_CONTEXT32 : PseudoI<(outs), (ins GR32:$context), []>,
+                                   Requires<[In32BitMode, HasXSAVE, HasSGX]>;
+    def ENCLU_TRANSFER_AT_CONTEXT32 :
+        PseudoI<(outs), (ins GR32:$context, i64imm:$site), []>,
+        Requires<[In32BitMode, HasXSAVE, HasSGX]>;
+  }
+  let Uses = [RSP],
+      Defs = [FS, GS, EFLAGS, RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI,
+              R8, R9, R10, R11, R12, R13, R14, R15] in {
+    def ENCLU_TRANSFER_CONTEXT64 : PseudoI<(outs), (ins GR64:$context), []>,
+                                   Requires<[In64BitMode, HasXSAVE, HasSGX]>;
+    def ENCLU_TRANSFER_AT_CONTEXT64 :
+        PseudoI<(outs), (ins GR64:$context, i64imm:$site), []>,
+        Requires<[In64BitMode, HasXSAVE, HasSGX]>;
+  }
+}
+
 // A plain COPY's register class can be widened by coalescing. Preserve the
 // native address carrier constraint through allocation and copy propagation.
 // MC lowering emits an ordinary MOV without changing flags or touching memory.

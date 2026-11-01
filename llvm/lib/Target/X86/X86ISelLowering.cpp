@@ -31232,6 +31232,28 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
 #undef X86_FRAME_RETURN
       return lowerNativeFrameReturn(Op, Subtarget, DAG);
 
+    case Intrinsic::x86_enclu_transfer_context:
+    case Intrinsic::x86_enclu_transfer_at_context: {
+      if (Subtarget.is16Bit() || !Subtarget.hasXSAVE() || !Subtarget.hasSGX())
+        report_fatal_error("ENCLU transfer context requires code32/code64, XSAVE and SGX");
+      const bool Wide = Subtarget.is64Bit();
+      const auto Type = Wide ? MVT::i64 : MVT::i32;
+      unsigned Opcode = Wide ? X86::ENCLU_TRANSFER_CONTEXT64
+                             : X86::ENCLU_TRANSFER_CONTEXT32;
+      SmallVector<SDValue, 3> Operands{
+          DAG.getZExtOrTrunc(Op.getOperand(2), SDLoc(Op), Type)};
+      if (IntNo == Intrinsic::x86_enclu_transfer_at_context) {
+        const auto *Site = dyn_cast<ConstantSDNode>(Op.getOperand(3));
+        if (!Site || (!Wide && !isUInt<32>(Site->getZExtValue())))
+          report_fatal_error("ENCLU original site must be a code-width constant");
+        Opcode = Wide ? X86::ENCLU_TRANSFER_AT_CONTEXT64
+                      : X86::ENCLU_TRANSFER_AT_CONTEXT32;
+        Operands.push_back(DAG.getTargetConstant(Site->getZExtValue(), SDLoc(Op),
+                                                MVT::i64));
+      }
+      Operands.push_back(Op.getOperand(0));
+      return SDValue(DAG.getMachineNode(Opcode, SDLoc(Op), MVT::Other, Operands), 0);
+    }
     case Intrinsic::x86_rsm_context:
       if (!Subtarget.is64Bit() || !Subtarget.hasXSAVE())
         report_fatal_error("RSM context requires 64-bit mode and XSAVE");

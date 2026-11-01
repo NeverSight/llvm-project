@@ -44,6 +44,16 @@ let TargetPrefix = "x86" in {
   // RSM restores the other banks from the ambient processor save image.
   def int_x86_rsm_context : Intrinsic<[], [llvm_ptr_ty],
       [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+  // Terminal ENCLU leaves 2..4. A natural-width GPR bank (AX,CX,DX,BX,SP,
+  // BP,SI,DI,R8..R15), flags and standard XCR0=7 image address. Code32 has
+  // only the first eight GPR slots. The native SGX environment owns EPC/SSA
+  // and all continuation addresses; this is not an ordinary C enclave call.
+  def int_x86_enclu_transfer_context : Intrinsic<[], [llvm_ptr_ty],
+      [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+  // A register-neutral jump to immutable original ENCLU bytes preserves the
+  // instruction's observable next PC, unlike relocation into generated code.
+  def int_x86_enclu_transfer_at_context : Intrinsic<[], [llvm_ptr_ty, llvm_i64_ty],
+      [IntrNoReturn, IntrConvergent, IntrNoDuplicate, ImmArg<ArgIndex<1>>]>;
   // The supplied frame replaces the compiler stack immediately before the
   // native transfer. The CPU owns all frame reads, descriptor/CET state and
   // faults. The old C ABI continuation is abandoned, including in code32.
