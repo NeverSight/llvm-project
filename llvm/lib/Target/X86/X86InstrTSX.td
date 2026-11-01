@@ -14,6 +14,12 @@
 //===----------------------------------------------------------------------===//
 // TSX instructions
 
+// A single late expansion owns both exits and keeps all compiler work outside
+// the checkpoint. The immediate is checked before instruction selection.
+let SchedRW = [WriteSystem], hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    Defs = [EAX, EFLAGS] in
+def RTM_ABORT_PAIR : PseudoI<(outs), (ins i32imm:$code), []>;
+
 // Test if in transactional execution.
 def X86xtest: SDNode<"X86ISD::XTEST", SDTypeProfile<1, 0, [SDTCisVT<0, i32>]>,
                      [SDNPHasChain, SDNPSideEffect]>;

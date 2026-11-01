@@ -3737,6 +3737,10 @@ let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
 // RTM intrinsics. Transactional Memory support.
 
 let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
+  // One native checkpoint contains an immediate abort. Entry must be outside
+  // RTM/HLE; the result is the actual EAX abort status, including early aborts.
+  def int_x86_rtm_abort_pair : Intrinsic<[llvm_i32_ty], [llvm_i32_ty],
+      [IntrConvergent, IntrNoDuplicate, ImmArg<ArgIndex<0>>]>;
   def int_x86_xbegin : ClangBuiltin<"__builtin_ia32_xbegin">,
               Intrinsic<[llvm_i32_ty], [], []>;
   def int_x86_xend : ClangBuiltin<"__builtin_ia32_xend">,
