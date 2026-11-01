@@ -16,8 +16,11 @@
 ; RUN: sed 's/i64 4096/i64 4294967296/' %s | not --crash llc -mtriple=i386-unknown-linux-gnu -mattr=+sgx,+xsave 2>&1 | FileCheck %s --check-prefix=WIDTH
 ; RUN: sed 's/i64 4096/i64 %%pc/' %s | not opt -passes=verify -disable-output 2>&1 | FileCheck %s --check-prefix=IMMEDIATE
 ; RUN: opt -S '-passes=default<O2>' < %s | FileCheck %s --check-prefix=IR
+; RUN: sed 's/i64 4096/i64 4294971392/' %s | llc -mtriple=x86_64-unknown-linux-gnu -mattr=+sgx,+xsave -O2 | FileCheck %s --check-prefix=WIDE-SITE
+; RUN: sed 's/i64 4096/i64 4294971392/' %s | llc -mtriple=x86_64-unknown-linux-gnux32 -mattr=+sgx,+xsave -O2 | FileCheck %s --check-prefix=WIDE-SITE
 
 ; WIDTH: ENCLU original site must be a code-width constant
+; WIDE-SITE: .quad 4294971392
 ; IMMEDIATE: immarg operand has non-immediate parameter
 ; COMMON-LABEL: transfer:
 ; COMMON: subl $2, %eax
