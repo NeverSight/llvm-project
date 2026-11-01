@@ -11,6 +11,19 @@
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
+// Full double-width dividend, quotient and remainder with architectural #DE.
+// Arguments are the low half, high half and divisor, all bit-pattern carriers.
+// Conservative effects preserve traps, unused/repeated calls and memory order.
+let TargetPrefix = "x86" in {
+  foreach Width = [8, 16, 32, 64] in {
+    defvar Ty = !cast<LLVMType>("llvm_i" # Width # "_ty");
+    foreach Name = ["udivrem", "sdivrem"] in
+      def "int_x86_" # Name # Width : Intrinsic<[Ty, Ty], [Ty, Ty, Ty],
+          [IntrConvergent, IntrNoDuplicate]>;
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Interrupt traps
 let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
   def int_x86_int : Intrinsic<[], [llvm_i8_ty], [ImmArg<ArgIndex<0>>]>;
