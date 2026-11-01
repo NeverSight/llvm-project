@@ -17,6 +17,7 @@
 #include "X86AMXStackMemory.h"
 #include "X86FrameLowering.h"
 #include "X86HyperVContext.h"
+#include "X86SNPContext.h"
 #include "X86InstrBuilder.h"
 #include "X86IntrinsicsInfo.h"
 #include "X86KVMHypercall.h"
@@ -30895,6 +30896,17 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
   if (!IntrData) {
     switch (IntNo) {
 
+    case Intrinsic::x86_psmash_context:
+    case Intrinsic::x86_pvalidate_context:
+    case Intrinsic::x86_rmpadjust_context:
+    case Intrinsic::x86_rmpupdate_context:
+    case Intrinsic::x86_rmpquery_context:
+    case Intrinsic::x86_rmpread_context:
+    case Intrinsic::x86_rmpopt_context:
+    case Intrinsic::x86_rmpchkd_context:
+      return X86::lowerSNPContext(Op, Subtarget, DAG);
+    case Intrinsic::x86_vmgexit_sev:
+      return X86::lowerSEVGuestExit(Op, Subtarget, DAG);
     case Intrinsic::x86_hyperv_call:
       return X86::lowerHyperVCall(Op, Subtarget, DAG);
     case Intrinsic::x86_vmcall_kvm:

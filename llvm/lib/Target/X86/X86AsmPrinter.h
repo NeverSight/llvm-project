@@ -111,6 +111,7 @@ private:
   bool emitNativeLeafSaveRBX(const MachineInstr *MI);
   bool emitSVMContext(const MachineInstr *MI);
   bool emitHyperVContext(const MachineInstr *MI);
+  bool emitSNPContext(const MachineInstr *MI);
   void emitSEHStateWrite(const MachineInstr &MI);
   SmallVector<const MCSymbol *, 8> SEHStateWriteSymbols;
   void LowerSTACKMAP(const MachineInstr &MI);

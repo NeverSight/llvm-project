@@ -14,14 +14,14 @@
 //===----------------------------------------------------------------------===//
 // SNP instructions
 
-let SchedRW = [WriteSystem] in {
+let SchedRW = [WriteSystem], hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
 // F3 0F 01 FF
 let Uses = [RAX], Defs = [EAX, EFLAGS] in
 def PSMASH: I<0x01, MRM_FF, (outs), (ins), "psmash", []>, TB, XS,
             Requires<[In64BitMode]>;
 
 // F2 0F 01 FF
-let Uses = [RAX, RCX, RDX], Defs = [EAX, EFLAGS] in
+let Uses = [RAX, ECX, EDX], Defs = [EAX, EFLAGS] in
 def PVALIDATE64: I<0x01, MRM_FF, (outs), (ins), "pvalidate",[]>,
                  TB, XD, Requires<[In64BitMode]>;
 
@@ -43,6 +43,30 @@ def RMPADJUST: I<0x01, MRM_FE, (outs), (ins), "rmpadjust", []>, TB, XS,
 let Uses = [RAX, RDX], Defs = [RAX, RCX, RDX, EFLAGS] in
 def RMPQUERY: I<0x01, MRM_FD, (outs), (ins), "rmpquery", []>, TB, XS,
                Requires<[In64BitMode]>;
+// F2 0F 01 FD
+let Uses = [RAX, RCX], Defs = [EAX, EFLAGS] in
+def RMPREAD: I<0x01, MRM_FD, (outs), (ins), "rmpread", []>, TB, XD,
+             Requires<[In64BitMode]>;
+
+// F2/F3 0F 01 FC
+let Uses = [RAX, RCX], Defs = [EFLAGS] in
+def RMPOPT: I<0x01, MRM_FC, (outs), (ins), "rmpopt", []>, TB, XD,
+            Requires<[In64BitMode]>;
+let Uses = [RAX, RCX], Defs = [RAX, RCX, EFLAGS] in
+def RMPCHKD: I<0x01, MRM_FC, (outs), (ins), "rmpchkd", []>, TB, XS,
+             Requires<[In64BitMode]>;
+
+// SEV-ES returns to the following instruction with private state restored.
+// RAX is also the optional VMGEXIT-parameter input when enabled by the VMSA.
+let Uses = [RAX] in {
+def VMGEXIT: I<0x01, MRM_D9, (outs), (ins), "vmgexit", []>, TB, XS;
+let isCodeGenOnly = 1, ForceDisassemble = 1 in
+def VMGEXIT_F2: I<0x01, MRM_D9, (outs), (ins), "vmgexit", []>, TB, XD;
+}
+
+// MC expansion keeps loads, the SNP instruction and flag capture inseparable.
+let Uses = [R10, R11], Defs = [RAX, RCX, RDX, EFLAGS] in
+def SNP_CONTEXT64 : PseudoI<(outs), (ins i32imm:$operation, i32imm:$control), []>;
 } // SchedRW
 
 def : InstAlias<"psmash\t{%rax|rax}", (PSMASH)>, Requires<[In64BitMode]>;

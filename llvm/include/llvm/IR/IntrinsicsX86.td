@@ -52,6 +52,23 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
+// Native SNP completion. The register bank and flags object use the contract
+// in X86SnpState.h. Address/segment controls are immediate. RMP, paging,
+// privilege, SNP and restart state are architectural, not emulated here.
+let TargetPrefix = "x86" in {
+  foreach Name = ["psmash", "pvalidate", "rmpadjust", "rmpupdate", "rmpquery",
+                  "rmpread", "rmpopt", "rmpchkd"] in
+    def "int_x86_" # Name # "_context" : Intrinsic<[],
+        [llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty],
+        [IntrConvergent, IntrNoDuplicate, ImmArg<ArgIndex<2>>]>;
+  // Returning SEV-ES/GHCB contract. RAX supplies the optional VMGEXIT parameter;
+  // private register state survives the exit. Non-SEV-ES VMMCALL semantics and
+  // services which replace the caller environment are outside this interface.
+  def int_x86_vmgexit_sev : Intrinsic<[], [llvm_i64_ty],
+      [IntrConvergent, IntrNoDuplicate]>;
+}
+
+//===----------------------------------------------------------------------===//
 // SEH intrinsics for Windows
 let TargetPrefix = "x86" in {
   def int_x86_seh_lsda : Intrinsic<[llvm_ptr_ty], [llvm_ptr_ty], [IntrNoMem]>;
