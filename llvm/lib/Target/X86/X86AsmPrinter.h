@@ -110,6 +110,7 @@ private:
   bool emitBoundedLeafState(const MachineInstr *MI);
   bool emitNativeLeafSaveRBX(const MachineInstr *MI);
   bool emitSVMContext(const MachineInstr *MI);
+  bool emitSMMContext(const MachineInstr *MI);
   bool emitHyperVContext(const MachineInstr *MI);
   bool emitSNPContext(const MachineInstr *MI);
   bool emitHLEContext(const MachineInstr *MI);

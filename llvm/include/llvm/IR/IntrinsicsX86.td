@@ -39,6 +39,11 @@ let TargetPrefix = "x86" in {
       [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
   def int_x86_rsm : Intrinsic<[], [],
       [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+  // Restore the software-owned SMM banks immediately before RSM. The five
+  // u64 slots are XState (linear pointer), XStateMask, CR2, CR8, KernelGSBase.
+  // RSM restores the other banks from the ambient processor save image.
+  def int_x86_rsm_context : Intrinsic<[], [llvm_ptr_ty],
+      [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
   // The supplied frame replaces the compiler stack immediately before the
   // native transfer. The CPU owns all frame reads, descriptor/CET state and
   // faults. The old C ABI continuation is abandoned, including in code32.

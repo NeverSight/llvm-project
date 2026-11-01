@@ -57,6 +57,16 @@ let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
       Requires<[In64BitMode]>;
 }
 
+// No compiler instruction may run after the final XRSTOR. RSM abandons the
+// compiler frame and restores the hardware-managed banks from SMRAM.
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    isTerminator = 1, isBarrier = 1, SchedRW = [WriteSystem],
+    Defs = [CS, SS, DS, ES, FS, GS, EFLAGS, CR2, CR8,
+            RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI,
+            R8, R9, R10, R11, R12, R13, R14, R15] in
+  def RSM_CONTEXT64 : PseudoI<(outs), (ins GR64:$context), []>,
+                     Requires<[In64BitMode, HasXSAVE]>;
+
 // A plain COPY's register class can be widened by coalescing. Preserve the
 // native address carrier constraint through allocation and copy propagation.
 // MC lowering emits an ordinary MOV without changing flags or touching memory.

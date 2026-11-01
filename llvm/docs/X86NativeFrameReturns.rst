@@ -68,3 +68,38 @@ pointer widening, code32 forms, malformed signatures, dynamic immediates,
 feature/mode rejection, attributes and the pre-existing system dispatcher.
 These compiler checks alone do not qualify successful native transitions,
 faults, asynchronous events or CPU feature implementations.
+
+Software SMM state before RSM
+----------------------------
+
+``void llvm.x86.rsm.context(ptr context)`` additionally restores the
+software-owned banks immediately before RSM. Its five consecutive u64 slots
+are a linear ``XState`` pointer, ``XStateMask``, ``CR2``, ``CR8`` and
+``KernelGSBase``. It requires code64 and the ``xsave`` target feature; an x32
+ABI context pointer is zero-extended. The intrinsic has the same terminal
+attributes as the transfers above.
+
+Supply an accessible 64-byte-aligned standard XRSTOR image, sized for the
+mask and the live XCR0, with valid component data and reserved header bytes.
+The context, image, compiler frame and processor SMRAM save image must be
+disjoint. CR8 is in [0,15], and KernelGSBase must be a valid canonical MSR
+value. The native environment already owns active SMM, all mappings and the
+other live MSRs/debug/device state.
+
+One terminal pseudo writes CR2, CR8 and IA32_KERNEL_GS_BASE, reads the image
+pointer/mask, and then emits adjacent XRSTOR64/RSM. Register allocation and
+scheduling cannot insert a compiler instruction after XRSTOR. In particular,
+there is no context-memory read after restoring PKRU. Hardware restores the
+remaining RSM-managed banks from its ambient SMI save image. The compiler
+neither decodes that vendor-specific image nor provides an SMI-entry emulator,
+ordinary return, fault recovery or asynchronous unwind contract.
+
+``native-rsm-context.ll`` checks the ordered transport, dynamic frames,
+legacy/new pipelines, ELF/COFF/Mach-O, x32 pointer widening and rejection of
+code32 or missing XSAVE. The NeverC ``verify_frame_returns.py --smm-context``
+fixture additionally compares compiled output with original XRSTOR/RSM bytes
+in KVM-mediated SMM, including software state, both memory spaces and event
+state. It compares the architectural values represented by XSAVE: initial
+components may have either XINUSE tracking value (Intel SDM 13.6). Removing
+XRSTOR must fail the state comparison. This is not bare-metal firmware or
+fault/asynchronous-delivery qualification.
