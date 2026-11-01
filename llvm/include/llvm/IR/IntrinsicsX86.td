@@ -69,6 +69,16 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
+// HLE hints belong to their memory operations. The explicit GPR and flags
+// objects, operation controls and boundary-abort contract are in X86HleState.h.
+let TargetPrefix = "x86" in {
+  def int_x86_hle_context : Intrinsic<[],
+      [llvm_ptr_ty, llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty, llvm_i32_ty],
+      [IntrConvergent, IntrNoDuplicate, ImmArg<ArgIndex<3>>,
+       ImmArg<ArgIndex<4>>]>;
+}
+
+//===----------------------------------------------------------------------===//
 // SEH intrinsics for Windows
 let TargetPrefix = "x86" in {
   def int_x86_seh_lsda : Intrinsic<[llvm_ptr_ty], [llvm_ptr_ty], [IntrNoMem]>;

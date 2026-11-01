@@ -112,6 +112,7 @@ private:
   bool emitSVMContext(const MachineInstr *MI);
   bool emitHyperVContext(const MachineInstr *MI);
   bool emitSNPContext(const MachineInstr *MI);
+  bool emitHLEContext(const MachineInstr *MI);
   void emitSEHStateWrite(const MachineInstr &MI);
   SmallVector<const MCSymbol *, 8> SEHStateWriteSymbols;
   void LowerSTACKMAP(const MachineInstr &MI);

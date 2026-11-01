@@ -50,6 +50,11 @@ def XABORT : Ii8<0xc6, MRM_F8, (outs), (ins i8imm:$imm),
 } // SchedRW
 
 // HLE prefixes
+// One MC expansion owns the native prefix, memory operation and publication.
+let SchedRW = [WriteSystem], hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    Uses = [R9, R10, R11], Defs = [RAX, RCX, RDX, RBX, EFLAGS] in
+def HLE_CONTEXT64 : PseudoI<(outs), (ins i32imm:$control, i32imm:$bytes), []>;
+
 let SchedRW = [WriteSystem] in {
 
 // XACQUIRE and XRELEASE reuse REPNE and REP respectively.

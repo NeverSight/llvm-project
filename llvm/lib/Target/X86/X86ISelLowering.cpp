@@ -16,14 +16,15 @@
 #include "X86.h"
 #include "X86AMXStackMemory.h"
 #include "X86FrameLowering.h"
+#include "X86HLEContext.h"
 #include "X86HyperVContext.h"
-#include "X86SNPContext.h"
 #include "X86InstrBuilder.h"
 #include "X86IntrinsicsInfo.h"
 #include "X86KVMHypercall.h"
 #include "X86MachineFunctionInfo.h"
 #include "X86NativeFrameReturn.h"
 #include "X86SEHState.h"
+#include "X86SNPContext.h"
 #include "X86SVMContext.h"
 #include "X86TargetMachine.h"
 #include "llvm/ADT/SmallBitVector.h"
@@ -30896,6 +30897,8 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
   if (!IntrData) {
     switch (IntNo) {
 
+    case Intrinsic::x86_hle_context:
+      return X86::lowerHLEContext(Op, Subtarget, DAG);
     case Intrinsic::x86_psmash_context:
     case Intrinsic::x86_pvalidate_context:
     case Intrinsic::x86_rmpadjust_context:

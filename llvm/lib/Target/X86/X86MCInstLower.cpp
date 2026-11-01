@@ -3114,6 +3114,8 @@ bool X86AsmPrinter::emitRepStringState(const MachineInstr *MI) {
 }
 
 void X86AsmPrinter::emitInstruction(const MachineInstr *MI) {
+  if (emitHLEContext(MI))
+    return;
   if (emitSNPContext(MI))
     return;
   if (emitHyperVContext(MI))
