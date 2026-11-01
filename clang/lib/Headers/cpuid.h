@@ -262,19 +262,20 @@
     __asm("cpuid" : "=a"(__eax), "=b" (__ebx), "=c"(__ecx), "=d"(__edx) \
                   : "0"(__leaf), "2"(__count))
 #else
-/* x86-64 uses %rbx as the base register, so preserve it. */
+/* Preserve %rbx. The first exchange writes the temporary before CPUID
+ * consumes its inputs, even when the EAX/ECX outputs are unused. */
 #define __cpuid(__leaf, __eax, __ebx, __ecx, __edx)                            \
   __asm("  xchg{q|}  {%%|}rbx,%q1\n"                                           \
         "  cpuid\n"                                                            \
         "  xchg{q|}  {%%|}rbx,%q1"                                             \
-        : "=a"(__eax), "=r"(__ebx), "=c"(__ecx), "=d"(__edx)                   \
+        : "=a"(__eax), "=&r"(__ebx), "=c"(__ecx), "=d"(__edx)                  \
         : "0"(__leaf))
 
 #define __cpuid_count(__leaf, __count, __eax, __ebx, __ecx, __edx)             \
   __asm("  xchg{q|}  {%%|}rbx,%q1\n"                                           \
         "  cpuid\n"                                                            \
         "  xchg{q|}  {%%|}rbx,%q1"                                             \
-        : "=a"(__eax), "=r"(__ebx), "=c"(__ecx), "=d"(__edx)                   \
+        : "=a"(__eax), "=&r"(__ebx), "=c"(__ecx), "=d"(__edx)                  \
         : "0"(__leaf), "2"(__count))
 #endif
 
