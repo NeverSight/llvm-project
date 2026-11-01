@@ -25,8 +25,8 @@ Native environment and protocol
 -------------------------------
 
 These interfaces require a flat native C address space, live XCR0=7, a valid
-64-byte-aligned standard XSAVE
-image, and accessible, disjoint context, image and compiler stack storage.
+64-byte-aligned standard XSAVE image, a context aligned to the code-mode word
+size, and accessible, disjoint context, image and compiler stack storage.
 They must not be concurrently mutated. The supplied flags must be realizable
 by CPL3 POPF: IF and IOPL equal the ambient values, and TF, RF, NT and VM are
 clear. CET is disabled. Hardware owns the enclave environment, including
@@ -57,6 +57,9 @@ it is a complete 64-bit code address independent of the C pointer size.
 
 The final indirect jump reads a code-local address literal: RIP-relative in
 code64, absolute in code32. It consumes no input GPR and leaves flags intact.
+The code32 literal-address relocation must be resolved by the final linker or
+loader. This interface does not promise relocation-free position-independent
+code32 text; the code64 RIP-relative form needs no such address relocation.
 The literal is aligned to the code-mode word size, so restoring AC does not
 introduce an alignment fault in this jump when CR0.AM is set at CPL3.
 SP and AX are the last context loads; the AX load still uses the context
