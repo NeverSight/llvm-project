@@ -212,10 +212,11 @@ def ADDR32_PREFIX : I<0x67, PrefixByte, (outs), (ins), "addr32", []>,
 } // SchedRW
 
 //===----------------------------------------------------------------------===//
-// Moves to and from segment registers.
+// Moves to and from segment registers. Reads observe ambient selector state;
+// writes additionally load a descriptor and may update its accessed bit.
 //
 
-let SchedRW = [WriteMove] in {
+let SchedRW = [WriteMove], hasSideEffects = 1 in {
 def MOV16rs : I<0x8C, MRMDestReg, (outs GR16:$dst), (ins SEGMENT_REG:$src),
                 "mov{w}\t{$src, $dst|$dst, $src}", []>, OpSize16;
 def MOV32rs : I<0x8C, MRMDestReg, (outs GR32:$dst), (ins SEGMENT_REG:$src),
@@ -226,16 +227,16 @@ let mayStore = 1 in {
 def MOV16ms : I<0x8C, MRMDestMem, (outs), (ins i16mem:$dst, SEGMENT_REG:$src),
                 "mov{w}\t{$src, $dst|$dst, $src}", []>;
 }
+let mayLoad = 1, mayStore = 1 in {
 def MOV16sr : I<0x8E, MRMSrcReg, (outs SEGMENT_REG:$dst), (ins GR16:$src),
                 "mov{w}\t{$src, $dst|$dst, $src}", []>, OpSize16;
 def MOV32sr : I<0x8E, MRMSrcReg, (outs SEGMENT_REG:$dst), (ins GR32:$src),
                 "mov{l}\t{$src, $dst|$dst, $src}", []>, OpSize32;
 def MOV64sr : RI<0x8E, MRMSrcReg, (outs SEGMENT_REG:$dst), (ins GR64:$src),
                  "mov{q}\t{$src, $dst|$dst, $src}", []>;
-let mayLoad = 1 in {
 def MOV16sm : I<0x8E, MRMSrcMem, (outs SEGMENT_REG:$dst), (ins i16mem:$src),
                 "mov{w}\t{$src, $dst|$dst, $src}", []>;
-}
+} // descriptor reads and accessed writes
 } // SchedRW
 
 //===----------------------------------------------------------------------===//

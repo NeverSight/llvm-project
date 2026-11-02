@@ -256,6 +256,25 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
+// Segment selector moves. The immediate register number is the architectural
+// encoding: ES=0, CS=1, SS=2, DS=3, FS=4, GS=5. CS is read-only. Memory forms
+// keep the exact two-byte access inside the MOV; writes also own descriptor
+// reads, accessed-bit updates and installation of the hidden segment state.
+// These are ordered ambient-state operations in 32/64-bit code. Callers must
+// preserve their ABI's segment/TLS/stack invariants. MOV SS inhibits events at
+// the next machine instruction boundary, whose instruction is compiler-chosen;
+// this API does not promise a coupled stack switch.
+let TargetPrefix = "x86" in {
+  def int_x86_readseg : Intrinsic<[llvm_i16_ty], [llvm_i32_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_readseg_mem : Intrinsic<[], [llvm_i32_ty, llvm_ptr_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_writeseg : Intrinsic<[], [llvm_i32_ty, llvm_i16_ty],
+      [ImmArg<ArgIndex<0>>]>;
+  def int_x86_writeseg_mem : Intrinsic<[], [llvm_i32_ty, llvm_ptr_ty],
+      [ImmArg<ArgIndex<0>>]>;
+}
+
 // Coupled far-pointer loads. The packed image holds a 16/32/64-bit offset
 // followed immediately by a 16-bit selector. Hardware owns the descriptor
 // validation, accessed-bit update and segment installation before returning

@@ -33,6 +33,14 @@ let hasSideEffects = 1, mayLoad = 0, mayStore = 0,
                       Requires<[In64BitMode]>;
 }
 
+// A fixed segment definition is materialized before machine optimization.
+// Keep selector memory access and hidden descriptor effects on that same MOV.
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    usesCustomInserter = 1, SchedRW = [WriteSystem] in {
+  def WRITE_SEGMENT_REG : PseudoI<(outs), (ins i32imm:$reg, GR16:$value), []>;
+  def WRITE_SEGMENT_MEM : PseudoI<(outs), (ins i32imm:$reg, i16mem:$value), []>;
+}
+
 // Keep the destination stack out of RSP until final MC emission. A glued
 // CopyToReg can still move ahead of frame accesses during machine scheduling.
 // These terminals abandon the compiler frame; they are not ABI returns.
