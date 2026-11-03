@@ -69,7 +69,8 @@ let TargetPrefix = "x86" in {
       [IntrNoReturn, IntrConvergent, IntrNoDuplicate, ImmArg<ArgIndex<1>>]>;
   // The supplied frame replaces the compiler stack immediately before the
   // native transfer. The CPU owns all frame reads, descriptor/CET state and
-  // faults. The old C ABI continuation is abandoned, including in code32.
+  // faults. The old C ABI continuation is abandoned. Protected code16/32 uses
+  // an explicit ESP carrier and the 32-bit compiler stack ABI.
   foreach Name = ["iret16", "iret32", "iret64", "retf16", "retf32", "retf64",
                   "erets", "eretu", "uiret"] in
     def "int_x86_" # Name : Intrinsic<[], [llvm_ptr_ty],

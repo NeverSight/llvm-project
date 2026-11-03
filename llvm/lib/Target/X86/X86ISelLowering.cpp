@@ -28956,7 +28956,7 @@ static SDValue lowerNativeFrameReturn(SDValue Op, const X86Subtarget &Subtarget,
   }
   const auto Info = X86::nativeFrameReturnInfo(unsigned(Kind));
   const bool Wide = Subtarget.is64Bit();
-  if (Subtarget.is16Bit() || (Info.LongOnly && !Wide))
+  if (Info.LongOnly && !Wide)
     report_fatal_error(
         "native frame-return intrinsic does not match the target code mode");
   if (Info.Uintr && !Subtarget.hasUINTR())

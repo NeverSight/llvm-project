@@ -13,7 +13,12 @@
 ; RUN: opt -S -passes=verify %t/returns.ll -o - | FileCheck %s --check-prefix=ATTR
 ; RUN: llc -mtriple=x86_64-unknown-linux-gnux32 -O2 -verify-machineinstrs %t/x32.ll -o - | FileCheck %s --check-prefix=X32
 ; RUN: not --crash llc -mtriple=i386-unknown-linux-gnu %t/wide.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=MODE
-; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/protected.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=MODE
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs %t/protected.ll -o - | FileCheck %s --check-prefix=PROTECTED
+; RUN: opt -S -passes='default<O2>' %t/protected.ll | llc -mtriple=i386-unknown-linux-code16 -O2 -verify-machineinstrs -o - | FileCheck %s --check-prefix=PROTECTED
+; RUN: llc -mtriple=i386-unknown-linux-code16 -filetype=obj %t/protected.ll -o %t/code16.o
+; RUN: llvm-objdump -d --mattr=+16bit-mode,-32bit-mode %t/code16.o | FileCheck %s --check-prefix=BINARY16
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/wide.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=MODE
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 -mattr=+uintr %t/uiret.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=MODE
 ; RUN: not --crash llc -mtriple=x86_64-unknown-linux-gnu -mattr=-uintr %t/uiret.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=FEATURE
 ; RUN: not opt -passes=verify %t/dynamic.ll -disable-output 2>&1 | FileCheck %s --check-prefix=IMM
 ; RUN: not opt -passes=verify %t/wrong.ll -disable-output 2>&1 | FileCheck %s --check-prefix=ARG
@@ -119,6 +124,14 @@
 ; PROTECTED-LABEL: rsm:
 ; PROTECTED: movb $17,
 ; PROTECTED: rsm
+; BINARY16: cf{{[ \t]+}}iretw
+; BINARY16: 66 cf{{[ \t]+}}iretl
+; BINARY16: cb{{[ \t]+}}lretw
+; BINARY16: 66 cb{{[ \t]+}}lretl
+; BINARY16: ca ff ff{{[ \t]+}}lretw
+; BINARY16: 66 ca 00 00{{[ \t]+}}lretl
+; BINARY16: 0f 34{{[ \t]+}}sysenter
+; BINARY16: 0f aa{{[ \t]+}}rsm
 ; BINARY: 66 cf{{[ \t]+}}iretw
 ; BINARY: cf{{[ \t]+}}iretl
 ; BINARY: 48 cf{{[ \t]+}}iretq
