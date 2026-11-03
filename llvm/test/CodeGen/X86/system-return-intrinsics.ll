@@ -13,7 +13,14 @@
 ; RUN: opt -S -passes=verify %t/returns.ll -o - | FileCheck %s --check-prefix=ATTR
 ; RUN: not --crash llc -mtriple=i386-unknown-linux-gnu %t/sysret-mode.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=MODE
 ; RUN: not --crash llc -mtriple=i386-unknown-linux-gnu %t/sysexit-mode.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=MODE
-; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/protected.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=MODE
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs %t/protected.ll -o - | FileCheck %s --check-prefix=PROTECTED
+; RUN: opt -S -passes='default<O2>' %t/protected.ll | llc -mtriple=i386-unknown-linux-code16 -O2 -verify-machineinstrs -o - | FileCheck %s --check-prefix=PROTECTED
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs %t/protected-frame.ll -o - | FileCheck %s --check-prefix=FRAME16
+; RUN: opt -S -passes='default<O2>' %t/protected-frame.ll | llc -mtriple=i386-unknown-linux-code16 -O2 -verify-machineinstrs -o - | FileCheck %s --check-prefix=FRAME16
+; RUN: llc -mtriple=i386-unknown-linux-code16 -filetype=obj %t/protected.ll -o %t/code16.o
+; RUN: llvm-objdump -d --mattr=+16bit-mode,-32bit-mode %t/code16.o | FileCheck %s --check-prefix=BINARY16
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/sysret-mode.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=MODE
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/sysexit-mode.ll -o /dev/null 2>&1 | FileCheck %s --check-prefix=MODE
 ; RUN: not opt -passes=verify %t/wrong-argument.ll -disable-output 2>&1 | FileCheck %s --check-prefix=ARGUMENT
 ; RUN: not opt -passes=verify %t/wrong-result.ll -disable-output 2>&1 | FileCheck %s --check-prefix=RESULT
 
@@ -61,6 +68,12 @@
 ; PROTECTED-DAG: movl $589824, %ecx
 ; PROTECTED: sysexitl
 ; PROTECTED-NOT: {{^[ \t]*ret[lq]?[ \t]*$}}
+; FRAME16-LABEL: exit32_frame:
+; FRAME16-NOT: #APP
+; FRAME16: movb $17,
+; FRAME16: sysexitl
+; FRAME16-NOT: {{^[ \t]*ret[lwq]?[ \t]*$}}
+; BINARY16: 0f 35{{[ \t]+}}sysexitl
 ; BINARY: 0f 07{{[ \t]+}}sysretl
 ; BINARY: 48 0f 07{{[ \t]+}}sysretq
 ; BINARY: 0f 35{{[ \t]+}}sysexitl
@@ -122,6 +135,18 @@ define void @exit32() {
   call void @llvm.x86.sysexit32(i32 305419896, i32 589824)
   unreachable
 }
+;--- protected-frame.ll
+declare void @llvm.x86.sysexit32(i32, i32)
+define void @exit32_frame(i32 %pc, i32 %sp, i32 %size) #0 {
+  %frame = alloca i8, i32 %size, align 32
+  store volatile i8 17, ptr %frame
+  %loaded = load volatile i8, ptr %frame
+  %delta = zext i8 %loaded to i32
+  %target = add i32 %pc, %delta
+  call void @llvm.x86.sysexit32(i32 %target, i32 %sp)
+  unreachable
+}
+attributes #0 = { "frame-pointer"="all" }
 ;--- sysret-mode.ll
 declare void @llvm.x86.sysret32(i32, i32, i64)
 define void @bad(i32 %pc, i32 %flags, i64 %sp) {

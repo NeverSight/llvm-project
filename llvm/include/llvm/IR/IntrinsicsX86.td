@@ -36,7 +36,7 @@ let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
 // The API guarantees these operands, not a complete saved GPR/vector context.
 // STAR/SYSENTER MSRs, privilege, feature and segment state remain ambient.
 // The suffix is operand size. SYSRET and every 64-bit form require long mode;
-// SYSEXIT32 also permits protected 32-bit code. Code16 is unsupported.
+// SYSEXIT32 also permits protected 16/32-bit code and always uses ECX/EDX.
 let TargetPrefix = "x86" in {
   def int_x86_sysret32 : Intrinsic<[],
       [llvm_i32_ty, llvm_i32_ty, llvm_i64_ty],

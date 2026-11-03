@@ -29053,7 +29053,7 @@ static SDValue lowerBoundedSystemState(SDValue Op,
         ID == Intrinsic::x86_sysret32 || ID == Intrinsic::x86_sysret64;
     const bool Wide =
         ID == Intrinsic::x86_sysret64 || ID == Intrinsic::x86_sysexit64;
-    if (Subtarget.is16Bit() || ((Sysret || Wide) && !Subtarget.is64Bit()))
+    if ((Sysret || Wide) && !Subtarget.is64Bit())
       report_fatal_error(
           "system-return intrinsic does not match the target code mode");
     const unsigned PC =
