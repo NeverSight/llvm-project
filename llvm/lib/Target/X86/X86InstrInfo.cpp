@@ -6332,13 +6332,17 @@ bool X86InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     return true;
   }
 
+  case X86::RDFLAGS16:
   case X86::RDFLAGS32:
   case X86::RDFLAGS64: {
-    unsigned Is64Bit = MI.getOpcode() == X86::RDFLAGS64;
+    const bool Is16Bit = MI.getOpcode() == X86::RDFLAGS16;
+    const bool Is64Bit = MI.getOpcode() == X86::RDFLAGS64;
     MachineBasicBlock &MBB = *MIB->getParent();
 
     MachineInstr *NewMI = BuildMI(MBB, MI, MIB->getDebugLoc(),
-                                  get(Is64Bit ? X86::PUSHF64 : X86::PUSHF32))
+                                  get(Is16Bit   ? X86::PUSHF16
+                                      : Is64Bit ? X86::PUSHF64
+                                                : X86::PUSHF32))
                               .getInstr();
 
     // Permit reads of the EFLAGS and DF registers without them being defined.
@@ -6352,20 +6356,28 @@ bool X86InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
            "Unexpected register in operand! Should be DF.");
     NewMI->getOperand(3).setIsUndef();
 
-    MIB->setDesc(get(Is64Bit ? X86::POP64r : X86::POP32r));
+    MIB->setDesc(get(Is16Bit   ? X86::POP16r
+                     : Is64Bit ? X86::POP64r
+                               : X86::POP32r));
     return true;
   }
 
+  case X86::WRFLAGS16:
   case X86::WRFLAGS32:
   case X86::WRFLAGS64: {
-    unsigned Is64Bit = MI.getOpcode() == X86::WRFLAGS64;
+    const bool Is16Bit = MI.getOpcode() == X86::WRFLAGS16;
+    const bool Is64Bit = MI.getOpcode() == X86::WRFLAGS64;
     MachineBasicBlock &MBB = *MIB->getParent();
 
     BuildMI(MBB, MI, MIB->getDebugLoc(),
-            get(Is64Bit ? X86::PUSH64r : X86::PUSH32r))
+            get(Is16Bit   ? X86::PUSH16r
+                : Is64Bit ? X86::PUSH64r
+                          : X86::PUSH32r))
         .addReg(MI.getOperand(0).getReg());
     BuildMI(MBB, MI, MIB->getDebugLoc(),
-            get(Is64Bit ? X86::POPF64 : X86::POPF32));
+            get(Is16Bit   ? X86::POPF16
+                : Is64Bit ? X86::POPF64
+                          : X86::POPF32));
     MI.eraseFromParent();
     return true;
   }

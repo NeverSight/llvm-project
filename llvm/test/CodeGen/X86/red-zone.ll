@@ -59,3 +59,33 @@ entry:
   %0 = fpext float %f to x86_fp80
   ret x86_fp80 %0
 }
+
+declare i16 @llvm.x86.flags.read.u16()
+declare void @llvm.x86.flags.write.u16(i16)
+
+; Word FLAGS pairs also use the compiler stack, including unused reads.
+; CHECK-LABEL: norz_flags16_read:
+; CHECK: subq ${{[0-9]+}}, %rsp
+; CHECK: pushfw
+; CHECK: popw
+; CHECK: (%rsp)
+; CHECK: (%rsp)
+; CHECK: ret
+define x86_fp80 @norz_flags16_read(float %f) nounwind {
+  %flags = call i16 @llvm.x86.flags.read.u16()
+  %value = fpext float %f to x86_fp80
+  ret x86_fp80 %value
+}
+
+; CHECK-LABEL: norz_flags16_write:
+; CHECK: subq ${{[0-9]+}}, %rsp
+; CHECK: pushw
+; CHECK: popfw
+; CHECK: (%rsp)
+; CHECK: (%rsp)
+; CHECK: ret
+define x86_fp80 @norz_flags16_write(float %f, i16 %flags) nounwind {
+  call void @llvm.x86.flags.write.u16(i16 %flags)
+  %value = fpext float %f to x86_fp80
+  ret x86_fp80 %value
+}

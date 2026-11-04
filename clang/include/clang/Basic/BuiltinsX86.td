@@ -33,6 +33,14 @@ def undef512 : X86Builtin<"_Vector<8, double>()"> {
 }
 
 // FLAGS
+def readeflags_u16 : X86Builtin<"unsigned short()"> {
+  let Attributes = [NoThrow];
+}
+
+def writeeflags_u16 : X86Builtin<"void(unsigned short)"> {
+  let Attributes = [NoThrow];
+}
+
 def readeflags_u32 : X86Builtin<"unsigned int()"> {
   let Attributes = [NoThrow];
 }
