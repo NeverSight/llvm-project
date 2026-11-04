@@ -1,9 +1,17 @@
 ; RUN: llc -mtriple=i386-unknown-linux-gnu -O0 -verify-machineinstrs < %s | FileCheck %s
 ; RUN: opt -S -passes='default<O2>' %s | llc -mtriple=i386-unknown-linux-gnu -O2 -verify-machineinstrs | FileCheck %s
 ; RUN: llc -mtriple=i386-unknown-linux-gnu -stop-after=finalize-isel -verify-machineinstrs < %s | FileCheck %s --check-prefix=MIR
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs < %s | FileCheck %s
+; RUN: opt -S -passes='default<O2>' %s | llc -mtriple=i386-unknown-linux-code16 -O2 -enable-new-pm -verify-machineinstrs | FileCheck %s
+; RUN: llc -mtriple=i386-unknown-linux-code16 -stop-after=finalize-isel -verify-machineinstrs < %s | FileCheck %s --check-prefix=MIR
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs -filetype=obj %s -o %t.o
+; RUN: llvm-objdump -d --mattr=+16bit-mode,-32bit-mode %t.o | FileCheck %s --check-prefix=CODE16
 ; RUN: not --crash llc -mtriple=x86_64-unknown-linux-gnu < %s 2>&1 | FileCheck %s --check-prefix=MODE
-; RUN: not --crash llc -mtriple=i386-unknown-none-code16 < %s 2>&1 | FileCheck %s --check-prefix=MODE
-; MODE: ARPL intrinsic requires 32-bit code mode
+; MODE: ARPL intrinsic requires 16- or 32-bit code mode
+; CODE16-LABEL: <adjust>:
+; CODE16: 63 {{[0-9a-f]+}} {{.*}}arpl
+; CODE16-LABEL: <adjust_memory>:
+; CODE16: 67 63 {{[0-9a-f]+}} {{.*}}arpl
 
 declare { i16, i8 } @llvm.x86.arpl.reg(i16, i16)
 declare i8 @llvm.x86.arpl.mem(ptr, i16)

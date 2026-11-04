@@ -28907,8 +28907,8 @@ static SDValue lowerDescriptorState(SDValue Op, const X86Subtarget &Subtarget,
 
 static SDValue lowerArpl(SDValue Op, const X86Subtarget &Subtarget,
                          SelectionDAG &DAG) {
-  if (Subtarget.is64Bit() || Subtarget.is16Bit())
-    report_fatal_error("ARPL intrinsic requires 32-bit code mode");
+  if (Subtarget.is64Bit())
+    report_fatal_error("ARPL intrinsic requires 16- or 32-bit code mode");
   const bool Memory = Op.getConstantOperandVal(1) == Intrinsic::x86_arpl_mem;
   const SDLoc DL(Op);
   SmallVector<SDValue, 7> Operands;

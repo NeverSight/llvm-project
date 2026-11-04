@@ -339,8 +339,8 @@ let TargetPrefix = "x86" in {
   // when the selector is inaccessible. Use lsl.reg32 for explicit failure
   // preservation and a success flag. The query remains ordered and observable.
   def int_x86_lsl : Intrinsic<[llvm_i32_ty], [llvm_i32_ty], []>;
-  // ARPL is only available in non-long protected mode. Its register form
-  // returns the adjusted destination and ZF. The memory form owns the m16
+  // ARPL is available in protected 16/32-bit code, with a 32-bit pointer ABI.
+  // Its register form returns the adjusted destination and ZF. Memory owns m16
   // read and conditional write; it must not become an ordinary load/store.
   def int_x86_arpl_reg : Intrinsic<[llvm_i16_ty, llvm_i8_ty],
       [llvm_i16_ty, llvm_i16_ty], []>;
