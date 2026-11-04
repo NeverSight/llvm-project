@@ -25,7 +25,11 @@
 ; RUN: llc -mtriple=i386-apple-darwin -O2 -verify-machineinstrs -filetype=obj %t/32.ll -o %t/i386-apple-darwin-2.o
 ; RUN: not --crash llc -mtriple=i386-unknown-linux-gnu %t/64.ll 2>&1 | FileCheck %s --check-prefix=MODE
 ; RUN: not --crash llc -mtriple=x86_64-unknown-linux-gnu %t/32.ll 2>&1 | FileCheck %s --check-prefix=MODE
-; RUN: not --crash llc -mtriple=i386-unknown-none-code16 %t/32.ll 2>&1 | FileCheck %s --check-prefix=MODE
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs %t/32.ll -o - | FileCheck %s --check-prefix=X32
+; RUN: opt -S -passes='default<O2>' %t/32.ll | llc -mtriple=i386-unknown-linux-code16 -O2 -enable-new-pm -verify-machineinstrs | FileCheck %s --check-prefix=X32
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs -filetype=obj %t/32.ll -o %t/code16.o
+; RUN: llvm-objdump -d --mattr=+16bit-mode,-32bit-mode %t/code16.o | FileCheck %s --check-prefix=CODE16
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/64.ll 2>&1 | FileCheck %s --check-prefix=MODE
 ; RUN: not --crash llc -mtriple=x86_64-unknown-linux-gnu %t/width.ll 2>&1 | FileCheck %s --check-prefix=WIDTH
 ; RUN: not --crash llc -mtriple=x86_64-unknown-linux-gnu %t/prefix.ll 2>&1 | FileCheck %s --check-prefix=PREFIX
 ; RUN: not opt -passes=verify -disable-output %t/dynamic.ll 2>&1 | FileCheck %s --check-prefix=IMM
@@ -33,6 +37,31 @@
 ; WIDTH: native memory address width is invalid for this code mode
 ; PREFIX: invalid native memory segment prefix
 ; IMM: immarg operand has non-immediate parameter
+
+; CODE16-LABEL: <sgdt_address32>:
+; CODE16: : 67 66 0f 01 {{[0-9a-f]+}} {{.*}}sgdtl
+; CODE16: : 65 66 0f 01 {{[0-9a-f]+}} {{.*}}sgdtl
+; CODE16-LABEL: <sidt_address32>:
+; CODE16: : 67 66 0f 01 {{[0-9a-f]+}} {{.*}}sidtl
+; CODE16: : 65 66 0f 01 {{[0-9a-f]+}} {{.*}}sidtl
+; CODE16-LABEL: <lgdt_address32>:
+; CODE16: : 67 66 0f 01 {{[0-9a-f]+}} {{.*}}lgdtl
+; CODE16: : 65 66 0f 01 {{[0-9a-f]+}} {{.*}}lgdtl
+; CODE16-LABEL: <lidt_address32>:
+; CODE16: : 67 66 0f 01 {{[0-9a-f]+}} {{.*}}lidtl
+; CODE16: : 65 66 0f 01 {{[0-9a-f]+}} {{.*}}lidtl
+; CODE16-LABEL: <sgdt16_address32>:
+; CODE16: : 67 0f 01 {{[0-9a-f]+}} {{.*}}sgdtw
+; CODE16: : 65 0f 01 {{[0-9a-f]+}} {{.*}}sgdtw
+; CODE16-LABEL: <sidt16_address32>:
+; CODE16: : 67 0f 01 {{[0-9a-f]+}} {{.*}}sidtw
+; CODE16: : 65 0f 01 {{[0-9a-f]+}} {{.*}}sidtw
+; CODE16-LABEL: <lgdt16_address32>:
+; CODE16: : 67 0f 01 {{[0-9a-f]+}} {{.*}}lgdtw
+; CODE16: : 65 0f 01 {{[0-9a-f]+}} {{.*}}lgdtw
+; CODE16-LABEL: <lidt16_address32>:
+; CODE16: : 67 0f 01 {{[0-9a-f]+}} {{.*}}lidtw
+; CODE16: : 65 0f 01 {{[0-9a-f]+}} {{.*}}lidtw
 
 ;--- 64.ll
 declare i8 @llvm.x86.verr.mem.address(i64, i32, i32)

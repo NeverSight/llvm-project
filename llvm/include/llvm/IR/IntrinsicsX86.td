@@ -584,7 +584,8 @@ let TargetPrefix = "x86" in {
 }
 
 // Explicit descriptor-state addresses retain native fault ordering. The
-// address32 suffix denotes i386 code mode; the separate address width and
+// address32 suffix selects the 32-bit stack/pointer ABI in protected code16
+// and code32; the separate address width and
 // segment controls are architectural constants. The four *16.address32 APIs
 // also retain the legacy 16-bit descriptor-table operand-size attribute.
 let TargetPrefix = "x86" in {

@@ -30117,7 +30117,7 @@ static SDValue lowerDescriptorStateAddress(SDValue Op,
     Wide = false;
     break;
   }
-  if (Wide != Subtarget.is64Bit() || Subtarget.is16Bit())
+  if (Wide != Subtarget.is64Bit())
     report_fatal_error("descriptor-state address intrinsic does not match the "
                        "target code mode");
   SDValue Chain, Glue;
