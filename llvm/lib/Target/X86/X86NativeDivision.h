@@ -16,10 +16,9 @@
 
 namespace llvm::X86 {
 
-inline SDValue lowerNativeDivision(SDValue Op, bool Is16Bit, bool Is64Bit,
-                                   SelectionDAG &DAG) {
+inline SDValue lowerNativeDivision(SDValue Op, bool Is64Bit, SelectionDAG &DAG) {
   const MVT VT = Op.getSimpleValueType();
-  if (Is16Bit || (VT == MVT::i64 && !Is64Bit))
+  if (VT == MVT::i64 && !Is64Bit)
     report_fatal_error(
         "native division intrinsic does not match target code mode");
   unsigned Opcode, LowReg, HighReg;

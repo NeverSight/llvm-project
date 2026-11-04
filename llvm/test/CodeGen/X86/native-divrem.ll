@@ -1,4 +1,8 @@
 ; RUN: split-file %s %t
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs < %t/common.ll | FileCheck %s --check-prefix=COMMON --implicit-check-not="#APP" --implicit-check-not="call"
+; RUN: opt -S -passes='default<O2>' %t/common.ll | llc -mtriple=i386-unknown-linux-code16 -O2 -enable-new-pm -verify-machineinstrs | FileCheck %s --check-prefix=COMMON --implicit-check-not="#APP" --implicit-check-not="call"
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs -filetype=obj %t/common.ll -o %t.code16.o
+; RUN: llvm-objdump -d --mattr=+16bit-mode,-32bit-mode %t.code16.o | FileCheck %s --check-prefix=CODE16
 ; RUN: llc -mtriple=i386-unknown-linux-gnu -O0 -verify-machineinstrs < %t/common.ll | FileCheck %s --check-prefix=COMMON --implicit-check-not="#APP" --implicit-check-not="call"
 ; RUN: opt -S -passes='default<O2>' %t/common.ll | llc -mtriple=i386-unknown-linux-gnu -O2 -enable-new-pm -verify-machineinstrs | FileCheck %s --check-prefix=COMMON --implicit-check-not="#APP" --implicit-check-not="call"
 ; RUN: llc -mtriple=i686-pc-windows-msvc -O0 -verify-machineinstrs < %t/common.ll | FileCheck %s --check-prefix=COMMON --implicit-check-not="#APP" --implicit-check-not="call"
@@ -23,12 +27,24 @@
 ; RUN: opt -S -passes='default<O2>' %t/wide.ll | llc -mtriple=x86_64-unknown-linux-gnux32 -O2 -enable-new-pm -verify-machineinstrs | FileCheck %s --check-prefix=WIDE --implicit-check-not="#APP" --implicit-check-not="call"
 ; RUN: opt -S -passes=verify %t/common.ll | FileCheck %s --check-prefix=ATTR
 ; RUN: not --crash llc -mtriple=i386 %t/wide.ll 2>&1 | FileCheck %s --check-prefix=MODE
-; RUN: not --crash llc -mtriple=i386 -mattr=+16bit-mode,-32bit-mode %t/common.ll 2>&1 | FileCheck %s --check-prefix=MODE
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/wide.ll 2>&1 | FileCheck %s --check-prefix=MODE
 ; RUN: not opt -passes=verify -disable-output %t/bad.ll 2>&1 | FileCheck %s --check-prefix=BAD
 ; MODE: native division intrinsic does not match target code mode
 ; BAD: intrinsic argument 0 type expected i8, but got i16
 ; ATTR: declare { i8, i8 } @llvm.x86.udivrem8(i8, i8, i8) #[[A:[0-9]+]]
 ; ATTR: attributes #[[A]] = { convergent noduplicate nounwind }
+; CODE16-LABEL: <probe_udivrem8>:
+; CODE16: f6 {{[ef][0-9a-f]}} {{.*}}divb
+; CODE16-LABEL: <probe_sdivrem8>:
+; CODE16: f6 f{{[89a-f]}} {{.*}}idivb
+; CODE16-LABEL: <probe_udivrem16>:
+; CODE16: f7 {{[ef][0-9a-f]}} {{.*}}divw
+; CODE16-LABEL: <probe_sdivrem16>:
+; CODE16: f7 f{{[89a-f]}} {{.*}}idivw
+; CODE16-LABEL: <probe_udivrem32>:
+; CODE16: 66 f7 {{[ef][0-9a-f]}} {{.*}}divl
+; CODE16-LABEL: <probe_sdivrem32>:
+; CODE16: 66 f7 f{{[89a-f]}} {{.*}}idivl
 ; COMMON-LABEL: probe_udivrem8:
 ; COMMON: movb $17,
 ; COMMON: divb

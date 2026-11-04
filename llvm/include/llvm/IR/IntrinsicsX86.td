@@ -14,6 +14,8 @@
 // Full double-width dividend, quotient and remainder with architectural #DE.
 // Arguments are the low half, high half and divisor, all bit-pattern carriers.
 // Conservative effects preserve traps, unused/repeated calls and memory order.
+// Widths 8/16/32 also support protected code16 with the 32-bit stack ABI;
+// width 64 requires long mode. MC selects the code-mode operand-size prefix.
 let TargetPrefix = "x86" in {
   foreach Width = [8, 16, 32, 64] in {
     defvar Ty = !cast<LLVMType>("llvm_i" # Width # "_ty");

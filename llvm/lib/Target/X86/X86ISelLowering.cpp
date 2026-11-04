@@ -30975,8 +30975,7 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_sdivrem32:
     case Intrinsic::x86_udivrem64:
     case Intrinsic::x86_sdivrem64:
-      return X86::lowerNativeDivision(Op, Subtarget.is16Bit(),
-                                      Subtarget.is64Bit(), DAG);
+      return X86::lowerNativeDivision(Op, Subtarget.is64Bit(), DAG);
     case Intrinsic::x86_rtm_abort_pair:
       return X86::lowerRTMAbortPair(Op, Subtarget.is16Bit(), DAG);
     case Intrinsic::x86_hle_context:
