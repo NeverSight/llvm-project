@@ -9,7 +9,11 @@
 ; RUN: llc -mtriple=i386-apple-darwin -verify-machineinstrs -filetype=obj %t/32.ll -o %t/mac32.o
 ; RUN: not --crash llc -mtriple=i386-unknown-linux-gnu %t/64.ll 2>&1 | FileCheck %s --check-prefix=MODE
 ; RUN: not --crash llc -mtriple=x86_64-unknown-linux-gnu %t/32.ll 2>&1 | FileCheck %s --check-prefix=MODE
-; RUN: not --crash llc -mtriple=i386-unknown-none-code16 %t/32.ll 2>&1 | FileCheck %s --check-prefix=MODE
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs %t/32.ll -o - | FileCheck %s --check-prefix=X32
+; RUN: opt -S -passes='default<O2>' %t/32.ll | llc -mtriple=i386-unknown-linux-code16 -O2 -enable-new-pm -verify-machineinstrs | FileCheck %s --check-prefix=X32
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs -filetype=obj %t/32.ll -o %t/code16.o
+; RUN: llvm-objdump -d --mattr=+16bit-mode,-32bit-mode %t/code16.o | FileCheck %s --check-prefix=CODE16
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/64.ll 2>&1 | FileCheck %s --check-prefix=MODE
 ; RUN: not --crash llc -mtriple=x86_64-unknown-linux-gnu %t/width.ll 2>&1 | FileCheck %s --check-prefix=WIDTH
 ; RUN: not --crash llc -mtriple=x86_64-unknown-linux-gnu %t/prefix.ll 2>&1 | FileCheck %s --check-prefix=PREFIX
 ; RUN: not opt -passes=verify -disable-output %t/dynamic.ll 2>&1 | FileCheck %s --check-prefix=IMM
@@ -17,6 +21,18 @@
 ; WIDTH: native memory address width is invalid for this code mode
 ; PREFIX: invalid native memory segment prefix
 ; IMM: immarg operand has non-immediate parameter
+; CODE16-LABEL: <lar_mem16>:
+; CODE16: : 67 0f 02 {{[0-9a-f]+}} {{.*}}larw
+; CODE16: : 65 0f 02 {{[0-9a-f]+}} {{.*}}larw
+; CODE16-LABEL: <lar_mem32>:
+; CODE16: : 67 66 0f 02 {{[0-9a-f]+}} {{.*}}larl
+; CODE16: : 65 66 0f 02 {{[0-9a-f]+}} {{.*}}larl
+; CODE16-LABEL: <lsl_mem16>:
+; CODE16: : 67 0f 03 {{[0-9a-f]+}} {{.*}}lslw
+; CODE16: : 65 0f 03 {{[0-9a-f]+}} {{.*}}lslw
+; CODE16-LABEL: <lsl_mem32>:
+; CODE16: : 67 66 0f 03 {{[0-9a-f]+}} {{.*}}lsll
+; CODE16: : 65 66 0f 03 {{[0-9a-f]+}} {{.*}}lsll
 
 ; Offsets are truncated before segment-base addition. A default DS address
 ; retains its segment regardless of register allocation. Failed queries return
@@ -154,4 +170,3 @@ define {i32, i8} @probe(i64 %offset, i32 %width, i32 %prefix, i32 %prior) {
   %value = call {i32, i8} @llvm.x86.lsl.mem32.address(i64 %offset, i32 %width, i32 %prefix, i32 %prior)
   ret {i32, i8} %value
 }
-

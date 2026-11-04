@@ -30197,7 +30197,7 @@ static SDValue lowerDescriptorAddress(SDValue Op, const X86Subtarget &Subtarget,
     NarrowOpcode = X86::LSL64rm_ADDR32;
     break;
   }
-  if (Wide != Subtarget.is64Bit() || Subtarget.is16Bit())
+  if (Wide != Subtarget.is64Bit())
     report_fatal_error(
         "descriptor memory intrinsic does not match the target code mode");
   SDValue Chain, Glue;

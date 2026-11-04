@@ -353,7 +353,8 @@ let TargetPrefix = "x86" in {
 // Explicit descriptor-memory addressing uses the same offset, width and
 // segment-prefix contract as VMX. The last query operand is the prior result;
 // failed queries preserve it and still return the real ZF. The address32
-// suffix denotes 32-bit code mode, independently of the result operand size.
+// suffix selects the 32-bit stack/pointer ABI in protected code16/code32,
+// independently of the result operand size or the explicit address width.
 let TargetPrefix = "x86" in {
   def int_x86_lar_mem16_address :
       Intrinsic<[llvm_i16_ty, llvm_i8_ty],
