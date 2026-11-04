@@ -933,6 +933,16 @@ let TargetPrefix = "x86" in {
               Intrinsic<[llvm_i32_ty], [], []>;
 }
 
+// Native memory bit strings. The signed register index selects a complete
+// word before or after the bit base. Preserve faults even for unused CF.
+let TargetPrefix = "x86" in {
+  foreach Bits = [16, 32, 64] in
+    foreach Name = ["bt", "bts", "btr", "btc"] in
+      def "int_x86_" # Name # "_mem" # Bits : Intrinsic<[llvm_i8_ty],
+          [llvm_ptr_ty, !cast<LLVMType>("llvm_i" # Bits # "_ty")],
+          [IntrConvergent, IntrNoDuplicate]>;
+}
+
 // Lock bit test.
 let TargetPrefix = "x86" in {
   def int_x86_atomic_bts : Intrinsic<[llvm_anyint_ty], [llvm_ptr_ty, llvm_i8_ty],
