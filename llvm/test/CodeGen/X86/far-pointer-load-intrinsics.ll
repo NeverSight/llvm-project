@@ -1,4 +1,12 @@
 ; RUN: split-file %s %t
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs < %t/common.ll | FileCheck %s --check-prefix=COMMON
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs < %t/legacy.ll | FileCheck %s --check-prefix=LEGACY
+; RUN: opt -S -passes='default<O2>' %t/common.ll | llc -mtriple=i386-unknown-linux-code16 -O2 -enable-new-pm -verify-machineinstrs | FileCheck %s --check-prefix=COMMON
+; RUN: opt -S -passes='default<O2>' %t/legacy.ll | llc -mtriple=i386-unknown-linux-code16 -O2 -enable-new-pm -verify-machineinstrs | FileCheck %s --check-prefix=LEGACY
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs -filetype=obj %t/common.ll -o %t.common16.o
+; RUN: llvm-objdump -d --mattr=+16bit-mode,-32bit-mode %t.common16.o | FileCheck %s --check-prefix=CODE16
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs -filetype=obj %t/legacy.ll -o %t.legacy16.o
+; RUN: llvm-objdump -d --mattr=+16bit-mode,-32bit-mode %t.legacy16.o | FileCheck %s --check-prefix=LEGACY16
 ; RUN: llc -mtriple=i386-unknown-linux-gnu -O0 -verify-machineinstrs < %t/common.ll | FileCheck %s --check-prefix=COMMON
 ; RUN: llc -mtriple=i386-unknown-linux-gnu -O0 -verify-machineinstrs < %t/legacy.ll | FileCheck %s --check-prefix=LEGACY
 ; RUN: opt -S -passes='default<O2>' %t/common.ll | llc -mtriple=i386-unknown-linux-gnu -O2 -verify-machineinstrs | FileCheck %s --check-prefix=COMMON
@@ -29,15 +37,36 @@
 ; RUN: not --crash llc -mtriple=i386 %t/bad-lfs.ll 2>&1 | FileCheck %s --check-prefix=BADWIDE
 ; RUN: not --crash llc -mtriple=i386 %t/bad-lgs.ll 2>&1 | FileCheck %s --check-prefix=BADWIDE
 ; RUN: not --crash llc -mtriple=i386 %t/bad-lss.ll 2>&1 | FileCheck %s --check-prefix=BADWIDE
-; RUN: not --crash llc -mtriple=i386 -mattr=+16bit-mode,-32bit-mode %t/common.ll 2>&1 | FileCheck %s --check-prefix=BAD16
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/bad-lfs.ll 2>&1 | FileCheck %s --check-prefix=BADWIDE
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/bad-lgs.ll 2>&1 | FileCheck %s --check-prefix=BADWIDE
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/bad-lss.ll 2>&1 | FileCheck %s --check-prefix=BADWIDE
 ; RUN: not opt -passes=verify -disable-output %t/bad.ll 2>&1 | FileCheck %s --check-prefix=BADSIG
 
-; BADLEGACY: LDS/LES intrinsic requires 32-bit code mode
+; BADLEGACY: LDS/LES intrinsic requires 16- or 32-bit code mode
 ; BADWIDE: 64-bit far-pointer load intrinsic requires 64-bit code mode
-; BAD16: far-pointer load intrinsic requires 32- or 64-bit code mode
 ; BADSIG: intrinsic argument 0 type expected ptr, but got i64
 ; ATTR: declare i16 @llvm.x86.lss16(ptr) #[[A:[0-9]+]]
 ; ATTR: attributes #[[A]] = { nounwind }
+; CODE16-LABEL: <probe_lss16>:
+; CODE16: 67 0f b2 {{.*}}lssw
+; CODE16-LABEL: <probe_lss32>:
+; CODE16: 67 66 0f b2 {{.*}}lssl
+; CODE16-LABEL: <probe_lfs16>:
+; CODE16: 67 0f b4 {{.*}}lfsw
+; CODE16-LABEL: <probe_lfs32>:
+; CODE16: 67 66 0f b4 {{.*}}lfsl
+; CODE16-LABEL: <probe_lgs16>:
+; CODE16: 67 0f b5 {{.*}}lgsw
+; CODE16-LABEL: <probe_lgs32>:
+; CODE16: 67 66 0f b5 {{.*}}lgsl
+; LEGACY16-LABEL: <probe_lds16>:
+; LEGACY16: 67 c5 {{.*}}ldsw
+; LEGACY16-LABEL: <probe_lds32>:
+; LEGACY16: 67 66 c5 {{.*}}ldsl
+; LEGACY16-LABEL: <probe_les16>:
+; LEGACY16: 67 c4 {{.*}}lesw
+; LEGACY16-LABEL: <probe_les32>:
+; LEGACY16: 67 66 c4 {{.*}}lesl
 ; COMMON-LABEL: probe_lss16:
 ; COMMON: lssw
 ; COMMON: lssw

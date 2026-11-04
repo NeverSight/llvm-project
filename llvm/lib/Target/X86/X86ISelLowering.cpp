@@ -28717,11 +28717,8 @@ static SDValue lowerFarPointerLoad(SDValue Op, const X86Subtarget &Subtarget,
 #include "X86FarPointerLoads.def"
 #undef X86_FAR_POINTER_LOAD
   }
-  if (Subtarget.is16Bit())
-    report_fatal_error(
-        "far-pointer load intrinsic requires 32- or 64-bit code mode");
   if (LegacyOnly && Subtarget.is64Bit())
-    report_fatal_error("LDS/LES intrinsic requires 32-bit code mode");
+    report_fatal_error("LDS/LES intrinsic requires 16- or 32-bit code mode");
   const MVT VT = Op.getSimpleValueType();
   if (VT == MVT::i64 && !Subtarget.is64Bit())
     report_fatal_error(

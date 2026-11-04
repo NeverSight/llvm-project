@@ -282,8 +282,9 @@ let TargetPrefix = "x86" in {
 // followed immediately by a 16-bit selector. Hardware owns the descriptor
 // validation, accessed-bit update and segment installation before returning
 // the offset. These are ambient segment-state operations, not ordinary loads.
-// LDS/LES require 32-bit code; 64-bit results require 64-bit code. Code16 is
-// unsupported. The caller must preserve the compiler ABI's segment invariants;
+// LDS/LES require 16/32-bit code; 64-bit results require 64-bit code. Protected
+// code16 uses the 32-bit stack/pointer ABI and compiler-selected addressing.
+// The caller must preserve the compiler ABI's segment invariants;
 // in particular this is not a stack-switch or a TLS-restoration interface.
 // The pointer uses compiler-selected addressing; an original binary's source
 // segment, address-size prefix and default-stack fault provenance are not inputs.
