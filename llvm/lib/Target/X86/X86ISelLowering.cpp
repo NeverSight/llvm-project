@@ -28635,9 +28635,6 @@ static SDValue lowerGetsecBounded(SDValue Op, const X86Subtarget &Subtarget,
 // faults. A CopyFromReg/CopyToReg does not describe this ordered operation.
 static SDValue lowerSegmentAccess(SDValue Op, const X86Subtarget &Subtarget,
                                   SelectionDAG &DAG) {
-  if (Subtarget.is16Bit())
-    report_fatal_error(
-        "segment move intrinsic requires 32- or 64-bit code mode");
   const unsigned ID = Op.getConstantOperandVal(1);
   const bool Read =
       ID == Intrinsic::x86_readseg || ID == Intrinsic::x86_readseg_mem;

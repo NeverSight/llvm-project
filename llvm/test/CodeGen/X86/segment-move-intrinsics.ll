@@ -1,4 +1,9 @@
 ; RUN: split-file %s %t
+; RUN: opt -S -passes='default<O0>' %t/common.ll | llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs | FileCheck %s --check-prefix=ASM --implicit-check-not='#APP'
+; RUN: opt -S -passes='default<O2>' %t/common.ll | llc -mtriple=i386-unknown-linux-code16 -O2 -enable-new-pm -verify-machineinstrs | FileCheck %s --check-prefix=ASM --implicit-check-not='#APP'
+; RUN: llc -mtriple=i386-unknown-linux-code16 -stop-after=finalize-isel -verify-machineinstrs %t/common.ll -o - | FileCheck %s --check-prefix=MIR --implicit-check-not=INLINEASM
+; RUN: llc -mtriple=i386-unknown-linux-code16 -O0 -verify-machineinstrs -filetype=obj %t/common.ll -o %t.o
+; RUN: llvm-objdump -d --mattr=+16bit-mode,-32bit-mode %t.o | FileCheck %s --check-prefix=CODE16
 ; RUN: opt -S -passes='default<O0>' %t/common.ll | llc -mtriple=i386-unknown-linux-gnu -O0 -verify-machineinstrs | FileCheck %s --check-prefix=ASM --implicit-check-not='#APP'
 ; RUN: opt -S -passes='default<O2>' %t/common.ll | llc -mtriple=i386-unknown-linux-gnu -O2 -verify-machineinstrs | FileCheck %s --check-prefix=ASM --implicit-check-not='#APP'
 ; RUN: opt -S -passes='default<O0>' %t/common.ll | llc -mtriple=x86_64-unknown-linux-gnu -O0 -verify-machineinstrs | FileCheck %s --check-prefix=ASM --implicit-check-not='#APP'
@@ -21,13 +26,13 @@
 ; RUN: not --crash llc -mtriple=i386 %t/bad-index.ll 2>&1 | FileCheck %s --check-prefix=BADINDEX
 ; RUN: not --crash llc -mtriple=x86_64 %t/bad-write.ll 2>&1 | FileCheck %s --check-prefix=BADWRITE
 ; RUN: not --crash llc -mtriple=i386 %t/bad-write.ll 2>&1 | FileCheck %s --check-prefix=BADWRITE
-; RUN: not --crash llc -mtriple=i386 -mattr=+16bit-mode,-32bit-mode %t/common.ll 2>&1 | FileCheck %s --check-prefix=BADMODE
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/bad-index.ll 2>&1 | FileCheck %s --check-prefix=BADINDEX
+; RUN: not --crash llc -mtriple=i386-unknown-linux-code16 %t/bad-write.ll 2>&1 | FileCheck %s --check-prefix=BADWRITE
 ; RUN: not opt -passes=verify -disable-output %t/dynamic.ll 2>&1 | FileCheck %s --check-prefix=DYNAMIC
 ; RUN: not opt -passes=verify -disable-output %t/bad-type.ll 2>&1 | FileCheck %s --check-prefix=BADTYPE
 
 ; BADINDEX: segment register index must be in [0, 5]
 ; BADWRITE: MOV cannot write the CS segment register
-; BADMODE: segment move intrinsic requires 32- or 64-bit code mode
 ; DYNAMIC: immarg operand has non-immediate parameter
 ; BADTYPE: intrinsic argument 1 type expected i16, but got i64
 ; ATTR: declare i16 @llvm.x86.readseg(i32 immarg) #[[A:[0-9]+]]
@@ -35,6 +40,14 @@
 ; ATTR: declare void @llvm.x86.writeseg(i32 immarg, i16) #[[A]]
 ; ATTR: declare void @llvm.x86.writeseg.mem(i32 immarg, ptr) #[[A]]
 ; ATTR: attributes #[[A]] = { nounwind }
+; CODE16-LABEL: <readseg_es>:
+; CODE16-COUNT-2: : 8c {{[0-9a-f]+}} {{.*}}movw
+; CODE16-LABEL: <readseg_mem_es>:
+; CODE16-COUNT-2: : 67 8c {{[0-9a-f]+}} {{.*}}movw
+; CODE16-LABEL: <writeseg_es>:
+; CODE16-COUNT-2: : 8e {{[0-9a-f]+}} {{.*}}movw
+; CODE16-LABEL: <writeseg_mem_es>:
+; CODE16-COUNT-2: : 67 8e {{[0-9a-f]+}} {{.*}}movw
 
 ;--- common.ll
 declare i16 @llvm.x86.readseg(i32 immarg)
