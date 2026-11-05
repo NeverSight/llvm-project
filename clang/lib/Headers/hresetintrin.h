@@ -13,8 +13,6 @@
 #ifndef __HRESETINTRIN_H
 #define __HRESETINTRIN_H
 
-#if __has_extension(gnu_asm)
-
 /* Define the default attributes for the functions in this file. */
 #define __DEFAULT_FN_ATTRS \
   __attribute__((__always_inline__, __nodebug__, __target__("hreset")))
@@ -39,11 +37,9 @@
 static __inline void __DEFAULT_FN_ATTRS
 _hreset(int __eax)
 {
-  __asm__ ("hreset $0" :: "a"(__eax));
+  __builtin_ia32_hreset((unsigned int)__eax);
 }
 
 #undef __DEFAULT_FN_ATTRS
-
-#endif /* __has_extension(gnu_asm) */
 
 #endif /* __HRESETINTRIN_H */

@@ -431,7 +431,8 @@ let TargetPrefix = "x86" in {
 // INVLPGB passes the complete rAX control/address, EDX identifiers and ECX
 // count/page-size operands; its address is not an ordinary memory pointer.
 let TargetPrefix = "x86" in {
-  def int_x86_hreset : Intrinsic<[], [llvm_i32_ty], []>;
+  def int_x86_hreset : ClangBuiltin<"__builtin_ia32_hreset">,
+      Intrinsic<[], [llvm_i32_ty], []>;
   def int_x86_invlpgb : Intrinsic<[],
       [llvm_i64_ty, llvm_i32_ty, llvm_i32_ty], []>;
   def int_x86_invlpgb32 : Intrinsic<[],

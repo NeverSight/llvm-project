@@ -919,6 +919,9 @@ void X86TargetInfo::getTargetDefines(const LangOptions &Opts,
     Builder.defineMacro("__ENQCMD__");
   if (HasHRESET)
     Builder.defineMacro("__HRESET__");
+  // API availability is independent of TU features. Function target attributes
+  // can enable HRESET even when __has_builtin is false during preprocessing.
+  Builder.defineMacro("__NEVERSIGHT_X86_HRESET__", "1");
   if (HasAMXTILE)
     Builder.defineMacro("__AMX_TILE__");
   if (HasAMXINT8)

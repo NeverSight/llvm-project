@@ -19,6 +19,11 @@ def __rdtsc : X86NoPrefixBuiltin<"unsigned long long int()"> {
 }
 def rdtscp : X86Builtin<"unsigned long long int(unsigned int*)">;
 
+def hreset : X86Builtin<"void(unsigned int)"> {
+  let Attributes = [NoThrow];
+  let Features = "hreset";
+}
+
 // Undefined Values
 def undef128 : X86Builtin<"_Vector<2, double>()"> {
   let Attributes = [Const, NoThrow, RequiredVectorWidth<128>];
