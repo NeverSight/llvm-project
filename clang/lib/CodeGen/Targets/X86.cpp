@@ -1084,14 +1084,16 @@ RValue X86_32ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
   if (AI.isIgnore())
     return Slot.asRValue();
 
-  // x86-32 changes the alignment of certain arguments on the stack.
-  //
-  // Just messing with TypeInfo like this works because we never pass
-  // anything indirectly.
-  TypeInfo.Align = CharUnits::fromQuantity(
-                getTypeStackAlignInBytes(Ty, TypeInfo.Align.getQuantity()));
+  // Large _BitInt arguments (and some vector arguments) are pointers to
+  // caller-owned temporaries. Byval aggregates instead occupy their stack
+  // image directly. Keep the pointed-to type's natural alignment for the
+  // indirect case; only direct arguments use the ABI's stack alignment.
+  const bool IsIndirect = AI.isIndirect() && !AI.getIndirectByVal();
+  if (!IsIndirect)
+    TypeInfo.Align = CharUnits::fromQuantity(
+        getTypeStackAlignInBytes(Ty, TypeInfo.Align.getQuantity()));
 
-  return emitVoidPtrVAArg(CGF, VAListAddr, Ty, /*Indirect*/ false, TypeInfo,
+  return emitVoidPtrVAArg(CGF, VAListAddr, Ty, IsIndirect, TypeInfo,
                           CharUnits::fromQuantity(4),
                           /*AllowHigherAlign*/ true, Slot);
 }
