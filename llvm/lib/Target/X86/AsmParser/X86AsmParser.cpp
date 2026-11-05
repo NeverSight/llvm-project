@@ -1177,7 +1177,8 @@ private:
   bool parseATTOperand(OperandVector &Operands);
   bool parseIntelOperand(OperandVector &Operands, StringRef Name);
   bool ParseIntelOffsetOperator(const MCExpr *&Val, StringRef &ID,
-                                InlineAsmIdentifierInfo &Info, SMLoc &End);
+                                InlineAsmIdentifierInfo &Info, SMLoc &End,
+                                bool InMemory);
   bool ParseIntelDotOperator(IntelExprStateMachine &SM, SMLoc &End);
   unsigned IdentifyIntelInlineAsmOperator(StringRef Name);
   unsigned ParseIntelInlineAsmOperator(unsigned OpKind);
@@ -1886,7 +1887,7 @@ bool X86AsmParser::ParseIntelNamedOperator(StringRef Name,
     const MCExpr *Val = nullptr;
     StringRef ID;
     InlineAsmIdentifierInfo Info;
-    ParseError = ParseIntelOffsetOperator(Val, ID, Info, End);
+    ParseError = ParseIntelOffsetOperator(Val, ID, Info, End, SM.isMemExpr());
     if (ParseError)
       return true;
     StringRef ErrMsg;
@@ -2479,14 +2480,22 @@ bool X86AsmParser::ParseIntelDotOperator(IntelExprStateMachine &SM,
 /// This operator is used to specify the location of a given operand
 bool X86AsmParser::ParseIntelOffsetOperator(const MCExpr *&Val, StringRef &ID,
                                             InlineAsmIdentifierInfo &Info,
-                                            SMLoc &End) {
+                                            SMLoc &End, bool InMemory) {
   // Eat offset, mark start of identifier.
   SMLoc Start = Lex().getLoc();
   ID = getTok().getString();
   if (!isParsingMSInlineAsm()) {
     if ((getTok().isNot(AsmToken::Identifier) &&
-         getTok().isNot(AsmToken::String)) ||
-        getParser().parsePrimaryExpr(Val, End, nullptr))
+         getTok().isNot(AsmToken::String)))
+      return Error(Start, "unexpected token!");
+    // OFFSET denotes an immediate expression, not a memory address with one
+    // symbolic displacement. In particular, i386 PIC assembly must retain
+    // _GLOBAL_OFFSET_TABLE_+(local_label-PIC_base) as a complete MCExpr so the
+    // encoder selects GOTPC and keeps its addend. Keep MASM's operator rules.
+    bool Failed = getParser().isParsingMasm() || InMemory
+                      ? getParser().parsePrimaryExpr(Val, End, nullptr)
+                      : getParser().parseExpression(Val, End);
+    if (Failed)
       return Error(Start, "unexpected token!");
   } else if (ParseIntelInlineAsmIdentifier(Val, ID, Info, false, End, true)) {
     return Error(Start, "unable to lookup expression");
