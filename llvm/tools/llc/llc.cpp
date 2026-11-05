@@ -77,6 +77,14 @@ static codegen::RegisterSaveStatsFlag SSF;
 static cl::opt<std::string>
     InputFilename(cl::Positional, cl::desc("<input bitcode>"), cl::init("-"));
 
+static cl::opt<bool> NeverSightCodeGenProtocol(
+    "neversight-codegen-protocol",
+    cl::desc("Report the NeverSight native x86 backend protocol"));
+
+static cl::opt<bool> NeverSightCodeGen(
+    "neversight-codegen",
+    cl::desc("Require every llvm.* declaration to be a known intrinsic"));
+
 static cl::list<std::string>
     InstPrinterOptions("M", cl::desc("InstPrinter options"));
 
@@ -413,6 +421,17 @@ int main(int argc, char **argv) {
 
   cl::ParseCommandLineOptions(argc, argv, "llvm system compiler\n");
 
+  if (NeverSightCodeGenProtocol) {
+    std::string Error;
+    if (!TargetRegistry::lookupTarget(Triple("i386-unknown-linux-gnu"),
+                                      Error)) {
+      errs() << Error << '\n';
+      return 1;
+    }
+    outs() << "neversight-codegen-v1 x86\n";
+    return 0;
+  }
+
   if (!PassPipeline.empty() && !getRunPassNames().empty()) {
     errs() << "The `llc -run-pass=...` syntax for the new pass manager is "
               "not supported, please use `llc -passes=<pipeline>` (or the `-p` "
@@ -720,6 +739,12 @@ static int compileModule(char **argv, SmallVectorImpl<PassPlugin> &PluginList,
 
   // Verify module immediately to catch problems before doInitialization() is
   // called on any passes.
+  if (NeverSightCodeGen)
+    for (const Function &F : *M)
+      if (F.getName().starts_with("llvm.") &&
+          F.getIntrinsicID() == Intrinsic::not_intrinsic)
+        reportError("unknown LLVM intrinsic '" + F.getName() + "'",
+                    InputFilename);
   if (!NoVerify && verifyModule(*M, &errs()))
     reportError("input module cannot be verified", InputFilename);
 
