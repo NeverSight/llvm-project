@@ -48,6 +48,19 @@ def bound32_address32 : X86Builtin<
   let Attributes = [NoThrow];
 }
 
+// Native ARPL owns the conditional memory write and architectural faults.
+def arpl_reg : X86Builtin<
+    "unsigned short(unsigned short, unsigned short, unsigned char *)"> {
+  let Attributes = [NoThrow];
+}
+def arpl_mem : X86Builtin<"unsigned char(void *, unsigned short)"> {
+  let Attributes = [NoThrow];
+}
+def arpl_mem_address32 : X86Builtin<
+    "unsigned char(unsigned int, unsigned short, _Constant int, _Constant int)"> {
+  let Attributes = [NoThrow];
+}
+
 // FLAGS
 def readeflags_u16 : X86Builtin<"unsigned short()"> {
   let Attributes = [NoThrow];

@@ -1183,10 +1183,13 @@ def ARPL16rr : I<0x63, MRMDestReg, (outs GR16:$dst),
                  (ins GR16:$prior, GR16:$src),
                  "arpl\t{$src, $dst|$dst, $src}", []>,
                  Requires<[Not64BitMode]>;
-let mayLoad = 1, mayStore = 1 in
+let mayLoad = 1, mayStore = 1 in {
 def ARPL16mr : I<0x63, MRMDestMem, (outs), (ins i16mem:$dst, GR16:$src),
                  "arpl\t{$src, $dst|$dst, $src}", []>,
                  Requires<[Not64BitMode]>;
+def ARPL16mr_ADDR16 : PseudoI<(outs), (ins i16mem:$dst, GR16:$src), []>,
+                     Requires<[Not64BitMode]>;
+} // mayLoad, mayStore
 } // Defs, hasSideEffects
 } // SchedRW
 

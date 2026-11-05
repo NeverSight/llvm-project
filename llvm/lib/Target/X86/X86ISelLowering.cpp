@@ -28904,39 +28904,6 @@ static SDValue lowerDescriptorState(SDValue Op, const X86Subtarget &Subtarget,
   return DAG.getMergeValues({ZF, SDValue(Access, 0)}, DL);
 }
 
-static SDValue lowerArpl(SDValue Op, const X86Subtarget &Subtarget,
-                         SelectionDAG &DAG) {
-  if (Subtarget.is64Bit())
-    report_fatal_error("ARPL intrinsic requires 16- or 32-bit code mode");
-  const bool Memory = Op.getConstantOperandVal(1) == Intrinsic::x86_arpl_mem;
-  const SDLoc DL(Op);
-  SmallVector<SDValue, 7> Operands;
-  if (Memory)
-    Operands = {Op.getOperand(2), DAG.getTargetConstant(1, DL, MVT::i8),
-                DAG.getRegister(0, MVT::i32),
-                DAG.getTargetConstant(0, DL, MVT::i32),
-                DAG.getRegister(0, MVT::i16)};
-  else
-    Operands.push_back(Op.getOperand(2));
-  Operands.push_back(Op.getOperand(3));
-  Operands.push_back(Op.getOperand(0));
-  auto *Access = DAG.getMachineNode(
-      Memory ? X86::ARPL16mr : X86::ARPL16rr, DL,
-      Memory ? DAG.getVTList(MVT::Other, MVT::Glue)
-             : DAG.getVTList(MVT::i16, MVT::Other, MVT::Glue),
-      Operands);
-  const unsigned ChainIndex = Memory ? 0 : 1;
-  SDValue ZF(
-      DAG.getMachineNode(X86::SETCCr, DL, MVT::i8,
-                         {DAG.getTargetConstant(X86::COND_E, DL, MVT::i8),
-                          SDValue(Access, ChainIndex + 1)}),
-      0);
-  if (Memory)
-    return DAG.getMergeValues({ZF, SDValue(Access, ChainIndex)}, DL);
-  return DAG.getMergeValues(
-      {SDValue(Access, 0), ZF, SDValue(Access, ChainIndex)}, DL);
-}
-
 static SDValue lowerNativeFrameReturn(SDValue Op, const X86Subtarget &Subtarget,
                                       SelectionDAG &DAG) {
   X86::NativeFrameReturn Kind;
@@ -29350,6 +29317,50 @@ lowerNativeAddressOperands(SDValue Op, const X86Subtarget &Subtarget,
                                   Width->getZExtValue(), Prefix->getZExtValue(),
                                   Subtarget, DAG, SDLoc(Op), Chain, Glue,
                                   AllowStack);
+}
+
+static SDValue lowerArpl(SDValue Op, const X86Subtarget &Subtarget,
+                         SelectionDAG &DAG) {
+  if (Subtarget.is64Bit())
+    report_fatal_error("ARPL intrinsic requires 16- or 32-bit code mode");
+  const unsigned ID = Op.getConstantOperandVal(1);
+  const bool Explicit = ID == Intrinsic::x86_arpl_mem_address32;
+  const bool Memory = ID != Intrinsic::x86_arpl_reg;
+  const SDLoc DL(Op);
+  SDValue Chain = Op.getOperand(0), Glue;
+  unsigned Opcode = Memory ? X86::ARPL16mr : X86::ARPL16rr;
+  SmallVector<SDValue, 8> Operands;
+  if (Explicit) {
+    Operands =
+        lowerNativeAddressOperands(Op, Subtarget, 2, DAG, Chain, Glue, 4);
+    if (Op.getConstantOperandVal(4) == 16)
+      Opcode = X86::ARPL16mr_ADDR16;
+  } else if (Memory) {
+    // Ordinary pointers use DS even if register pressure would favor BP/SP.
+    Operands = lowerNativeMemoryAddress(Op.getOperand(2), 32, 0, Subtarget, DAG,
+                                        DL, Chain, Glue);
+  } else {
+    Operands.push_back(Op.getOperand(2));
+  }
+  Operands.push_back(Op.getOperand(3));
+  Operands.push_back(Chain);
+  if (Glue)
+    Operands.push_back(Glue);
+  auto *Access = DAG.getMachineNode(
+      Opcode, DL,
+      Memory ? DAG.getVTList(MVT::Other, MVT::Glue)
+             : DAG.getVTList(MVT::i16, MVT::Other, MVT::Glue),
+      Operands);
+  const unsigned ChainIndex = Memory ? 0 : 1;
+  SDValue ZF(
+      DAG.getMachineNode(X86::SETCCr, DL, MVT::i8,
+                         {DAG.getTargetConstant(X86::COND_E, DL, MVT::i8),
+                          SDValue(Access, ChainIndex + 1)}),
+      0);
+  if (Memory)
+    return DAG.getMergeValues({ZF, SDValue(Access, ChainIndex)}, DL);
+  return DAG.getMergeValues(
+      {SDValue(Access, 0), ZF, SDValue(Access, ChainIndex)}, DL);
 }
 
 static SDValue lowerBound(SDValue Op, const X86Subtarget &Subtarget,
@@ -31454,6 +31465,7 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
 
     case Intrinsic::x86_arpl_reg:
     case Intrinsic::x86_arpl_mem:
+    case Intrinsic::x86_arpl_mem_address32:
       return lowerArpl(Op, Subtarget, DAG);
 
     case Intrinsic::x86_fnop:

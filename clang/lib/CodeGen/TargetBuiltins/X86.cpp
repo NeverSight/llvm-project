@@ -851,6 +851,13 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
 
   switch (BuiltinID) {
   default: return nullptr;
+  case X86::BI__builtin_ia32_arpl_reg: {
+    Value *Pair = Builder.CreateCall(CGM.getIntrinsic(Intrinsic::x86_arpl_reg),
+                                     ArrayRef(Ops).drop_back());
+    Builder.CreateAlignedStore(Builder.CreateExtractValue(Pair, 1), Ops.back(),
+                               Align(1));
+    return Builder.CreateExtractValue(Pair, 0);
+  }
   case X86::BI_mm_prefetch: {
     Value *Address = Ops[0];
     ConstantInt *C = cast<ConstantInt>(Ops[1]);

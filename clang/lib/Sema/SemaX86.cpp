@@ -525,6 +525,9 @@ bool SemaX86::CheckBuiltinTileArguments(unsigned BuiltinID, CallExpr *TheCall) {
 static bool isX86_32Builtin(unsigned BuiltinID) {
   // These builtins only work on x86-32 targets.
   switch (BuiltinID) {
+  case X86::BI__builtin_ia32_arpl_reg:
+  case X86::BI__builtin_ia32_arpl_mem:
+  case X86::BI__builtin_ia32_arpl_mem_address32:
   case X86::BI__builtin_ia32_bound16:
   case X86::BI__builtin_ia32_bound32:
   case X86::BI__builtin_ia32_bound16_address32:
@@ -546,7 +549,8 @@ bool SemaX86::CheckBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
                 diag::err_32_bit_builtin_64_bit_tgt);
 
   if (BuiltinID == X86::BI__builtin_ia32_bound16_address32 ||
-      BuiltinID == X86::BI__builtin_ia32_bound32_address32) {
+      BuiltinID == X86::BI__builtin_ia32_bound32_address32 ||
+      BuiltinID == X86::BI__builtin_ia32_arpl_mem_address32) {
     for (unsigned I : {2u, 3u}) {
       Expr *Argument = TheCall->getArg(I);
       if (Argument->isTypeDependent() || Argument->isValueDependent())

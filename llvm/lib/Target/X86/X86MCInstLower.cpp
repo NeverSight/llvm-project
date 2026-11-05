@@ -839,6 +839,9 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
     OutMI.setOpcode(X86::VMLOAD32);
     OutMI.setFlags(OutMI.getFlags() | X86::IP_HAS_AD_SIZE);
     break;
+  case X86::ARPL16mr_ADDR16:
+    lowerNativeAddressOverride(OutMI, X86::ARPL16mr, 0, 16);
+    break;
   case X86::BOUNDS16rm_ADDR16:
     lowerNativeAddressOverride(OutMI, X86::BOUNDS16rm, 1, 16);
     break;

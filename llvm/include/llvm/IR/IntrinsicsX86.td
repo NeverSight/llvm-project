@@ -364,8 +364,13 @@ let TargetPrefix = "x86" in {
   // read and conditional write; it must not become an ordinary load/store.
   def int_x86_arpl_reg : Intrinsic<[llvm_i16_ty, llvm_i8_ty],
       [llvm_i16_ty, llvm_i16_ty], []>;
-  def int_x86_arpl_mem : Intrinsic<[llvm_i8_ty],
-      [llvm_ptr_ty, llvm_i16_ty], []>;
+  def int_x86_arpl_mem : ClangBuiltin<"__builtin_ia32_arpl_mem">,
+      Intrinsic<[llvm_i8_ty], [llvm_ptr_ty, llvm_i16_ty], []>;
+  def int_x86_arpl_mem_address32 :
+      ClangBuiltin<"__builtin_ia32_arpl_mem_address32">,
+      Intrinsic<[llvm_i8_ty],
+                [llvm_i32_ty, llvm_i16_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
 }
 
 //===----------------------------------------------------------------------===//
