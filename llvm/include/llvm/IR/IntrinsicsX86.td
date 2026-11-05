@@ -340,6 +340,25 @@ let TargetPrefix = "x86" in {
   // when the selector is inaccessible. Use lsl.reg32 for explicit failure
   // preservation and a success flag. The query remains ordered and observable.
   def int_x86_lsl : Intrinsic<[llvm_i32_ty], [llvm_i32_ty], []>;
+  // BOUND is an ordered, potentially faulting native access. The lower check
+  // can fault before the upper element is accessed; it is not a pair load.
+  // The register is read-only and FLAGS are preserved. The CPU also owns MPX
+  // status changes on #BR. No memory/speculation attributes weaken this boundary.
+  def int_x86_bound16 : ClangBuiltin<"__builtin_ia32_bound16">,
+      Intrinsic<[], [llvm_i16_ty, llvm_ptr_ty], []>;
+  def int_x86_bound32 : ClangBuiltin<"__builtin_ia32_bound32">,
+      Intrinsic<[], [llvm_i32_ty, llvm_ptr_ty], []>;
+  // Explicit address width and segment prefix use the native address contract.
+  // These APIs have a 32-bit offset/stack ABI in either code16 or code32.
+  def int_x86_bound16_address32 :
+      ClangBuiltin<"__builtin_ia32_bound16_address32">,
+      Intrinsic<[], [llvm_i16_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+  def int_x86_bound32_address32 :
+      ClangBuiltin<"__builtin_ia32_bound32_address32">,
+      Intrinsic<[], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+
   // ARPL is available in protected 16/32-bit code, with a 32-bit pointer ABI.
   // Its register form returns the adjusted destination and ZF. Memory owns m16
   // read and conditional write; it must not become an ordinary load/store.

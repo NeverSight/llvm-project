@@ -1162,12 +1162,19 @@ def DAS : I<0x2F, RawFrm, (outs), (ins), "das", []>,
 let SchedRW = [WriteSystem] in {
 // Check Array Index Against Bounds
 // Note: "bound" does not have reversed operands in at&t syntax.
-def BOUNDS16rm : I<0x62, MRMSrcMem, (outs GR16:$dst), (ins i16mem:$src),
-                   "bound\t$dst, $src", []>, OpSize16,
+let hasSideEffects = 1, mayLoad = 1 in {
+def BOUNDS16rm : I<0x62, MRMSrcMem, (outs), (ins GR16:$index, i16mem:$src),
+                   "bound\t$index, $src", []>, OpSize16,
                    Requires<[Not64BitMode]>;
-def BOUNDS32rm : I<0x62, MRMSrcMem, (outs GR32:$dst), (ins i32mem:$src),
-                   "bound\t$dst, $src", []>, OpSize32,
+def BOUNDS32rm : I<0x62, MRMSrcMem, (outs), (ins GR32:$index, i32mem:$src),
+                   "bound\t$index, $src", []>, OpSize32,
                    Requires<[Not64BitMode]>;
+// Keep the pointer class until final MC address-size lowering.
+def BOUNDS16rm_ADDR16 : PseudoI<(outs),
+    (ins GR16:$index, i16mem:$src), []>, Requires<[Not64BitMode]>;
+def BOUNDS32rm_ADDR16 : PseudoI<(outs),
+    (ins GR32:$index, i32mem:$src), []>, Requires<[Not64BitMode]>;
+} // hasSideEffects, mayLoad
 
 // Adjust RPL Field of Segment Selector
 let Defs = [EFLAGS], hasSideEffects = 1 in {

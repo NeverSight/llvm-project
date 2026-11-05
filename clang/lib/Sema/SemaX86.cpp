@@ -18,6 +18,7 @@
 #include "clang/Sema/ParsedAttr.h"
 #include "clang/Sema/Sema.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/IR/X86NativeMemoryAddress.h"
 #include "llvm/TargetParser/Triple.h"
 #include <bitset>
 
@@ -524,6 +525,10 @@ bool SemaX86::CheckBuiltinTileArguments(unsigned BuiltinID, CallExpr *TheCall) {
 static bool isX86_32Builtin(unsigned BuiltinID) {
   // These builtins only work on x86-32 targets.
   switch (BuiltinID) {
+  case X86::BI__builtin_ia32_bound16:
+  case X86::BI__builtin_ia32_bound32:
+  case X86::BI__builtin_ia32_bound16_address32:
+  case X86::BI__builtin_ia32_bound32_address32:
   case X86::BI__builtin_ia32_readeflags_u32:
   case X86::BI__builtin_ia32_writeeflags_u32:
     return true;
@@ -539,6 +544,27 @@ bool SemaX86::CheckBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
   if (TT.getArch() != llvm::Triple::x86 && isX86_32Builtin(BuiltinID))
     return Diag(TheCall->getCallee()->getBeginLoc(),
                 diag::err_32_bit_builtin_64_bit_tgt);
+
+  if (BuiltinID == X86::BI__builtin_ia32_bound16_address32 ||
+      BuiltinID == X86::BI__builtin_ia32_bound32_address32) {
+    for (unsigned I : {2u, 3u}) {
+      Expr *Argument = TheCall->getArg(I);
+      if (Argument->isTypeDependent() || Argument->isValueDependent())
+        continue;
+      llvm::APSInt Value;
+      if (SemaRef.BuiltinConstantArg(TheCall, I, Value))
+        return true;
+      const bool Valid =
+          I == 2 ? llvm::X86::isNativeMemoryAddressWidth(false,
+                                                         Value.getZExtValue())
+                 : llvm::X86::isNativeMemorySegmentPrefix(Value.getZExtValue());
+      if (!Valid)
+        return Diag(Argument->getBeginLoc(), diag::err_invalid_builtin_argument)
+               << Value.getExtValue() << TheCall->getDirectCallee()
+               << Argument->getSourceRange();
+    }
+    return false;
+  }
 
   // If the intrinsic has rounding or SAE make sure its valid.
   if (CheckBuiltinRoundingOrSAE(BuiltinID, TheCall))

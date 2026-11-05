@@ -29352,6 +29352,34 @@ lowerNativeAddressOperands(SDValue Op, const X86Subtarget &Subtarget,
                                   AllowStack);
 }
 
+static SDValue lowerBound(SDValue Op, const X86Subtarget &Subtarget,
+                          SelectionDAG &DAG) {
+  if (Subtarget.is64Bit())
+    report_fatal_error("BOUND intrinsic requires 16- or 32-bit code mode");
+  const unsigned ID = Op.getConstantOperandVal(1);
+  const bool Word =
+      ID == Intrinsic::x86_bound16 || ID == Intrinsic::x86_bound16_address32;
+  const bool Explicit = ID == Intrinsic::x86_bound16_address32 ||
+                        ID == Intrinsic::x86_bound32_address32;
+  const SDLoc DL(Op);
+  unsigned Opcode = Word ? X86::BOUNDS16rm : X86::BOUNDS32rm;
+  SDValue Chain = Op.getOperand(0), Glue;
+  SmallVector<SDValue, 8> Operands;
+  if (Explicit) {
+    Operands = lowerNativeAddressOperands(Op, Subtarget, 3, DAG, Chain, Glue);
+    if (Op.getConstantOperandVal(4) == 16)
+      Opcode = Word ? X86::BOUNDS16rm_ADDR16 : X86::BOUNDS32rm_ADDR16;
+  } else {
+    // An ordinary pointer uses DS, regardless of the allocated carrier.
+    Operands = lowerNativeMemoryAddress(Op.getOperand(3), 32, 0, Subtarget, DAG,
+                                        DL, Chain, Glue);
+  }
+  Operands.insert(Operands.begin(), Op.getOperand(2));
+  Operands.push_back(Chain);
+  Operands.push_back(Glue);
+  return SDValue(DAG.getMachineNode(Opcode, DL, MVT::Other, Operands), 0);
+}
+
 // A volatile native access survives dead results and zero masks. The CPU
 // owns the packed memory interval, lane suppression and architectural faults.
 static SDValue lowerCompressExpandNative(SDValue Op,
@@ -31417,6 +31445,12 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_lkgs_mem:
     case Intrinsic::x86_invlpgb32:
       return lowerBoundedSystemState(Op, Subtarget, DAG);
+
+    case Intrinsic::x86_bound16:
+    case Intrinsic::x86_bound32:
+    case Intrinsic::x86_bound16_address32:
+    case Intrinsic::x86_bound32_address32:
+      return lowerBound(Op, Subtarget, DAG);
 
     case Intrinsic::x86_arpl_reg:
     case Intrinsic::x86_arpl_mem:

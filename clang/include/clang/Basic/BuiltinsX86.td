@@ -32,6 +32,22 @@ def undef512 : X86Builtin<"_Vector<8, double>()"> {
   let Attributes = [Const, NoThrow, RequiredVectorWidth<512>];
 }
 
+// Legacy signed bounds checks. The native instruction owns all memory faults.
+def bound16 : X86Builtin<"void(short, void const *)"> {
+  let Attributes = [NoThrow];
+}
+def bound32 : X86Builtin<"void(int, void const *)"> {
+  let Attributes = [NoThrow];
+}
+def bound16_address32 : X86Builtin<
+    "void(short, unsigned int, _Constant int, _Constant int)"> {
+  let Attributes = [NoThrow];
+}
+def bound32_address32 : X86Builtin<
+    "void(int, unsigned int, _Constant int, _Constant int)"> {
+  let Attributes = [NoThrow];
+}
+
 // FLAGS
 def readeflags_u16 : X86Builtin<"unsigned short()"> {
   let Attributes = [NoThrow];
