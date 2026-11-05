@@ -290,19 +290,32 @@ let TargetPrefix = "x86" in {
 // The pointer uses compiler-selected addressing; an original binary's source
 // segment, address-size prefix and default-stack fault provenance are not inputs.
 let TargetPrefix = "x86" in {
-  def int_x86_lds16 : Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
-  def int_x86_lds32 : Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
-  def int_x86_les16 : Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
-  def int_x86_les32 : Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
-  def int_x86_lss16 : Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
-  def int_x86_lss32 : Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
-  def int_x86_lss64 : Intrinsic<[llvm_i64_ty], [llvm_ptr_ty], []>;
-  def int_x86_lfs16 : Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
-  def int_x86_lfs32 : Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
-  def int_x86_lfs64 : Intrinsic<[llvm_i64_ty], [llvm_ptr_ty], []>;
-  def int_x86_lgs16 : Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
-  def int_x86_lgs32 : Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
-  def int_x86_lgs64 : Intrinsic<[llvm_i64_ty], [llvm_ptr_ty], []>;
+  def int_x86_lds16 : ClangBuiltin<"__builtin_ia32_lds16">,
+      Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
+  def int_x86_lds32 : ClangBuiltin<"__builtin_ia32_lds32">,
+      Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
+  def int_x86_les16 : ClangBuiltin<"__builtin_ia32_les16">,
+      Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
+  def int_x86_les32 : ClangBuiltin<"__builtin_ia32_les32">,
+      Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
+  def int_x86_lss16 : ClangBuiltin<"__builtin_ia32_lss16">,
+      Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
+  def int_x86_lss32 : ClangBuiltin<"__builtin_ia32_lss32">,
+      Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
+  def int_x86_lss64 : ClangBuiltin<"__builtin_ia32_lss64">,
+      Intrinsic<[llvm_i64_ty], [llvm_ptr_ty], []>;
+  def int_x86_lfs16 : ClangBuiltin<"__builtin_ia32_lfs16">,
+      Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
+  def int_x86_lfs32 : ClangBuiltin<"__builtin_ia32_lfs32">,
+      Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
+  def int_x86_lfs64 : ClangBuiltin<"__builtin_ia32_lfs64">,
+      Intrinsic<[llvm_i64_ty], [llvm_ptr_ty], []>;
+  def int_x86_lgs16 : ClangBuiltin<"__builtin_ia32_lgs16">,
+      Intrinsic<[llvm_i16_ty], [llvm_ptr_ty], []>;
+  def int_x86_lgs32 : ClangBuiltin<"__builtin_ia32_lgs32">,
+      Intrinsic<[llvm_i32_ty], [llvm_ptr_ty], []>;
+  def int_x86_lgs64 : ClangBuiltin<"__builtin_ia32_lgs64">,
+      Intrinsic<[llvm_i64_ty], [llvm_ptr_ty], []>;
 }
 
 //===----------------------------------------------------------------------===//

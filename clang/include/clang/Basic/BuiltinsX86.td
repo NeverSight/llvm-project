@@ -66,6 +66,21 @@ def arpl_mem_address32 : X86Builtin<
   let Attributes = [NoThrow];
 }
 
+// Native packed far-pointer loads. The instruction owns both the image read
+// and descriptor effects; these are not pure integer loads.
+let Attributes = [NoThrow] in {
+  def lds16 : X86Builtin<"unsigned short(void const *)">;
+  def lds32 : X86Builtin<"unsigned int(void const *)">;
+  def les16 : X86Builtin<"unsigned short(void const *)">;
+  def les32 : X86Builtin<"unsigned int(void const *)">;
+  def lss16 : X86Builtin<"unsigned short(void const *)">;
+  def lss32 : X86Builtin<"unsigned int(void const *)">;
+  def lfs16 : X86Builtin<"unsigned short(void const *)">;
+  def lfs32 : X86Builtin<"unsigned int(void const *)">;
+  def lgs16 : X86Builtin<"unsigned short(void const *)">;
+  def lgs32 : X86Builtin<"unsigned int(void const *)">;
+}
+
 // FLAGS
 def readeflags_u16 : X86Builtin<"unsigned short()"> {
   let Attributes = [NoThrow];

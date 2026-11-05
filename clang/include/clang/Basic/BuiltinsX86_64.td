@@ -12,6 +12,12 @@
 
 include "clang/Basic/BuiltinsX86Base.td"
 
+let Attributes = [NoThrow] in {
+  def lss64 : X86Builtin<"unsigned long long int(void const *)">;
+  def lfs64 : X86Builtin<"unsigned long long int(void const *)">;
+  def lgs64 : X86Builtin<"unsigned long long int(void const *)">;
+}
+
 let Header = "intrin.h", Languages = "ALL_MS_LANGUAGES", Attributes = [NoThrow, RequireDeclaration] in {
   def _BitScanForward64 : X86LibBuiltin<"unsigned char(msuint32_t *, unsigned long long int)">;
   def _BitScanReverse64 : X86LibBuiltin<"unsigned char(msuint32_t *, unsigned long long int)">;

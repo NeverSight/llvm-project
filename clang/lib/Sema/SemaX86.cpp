@@ -525,6 +525,10 @@ bool SemaX86::CheckBuiltinTileArguments(unsigned BuiltinID, CallExpr *TheCall) {
 static bool isX86_32Builtin(unsigned BuiltinID) {
   // These builtins only work on x86-32 targets.
   switch (BuiltinID) {
+  case X86::BI__builtin_ia32_lds16:
+  case X86::BI__builtin_ia32_lds32:
+  case X86::BI__builtin_ia32_les16:
+  case X86::BI__builtin_ia32_les32:
   case X86::BI__builtin_ia32_arpl_reg:
   case X86::BI__builtin_ia32_arpl_mem:
   case X86::BI__builtin_ia32_arpl_mem_address32:
