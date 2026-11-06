@@ -26,6 +26,29 @@ let TargetPrefix = "x86" in {
 }
 
 //===----------------------------------------------------------------------===//
+// Native zero-argument far calls, with the platform C register-preservation
+// contract and an AX/EAX/RAX result. The far entry must restore CS/SS/SP with
+// RETF before resuming the compiler. Far jumps abandon the compiler frame and
+// install the supplied stack immediately before the native transfer.
+let TargetPrefix = "x86" in {
+  foreach Width = [16, 32, 64] in {
+    defvar Ty = !cast<LLVMType>("llvm_i" # Width # "_ty");
+    def "int_x86_lcall" # Width : Intrinsic<[Ty], [llvm_ptr_ty],
+        [IntrConvergent, IntrNoDuplicate]>;
+    def "int_x86_ljmp" # Width : Intrinsic<[], [llvm_ptr_ty, llvm_ptr_ty],
+        [IntrNoReturn, IntrConvergent, IntrNoDuplicate]>;
+  }
+  foreach Width = [16, 32] in {
+    defvar Ty = !cast<LLVMType>("llvm_i" # Width # "_ty");
+    def "int_x86_lcall" # Width # "_imm" : Intrinsic<[Ty], [Ty, llvm_i16_ty],
+        [IntrConvergent, IntrNoDuplicate, ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>;
+    def "int_x86_ljmp" # Width # "_imm" : Intrinsic<[],
+        [Ty, llvm_i16_ty, llvm_ptr_ty],
+        [IntrNoReturn, IntrConvergent, IntrNoDuplicate,
+         ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>;
+  }
+}
+
 // Interrupt traps
 let TargetPrefix = "x86" in {  // All intrinsics start with "llvm.x86.".
   def int_x86_int : Intrinsic<[], [llvm_i8_ty], [ImmArg<ArgIndex<0>>]>;

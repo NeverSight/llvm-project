@@ -103,3 +103,6 @@ state. It compares the architectural values represented by XSAVE: initial
 components may have either XINUSE tracking value (Intel SDM 13.6). Removing
 XRSTOR must fail the state comparison. This is not bare-metal firmware or
 fault/asynchronous-delivery qualification.
+
+Native far CALL/JMP interfaces have a separate returning-entry and terminal
+stack contract; see :doc:`X86NativeFarTransfers`.

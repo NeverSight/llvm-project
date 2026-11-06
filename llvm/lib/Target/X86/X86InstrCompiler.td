@@ -65,6 +65,26 @@ let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
       Requires<[In64BitMode]>;
 }
 
+// A far target address must survive the final stack assignment. In particular,
+// an address of the compiler's own frame must not coalesce into ESP/RSP.
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    isTerminator = 1, isBarrier = 1, SchedRW = [WriteSystem] in {
+  let Defs = [CS, SS, DS, ES, FS, GS, EFLAGS,
+              EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI] in {
+    def NATIVE_FAR_JUMP32 : PseudoI<(outs),
+        (ins GR32_NOSP:$target, GR32:$stack, i32imm:$width), []>,
+        Requires<[Not64BitMode]>;
+    def NATIVE_FAR_JUMP_IMM32 : PseudoI<(outs),
+        (ins i32imm:$offset, i16imm:$selector, GR32:$stack, i32imm:$width), []>,
+        Requires<[Not64BitMode]>;
+  }
+  let Defs = [CS, SS, DS, ES, FS, GS, EFLAGS,
+              RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI] in
+    def NATIVE_FAR_JUMP64 : PseudoI<(outs),
+        (ins GR64_NOSP:$target, GR64:$stack, i32imm:$width), []>,
+        Requires<[In64BitMode]>;
+}
+
 // No compiler instruction may run after the final XRSTOR. RSM abandons the
 // compiler frame and restores the hardware-managed banks from SMRAM.
 let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
