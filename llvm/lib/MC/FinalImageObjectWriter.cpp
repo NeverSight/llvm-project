@@ -829,6 +829,8 @@ void FinalImageObjectWriter::recordRelocation(const MCFragment &F,
     mc_rewrite::RewriteSymbolResolveRequest Request;
     Request.Symbol = Sym->getName();
     Request.Specifier = Specifier;
+    Request.PointerAuth =
+        Context.getAsmInfo().getPointerAuthInfo(*Fixup.getValue());
     if (Specifier)
       Request.SpecifierName =
           Context.getAsmInfo().getSpecifierNameOrEmpty(Specifier);

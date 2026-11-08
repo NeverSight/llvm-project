@@ -52,6 +52,7 @@ LLVM and API reference documentation.
    StackMaps
    Coroutines
    PointerAuth
+   BinaryRewritePointerAuth
    YamlIO
    ConvergenceAndUniformity
    MLGO
@@ -72,6 +73,10 @@ LLVM and API reference documentation.
 
 API Reference
 -------------
+
+:doc:`BinaryRewritePointerAuth`
+  Authenticated pointer metadata and installation contracts in the NeverSight
+  binary-rewrite emitter.
 
 :doc:`X86MPXIntrinsics`
   Architectural MPX bounds-bank intrinsics in the NeverSight LLVM fork.

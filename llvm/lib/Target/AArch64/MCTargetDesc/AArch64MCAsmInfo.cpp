@@ -178,6 +178,28 @@ const MCExpr *AArch64MCAsmInfoDarwin::getExprForPersonalitySymbol(
   return MCBinaryExpr::createSub(Res, PC, Context);
 }
 
+static std::optional<MCPointerAuthInfo> pointerAuthInfo(const MCExpr &Expr) {
+  const auto *Auth = dyn_cast<AArch64AuthMCExpr>(&Expr);
+  if (!Auth)
+    return std::nullopt;
+#define MC_POINTER_AUTH_KEY(Name, Value)                                       \
+  static_assert(unsigned(MCPointerAuthKey::Name) == AArch64PACKey::Name);
+#include "llvm/MC/MCPointerAuthInfo.def"
+  return MCPointerAuthInfo{static_cast<MCPointerAuthKey>(Auth->getKey()),
+                           Auth->getDiscriminator(),
+                           Auth->hasAddressDiversity()};
+}
+
+std::optional<MCPointerAuthInfo>
+AArch64MCAsmInfoDarwin::getPointerAuthInfo(const MCExpr &Expr) const {
+  return pointerAuthInfo(Expr);
+}
+
+std::optional<MCPointerAuthInfo>
+AArch64MCAsmInfoELF::getPointerAuthInfo(const MCExpr &Expr) const {
+  return pointerAuthInfo(Expr);
+}
+
 void AArch64AuthMCExpr::print(raw_ostream &OS, const MCAsmInfo *MAI) const {
   bool WrapSubExprInParens = !isa<MCSymbolRefExpr>(getSubExpr());
   if (WrapSubExprInParens)
