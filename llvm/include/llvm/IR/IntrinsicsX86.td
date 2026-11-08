@@ -207,6 +207,9 @@ let TargetPrefix = "x86" in {
   def int_x86_vmptrst : Intrinsic<[], [llvm_ptr_ty], []>;
   def int_x86_vmxon : Intrinsic<[llvm_i8_ty], [llvm_ptr_ty], []>;
   def int_x86_vmxoff : Intrinsic<[], [], []>;
+  // Unlike the compatibility void API, retain VMfail under SMM dual-monitor
+  // treatment. Status uses the same 0 / ZF / CF encoding as other VMX calls.
+  def int_x86_vmxoff_status : Intrinsic<[llvm_i8_ty], [], []>;
   // Successful VM entry transfers control through the VMCS. These return a
   // completion status only when the instruction falls through on VMfail.
   def int_x86_vmlaunch : Intrinsic<[llvm_i8_ty], [], []>;

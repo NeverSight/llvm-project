@@ -16,6 +16,7 @@ declare i8 @llvm.x86.vmptrld(ptr)
 declare void @llvm.x86.vmptrst(ptr)
 declare i8 @llvm.x86.vmresume()
 declare void @llvm.x86.vmxoff()
+declare i8 @llvm.x86.vmxoff.status()
 declare i8 @llvm.x86.vmxon(ptr)
 
 define i8 @clear(ptr %operand) {
@@ -129,4 +130,46 @@ define i64 @observe_store(ptr %operand) {
   call void @llvm.x86.vmptrst(ptr %operand)
   %value = load i64, ptr %operand, align 1
   ret i64 %value
+}
+
+; VMXOFF can VMfail with dual-monitor SMM active. Retain the completion even
+; though the older void interface deliberately discards it.
+define i8 @off_status() {
+; CHECK-LABEL: off_status:
+; CHECK-NOT: #APP
+; CHECK: vmxoff
+; CHECK-NEXT: sete
+; CHECK-NEXT: setb
+; CHECK: ret
+; EFFECTS: VMXOFF implicit-def $eflags
+  %status = call i8 @llvm.x86.vmxoff.status()
+  ret i8 %status
+}
+
+define void @off_status_dead() {
+; CHECK-LABEL: off_status_dead:
+; CHECK: vmxoff
+; CHECK-NOT: set
+; CHECK: ret
+  %status = call i8 @llvm.x86.vmxoff.status()
+  ret void
+}
+
+define i8 @off_status_ordered(ptr %memory) {
+; CHECK-LABEL: off_status_ordered:
+; CHECK: movl $17,
+; CHECK: vmxoff
+; CHECK-NEXT: sete
+; CHECK-NEXT: setb
+; CHECK: movl $34,
+; CHECK: vmxoff
+; CHECK-NEXT: sete
+; CHECK-NEXT: setb
+; CHECK: ret
+  store i32 17, ptr %memory
+  %first = call i8 @llvm.x86.vmxoff.status()
+  store i32 34, ptr %memory
+  %second = call i8 @llvm.x86.vmxoff.status()
+  %both = xor i8 %first, %second
+  ret i8 %both
 }

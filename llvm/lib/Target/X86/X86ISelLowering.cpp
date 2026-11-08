@@ -30482,6 +30482,7 @@ static SDValue lowerVMXManagement(SDValue Op, const X86Subtarget &Subtarget,
     Opcode = X86::VMRESUME;
     break;
   case Intrinsic::x86_vmxoff:
+  case Intrinsic::x86_vmxoff_status:
     Opcode = X86::VMXOFF;
     break;
   case Intrinsic::x86_vmxon:
@@ -31303,6 +31304,7 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
     case Intrinsic::x86_vmptrst:
     case Intrinsic::x86_vmresume:
     case Intrinsic::x86_vmxoff:
+    case Intrinsic::x86_vmxoff_status:
     case Intrinsic::x86_vmxon:
       return lowerVMXManagement(Op, Subtarget, DAG);
 
