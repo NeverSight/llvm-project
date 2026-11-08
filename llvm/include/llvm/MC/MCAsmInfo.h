@@ -21,8 +21,10 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCDirectives.h"
+#include "llvm/MC/MCPointerAuthInfo.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Support/Compiler.h"
+#include <optional>
 #include <vector>
 
 namespace llvm {
@@ -757,6 +759,12 @@ public:
   }
   virtual bool evaluateAsRelocatableImpl(const MCSpecifierExpr &, MCValue &Res,
                                          const MCAssembler *Asm) const;
+  /// Return the complete signing recipe when Expr is an authenticated pointer.
+  /// Target-private expression layouts remain owned by the target.
+  virtual std::optional<MCPointerAuthInfo>
+  getPointerAuthInfo(const MCExpr &Expr) const {
+    return std::nullopt;
+  }
 };
 
 } // end namespace llvm

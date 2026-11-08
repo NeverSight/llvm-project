@@ -1,0 +1,15 @@
+//===- MCPointerAuthInfo.def - Pointer authentication keys ----------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifdef MC_POINTER_AUTH_KEY
+MC_POINTER_AUTH_KEY(IA, 0)
+MC_POINTER_AUTH_KEY(IB, 1)
+MC_POINTER_AUTH_KEY(DA, 2)
+MC_POINTER_AUTH_KEY(DB, 3)
+#undef MC_POINTER_AUTH_KEY
+#endif

@@ -21,10 +21,12 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
 #include "gtest/gtest.h"
+#include <climits>
 #include <memory>
 #include <optional>
 
@@ -267,6 +269,124 @@ TEST(BinaryRewriteRelocationTest, AArch64StillUsesPageAndPageOffsetArithmetic) {
           (int64_t(Bits ^ ADRPSignBit) - ADRPSignBit) * PageBytes;
       EXPECT_EQ((Base & ~PageMask) + Delta, TargetVA & ~PageMask);
       EXPECT_EQ((Add >> AddImmediateShift) & PageMask, TargetVA & PageMask);
+    }
+}
+
+TEST(BinaryRewriteRelocationTest,
+     AArch64AuthenticatedPointerRecipesReachHooks) {
+  struct AuthKey {
+    MCPointerAuthKey Key;
+    StringRef Name;
+  };
+  const AuthKey Keys[] = {
+#define REWRITE_TEST_AUTH_KEY(Key, Name) {MCPointerAuthKey::Key, Name},
+#include "BinaryRewriteRelocationFixtures.def"
+  };
+  for (StringRef TT : {AArch64ELF, AArch64MachO}) {
+    if (!hasTarget(TT))
+      continue;
+    SCOPED_TRACE(TT.str());
+    const bool MachO = TT == AArch64MachO;
+    for (const auto &Key : Keys)
+      for (bool AddressDiversity : {false, true})
+        for (bool Local : {false, true}) {
+          SCOPED_TRACE(Key.Name.str());
+          SCOPED_TRACE(AddressDiversity);
+          SCOPED_TRACE(Local);
+          const MCPointerAuthInfo Expected{Key.Key, AuthDiscriminator,
+                                           AddressDiversity};
+          auto Options = options(AArch64FirstBase, ForwardTarget);
+          unsigned Resolutions = 0, Fixups = 0;
+          Options.Model.resolveWithContext =
+              [&](const mc_rewrite::RewriteSymbolResolveRequest &Request)
+              -> std::optional<uint64_t> {
+            EXPECT_EQ(Request.Symbol, MachOSymbol);
+            EXPECT_EQ(Request.PointerAuth, Expected);
+            EXPECT_EQ(Request.FixupVA, AArch64FirstBase + DataOffset);
+            EXPECT_EQ(Request.SectionOffset, 0u);
+            EXPECT_EQ(Request.BitWidth, AuthPointerBytes * CHAR_BIT);
+            EXPECT_FALSE(Request.IsPCRel);
+            EXPECT_FALSE(Request.IsSubtrahend);
+            ++Resolutions;
+            return ForwardTarget;
+          };
+          Options.onFixup = [&](const mc_rewrite::FixupCtx &Fixup,
+                                uint64_t Value) {
+            EXPECT_EQ(Fixup.PointerAuth, Expected);
+            EXPECT_EQ(Fixup.FixupVA, AArch64FirstBase + DataOffset);
+            EXPECT_EQ(Fixup.SectionOffset, 0u);
+            EXPECT_TRUE(Fixup.IsResolved);
+            EXPECT_EQ(Value,
+                      (Local ? AArch64FirstBase : ForwardTarget) + AuthAddend);
+            ++Fixups;
+            return AuthInstalledWord;
+          };
+          const auto Assembly =
+              formatv(AuthPointerAssembly.data(),
+                      MachO ? AuthMachODataDirective : AuthELFDataDirective,
+                      Local ? AuthLocalSymbol : MachOSymbol, Key.Name,
+                      AddressDiversity ? AuthAddressDiversity
+                                       : AuthNoAddressDiversity)
+                  .str();
+          auto Result = assemble(TT, Assembly, Options);
+          ASSERT_TRUE(Result);
+          EXPECT_TRUE(Result->ImageValid);
+          EXPECT_TRUE(Result->Unresolved.empty());
+          EXPECT_EQ(Fixups, 1u);
+          EXPECT_EQ(Resolutions != 0, !Local);
+          const auto Data =
+              bytes(*Result, MachO ? MachODataSection : DataSection);
+          ASSERT_EQ(Data.size(), AuthPointerBytes);
+          EXPECT_EQ(support::endian::read64le(Data.data()), AuthInstalledWord);
+        }
+  }
+}
+
+TEST(BinaryRewriteRelocationTest, AuthenticatedPointersRequireAnInstaller) {
+  for (StringRef TT : {AArch64ELF, AArch64MachO}) {
+    if (!hasTarget(TT))
+      continue;
+    SCOPED_TRACE(TT.str());
+    const auto Assembly = formatv(AuthPointerAssembly.data(),
+                                  TT == AArch64MachO ? AuthMachODataDirective
+                                                     : AuthELFDataDirective,
+                                  MachOSymbol, AuthIAKey, AuthAddressDiversity)
+                              .str();
+    EXPECT_FALSE(
+        assemble(TT, Assembly, options(AArch64FirstBase, ForwardTarget)));
+  }
+  auto Options = options(AArch64FirstBase, ForwardTarget);
+  Options.onFixup = [](const mc_rewrite::FixupCtx &, uint64_t) {
+    ADD_FAILURE();
+    return AuthInstalledWord;
+  };
+  EXPECT_FALSE(assemble(AArch64ELF, AuthInvalidWidthAssembly, Options));
+  EXPECT_FALSE(assemble(AArch64ELF, AuthUnknownAssembly, Options));
+}
+
+TEST(BinaryRewriteRelocationTest, AuthenticatedAliasesKeepTheirSigningRecipe) {
+  for (StringRef TT : {AArch64ELF, AArch64MachO})
+    for (StringRef Source : {AuthAliasAssembly, AuthOutsideAddendAssembly}) {
+      SCOPED_TRACE(TT.str());
+      SCOPED_TRACE(Source.str());
+      auto Options = options(AArch64FirstBase, ForwardTarget);
+      unsigned Fixups = 0;
+      Options.onFixup = [&](const mc_rewrite::FixupCtx &Fixup, uint64_t Value) {
+        EXPECT_EQ(Fixup.PointerAuth,
+                  (MCPointerAuthInfo{MCPointerAuthKey::IA, AuthDiscriminator,
+                                     true}));
+        EXPECT_EQ(Value, ForwardTarget + AuthAddend);
+        ++Fixups;
+        return AuthInstalledWord;
+      };
+      const auto Assembly =
+          formatv(Source.data(), TT == AArch64MachO ? AuthMachODataDirective
+                                                    : AuthELFDataDirective)
+              .str();
+      auto Result = assemble(TT, Assembly, Options);
+      ASSERT_TRUE(Result);
+      EXPECT_TRUE(Result->ImageValid);
+      EXPECT_EQ(Fixups, 1u);
     }
 }
 

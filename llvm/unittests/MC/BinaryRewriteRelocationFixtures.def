@@ -11,6 +11,26 @@ REWRITE_TEST_STRING(X64ELF, "x86_64-unknown-linux-gnu")
 REWRITE_TEST_STRING(I386ELF, "i386-unknown-linux-gnu")
 REWRITE_TEST_STRING(X64MachO, "x86_64-apple-macosx14.0.0")
 REWRITE_TEST_STRING(AArch64ELF, "aarch64-unknown-linux-gnu")
+REWRITE_TEST_STRING(AArch64MachO, "arm64e-apple-macosx14.0.0")
+REWRITE_TEST_STRING(DataSection, ".data")
+REWRITE_TEST_STRING(AuthPointerAssembly,
+                    ".text\nlocal_target:\n.space 4\n{0}\n"
+                    ".quad ({1}+7)@AUTH({2},4660{3})\n")
+REWRITE_TEST_STRING(AuthELFDataDirective, ".data")
+REWRITE_TEST_STRING(AuthMachODataDirective, ".section __DATA,__data")
+REWRITE_TEST_STRING(AuthLocalSymbol, "local_target")
+REWRITE_TEST_STRING(AuthAddressDiversity, ",addr")
+REWRITE_TEST_STRING(AuthIAKey, "ia")
+REWRITE_TEST_STRING(AuthNoAddressDiversity, "")
+REWRITE_TEST_STRING(AuthInvalidWidthAssembly,
+                    ".data\n.long _target@AUTH(ia,0)\n")
+REWRITE_TEST_STRING(AuthUnknownAssembly,
+                    ".data\n.quad unknown_target@AUTH(ia,0)\n")
+REWRITE_TEST_STRING(AuthAliasAssembly,
+                    "{0}\n.set alias,_target+7\n"
+                    ".quad alias@AUTH(ia,4660,addr)\n")
+REWRITE_TEST_STRING(AuthOutsideAddendAssembly,
+                    "{0}\n.quad 7+_target@AUTH(ia,4660,addr)\n")
 REWRITE_TEST_STRING(TextSection, ".text")
 REWRITE_TEST_STRING(MachOTextSection, "__text")
 REWRITE_TEST_STRING(MachODataSection, "__data")
@@ -61,5 +81,17 @@ REWRITE_TEST_INTEGER(ADRPImmediateHighMask, 0x7ffff)
 REWRITE_TEST_INTEGER(ADRPImmediateHighOffset, 2)
 REWRITE_TEST_INTEGER(ADRPSignBit, 0x100000)
 REWRITE_TEST_INTEGER(AddImmediateShift, 10)
+REWRITE_TEST_INTEGER(AuthDiscriminator, 4660)
+REWRITE_TEST_INTEGER(AuthAddend, 7)
+REWRITE_TEST_INTEGER(AuthPointerBytes, 8)
+REWRITE_TEST_INTEGER(AuthInstalledWord, 0x8000123456789abc)
 #undef REWRITE_TEST_INTEGER
+#endif
+
+#ifdef REWRITE_TEST_AUTH_KEY
+REWRITE_TEST_AUTH_KEY(IA, "ia")
+REWRITE_TEST_AUTH_KEY(IB, "ib")
+REWRITE_TEST_AUTH_KEY(DA, "da")
+REWRITE_TEST_AUTH_KEY(DB, "db")
+#undef REWRITE_TEST_AUTH_KEY
 #endif
