@@ -12,10 +12,14 @@ REWRITE_FIXUP_STRING(GOTSpecifierName, "GOT")
 REWRITE_FIXUP_STRING(GOTOFFSpecifierName, "GOTOFF")
 REWRITE_FIXUP_STRING(I386GOTPCFixupName, "reloc_global_offset_table")
 REWRITE_FIXUP_STRING(UnresolvedI386GOTAnchor, "cannot resolve i386 GOT anchor")
+REWRITE_FIXUP_STRING(InvalidAuthenticatedPointer,
+                     "authenticated pointer requires a resolved 64-bit "
+                     "absolute target and a runtime signing fixup hook")
 #undef REWRITE_FIXUP_STRING
 #endif
 
 #ifdef REWRITE_FIXUP_INTEGER
 REWRITE_FIXUP_INTEGER(MachOGOTPCRelDataBias, 4)
+REWRITE_FIXUP_INTEGER(AuthenticatedPointerBits, 64)
 #undef REWRITE_FIXUP_INTEGER
 #endif

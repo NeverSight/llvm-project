@@ -34,6 +34,8 @@ struct AArch64MCAsmInfoDarwin : public MCAsmInfoDarwin {
                           const MCSpecifierExpr &Expr) const override;
   bool evaluateAsRelocatableImpl(const MCSpecifierExpr &Expr, MCValue &Res,
                                  const MCAssembler *Asm) const override;
+  std::optional<MCPointerAuthInfo>
+  getPointerAuthInfo(const MCExpr &Expr) const override;
 };
 
 struct AArch64MCAsmInfoELF : public MCAsmInfoELF {
@@ -42,6 +44,8 @@ struct AArch64MCAsmInfoELF : public MCAsmInfoELF {
                           const MCSpecifierExpr &Expr) const override;
   bool evaluateAsRelocatableImpl(const MCSpecifierExpr &Expr, MCValue &Res,
                                  const MCAssembler *Asm) const override;
+  std::optional<MCPointerAuthInfo>
+  getPointerAuthInfo(const MCExpr &Expr) const override;
 };
 
 struct AArch64MCAsmInfoMicrosoftCOFF : public MCAsmInfoMicrosoft {

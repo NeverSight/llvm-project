@@ -32,6 +32,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/MC/MCPointerAuthInfo.h"
 #include "llvm/Support/Compiler.h"
 #include <array>
 #include <cstdint>
@@ -66,6 +67,9 @@ struct RewriteSymbolResolveRequest {
   /// Stable target spelling of `Specifier`; empty when the target exposes no
   /// registered spelling. Valid only for the duration of the callback.
   StringRef SpecifierName;
+  /// Signing recipe for this pointer storage, when present. The resolver still
+  /// returns the unsigned target VA; onFixup owns runtime fixup installation.
+  std::optional<MCPointerAuthInfo> PointerAuth;
   /// Raw target fixup kind from MCFixup.
   unsigned FixupKind = 0;
   /// Stable target spelling of `FixupKind`. Final-image symbol-index records
@@ -145,6 +149,10 @@ struct FixupCtx {
   int64_t Addend = 0;
   /// Expression specifier (@PLT/@GOT/...), if any.
   uint32_t Specifier = 0;
+  /// Signing recipe for this pointer storage. The hook must install a runtime
+  /// signing fixup or supply a pointer signed for FixupVA. Returning the raw
+  /// target address does not fulfill this contract.
+  std::optional<MCPointerAuthInfo> PointerAuth;
   bool IsPCRel = false;
   /// Whether the assembler resolved the fixup before applying it.
   bool IsResolved = false;

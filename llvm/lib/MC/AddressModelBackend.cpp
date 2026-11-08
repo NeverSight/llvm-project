@@ -141,6 +141,8 @@ std::optional<uint64_t> AddressModelBackend::resolveExternalSymbol(
   mc_rewrite::RewriteSymbolResolveRequest Request;
   Request.Symbol = Symbol;
   Request.Specifier = Specifier;
+  Request.PointerAuth =
+      Asm->getContext().getAsmInfo().getPointerAuthInfo(*Fixup.getValue());
   if (Specifier)
     Request.SpecifierName =
         Asm->getContext().getAsmInfo().getSpecifierNameOrEmpty(Specifier);
@@ -477,6 +479,17 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
                                      uint64_t Value, bool IsResolved) {
   syncWrappedAssembler();
 
+  const auto PointerAuth =
+      Asm->getContext().getAsmInfo().getPointerAuthInfo(*Fixup.getValue());
+  if (PointerAuth &&
+      (!IsResolved || !Opts.onFixup || Fixup.isPCRel() || Target.getSubSym() ||
+       Wrapped->getFixupKindInfo(Fixup.getKind()).TargetSize !=
+           AuthenticatedPointerBits)) {
+    Result.ImageValid = false;
+    Asm->getContext().reportError(Fixup.getLoc(), InvalidAuthenticatedPointer);
+    return;
+  }
+
   if (Opts.onFixup) {
     mc_rewrite::FixupCtx Ctx;
     Ctx.Kind = Fixup.getKind();
@@ -503,6 +516,7 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
       Ctx.SubSym = Sub->getName();
     Ctx.Addend = Identity.getConstant();
     Ctx.Specifier = Identity.getSpecifier();
+    Ctx.PointerAuth = PointerAuth;
     Ctx.IsPCRel = Fixup.isPCRel();
     Ctx.IsResolved = IsResolved;
     Ctx.BitWidth =
@@ -516,6 +530,10 @@ void AddressModelBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   // model has already resolved GOTPCREL and applied its PC-relative semantics;
   // clear only that consumed specifier before delegating the byte write.
   MCValue AppliedTarget = Target;
+  // The hook consumed the signing recipe. In particular, the ELF backend must
+  // not replace the installed runtime chain word with object-relocation bits.
+  if (PointerAuth)
+    AppliedTarget.setSpecifier(0);
   if (IsResolved && isX86GOTPCRelSpecifier(Asm->getContext().getAsmInfo(),
                                            Asm->getContext().getTargetTriple(),
                                            AppliedTarget.getSpecifier()))
