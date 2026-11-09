@@ -1724,6 +1724,16 @@ let SchedRW = [WriteSystem] in {
   def TLBSYNC   : I<0x01, MRM_FF, (outs), (ins),
                   "tlbsync", []>,
                   TB, Requires<[]>;
+  // Keep the EnhancedTlbi control input live through register allocation.
+  // Both pseudos lower to the same prefix-free architectural instruction.
+  let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
+    let Uses = [EAX] in
+    def TLBSYNC_CONTROL32 : PseudoI<(outs), (ins), []>,
+                            Requires<[Not64BitMode]>;
+    let Uses = [RAX] in
+    def TLBSYNC_CONTROL64 : PseudoI<(outs), (ins), []>,
+                            Requires<[In64BitMode]>;
+  }
 } // SchedRW
 
 //===----------------------------------------------------------------------===//

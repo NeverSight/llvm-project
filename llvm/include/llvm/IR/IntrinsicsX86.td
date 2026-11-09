@@ -480,7 +480,12 @@ let TargetPrefix = "x86" in {
   // and ECX retain their complete 32-bit identifiers and count operands.
   def int_x86_invlpgb_addr32 : Intrinsic<[],
       [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], []>;
+  // The compatibility interface selects CPU-only synchronization (rAX = 0).
+  // EnhancedTlbi also consumes rAX: bit 0 requests IOMMU completion, while
+  // reserved bits retain the processor's #GP behavior. Do not mask them.
   def int_x86_tlbsync : Intrinsic<[], [], []>;
+  def int_x86_tlbsync_control32 : Intrinsic<[], [llvm_i32_ty], []>;
+  def int_x86_tlbsync_control64 : Intrinsic<[], [llvm_i64_ty], []>;
   // LKGS is a long-mode operation. Its memory form owns the m16 selector read.
   def int_x86_lkgs_reg : Intrinsic<[], [llvm_i16_ty], []>;
   def int_x86_lkgs_mem : Intrinsic<[], [llvm_ptr_ty], []>;
