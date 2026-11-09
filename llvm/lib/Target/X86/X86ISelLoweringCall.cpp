@@ -2730,7 +2730,13 @@ X86TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   unsigned NumBytesForCalleeToPop = 0; // Callee pops nothing.
   if (X86::isCalleePop(CallConv, Is64Bit, isVarArg,
                        DAG.getTarget().Options.GuaranteedTailCallOpt)) {
-    NumBytesForCalleeToPop = NumBytes;    // Callee pops everything
+    // Match LowerFormalArguments: alignment padding reserved by the caller
+    // is not part of the callee's argument area. In particular a stack vector
+    // can make getAlignedCallFrameSize() larger than the RET immediate.
+    NumBytesForCalleeToPop = CCInfo.getStackSize();
+    if (ShouldGuaranteeTCO)
+      NumBytesForCalleeToPop =
+          GetAlignedArgumentStackSize(NumBytesForCalleeToPop, DAG);
   } else if (hasCalleePopSRet(Outs, ArgLocs, Subtarget)) {
     // If this call passes a struct-return pointer, the callee
     // pops that struct pointer.
