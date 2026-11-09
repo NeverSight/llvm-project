@@ -3585,7 +3585,7 @@ bool X86FastISel::fastLowerCall(CallLoweringInfo &CLI) {
   unsigned NumBytesForCalleeToPop =
       X86::isCalleePop(CC, Subtarget->is64Bit(), IsVarArg,
                        TM.Options.GuaranteedTailCallOpt)
-          ? NumBytes // Callee pops everything.
+          ? CCInfo.getStackSize() // The caller owns trailing alignment padding.
           : computeBytesPoppedByCalleeForSRet(Subtarget, CC, CLI.CB);
   unsigned AdjStackUp = TII.getCallFrameDestroyOpcode();
   BuildMI(*FuncInfo.MBB, FuncInfo.InsertPt, MIMD, TII.get(AdjStackUp))

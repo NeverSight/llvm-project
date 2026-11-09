@@ -1079,6 +1079,10 @@ RValue X86_32ABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
   auto TypeInfo = getContext().getTypeInfoInChars(Ty);
 
   CCState State(*const_cast<CGFunctionInfo *>(CGF.CurFnInfo));
+  // va_arg always consumes an unnamed argument. A required over-aligned
+  // Win32 record is indirect, but the same type occupies its stack image
+  // when passed through ellipsis.
+  State.Required = RequiredArgs(0);
   ABIArgInfo AI = classifyArgumentType(Ty, State, /*ArgIndex*/ 0);
   // Empty records are ignored for parameter passing purposes.
   if (AI.isIgnore())
