@@ -19,3 +19,15 @@ unsigned read_aligned(unsigned first, ...) {
   __builtin_va_end(ap);
   return value.value ^ last;
 }
+
+#ifdef _WIN32
+typedef unsigned V4 __attribute__((vector_size(16)));
+extern void consume_vectors(unsigned tag, ...);
+// Unnamed Windows vector arguments are pointer slots, including the first
+// three vectors that would use SSE registers in a fixed-argument function.
+// CHECK-LABEL: define{{.*}} void @pass_vectors(
+// CHECK: call void (i32, ...) @consume_vectors(i32 noundef 1, ptr {{.*}}, ptr {{.*}}, ptr {{.*}}, ptr {{.*}})
+void pass_vectors(V4 a, V4 b, V4 c, V4 d) {
+  consume_vectors(1, a, b, c, d);
+}
+#endif

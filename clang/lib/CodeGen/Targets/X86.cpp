@@ -866,7 +866,8 @@ ABIArgInfo X86_32ABIInfo::classifyArgumentType(QualType Ty, CCState &State,
     // indirectly if not. This avoids the need to align argument memory. Pass
     // user-defined vector types larger than 512 bits indirectly for simplicity.
     if (IsWin32StructABI) {
-      if (TI.Width <= 512 && State.FreeSSERegs > 0) {
+      if (TI.Width <= 512 && State.FreeSSERegs > 0 &&
+          State.Required.isRequiredArg(ArgIndex)) {
         --State.FreeSSERegs;
         return ABIArgInfo::getDirectInReg();
       }
