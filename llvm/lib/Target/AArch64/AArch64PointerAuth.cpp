@@ -80,10 +80,16 @@ static void emitPACCFI(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
 
   auto &MF = *MBB.getParent();
   auto &MFnI = *MF.getInfo<AArch64FunctionInfo>();
+  const Triple &TT = MF.getTarget().getTargetTriple();
 
   CFIInstBuilder CFIBuilder(MBB, MBBI, Flags);
-  MFnI.branchProtectionPAuthLR() ? CFIBuilder.buildNegateRAStateWithPC()
-                                 : CFIBuilder.buildNegateRAState();
+  if (MFnI.branchProtectionPAuthLR())
+    CFIBuilder.buildNegateRAStateWithPC();
+  else if (!TT.isOSBinFormatMachO() || !TT.isArm64e())
+    // Darwin's classic arm64e unwind ABI already authenticates the saved LR
+    // with the B key. An additional RA-state toggle asks older system
+    // unwinders to authenticate it twice, first with the default A key.
+    CFIBuilder.buildNegateRAState();
 }
 
 void AArch64PointerAuthImpl::signLR(MachineFunction &MF,
