@@ -1,5 +1,5 @@
 ; RUN: llc -mtriple=arm64e-apple-macosx14.0 -mattr=+pauth-lr -verify-machineinstrs < %s | FileCheck %s --check-prefix=MACHO
-; RUN: llc -mtriple=aarch64-linux-gnu -mattr=+pauth-lr -verify-machineinstrs < %s | FileCheck %s --check-prefix=ELF
+; RUN: llc -mtriple=aarch64-linux-gnu -mattr=+v8.3a,+pauth-lr -verify-machineinstrs < %s | FileCheck %s --check-prefix=ELF
 
 ; Classic arm64e uses Darwin's implicit B-key return-address ABI. ELF must
 ; retain its explicit RA-state transitions; PAuthLR must retain its signing-PC
