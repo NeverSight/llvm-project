@@ -208,8 +208,7 @@ void RemanglerBase::addSubstitution(const SubstitutionEntry &entry) {
 namespace {
 
 class Remangler : public RemanglerBase {
-  template <typename Mangler>
-  friend void Mangle::mangleIdentifier(Mangler &M, StringRef ident);
+  friend void Mangle::mangleIdentifier<Remangler>(Remangler &M, StringRef ident);
   friend class Mangle::SubstitutionMerging;
 
   const ManglingFlavor Flavor = ManglingFlavor::Default;
