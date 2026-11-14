@@ -1,0 +1,123 @@
+// Assembly input for arm64e-compact-unwind-pauth-lr.s.
+.text
+.macro frame cfa=16
+  stp x29, x30, [sp, #-16]!
+  mov x29, sp
+  .cfi_def_cfa x29, \cfa
+  .cfi_offset x30, -8
+  .cfi_offset x29, -16
+.endm
+.macro finish
+  ldp x29, x30, [sp], #16
+  ret
+  .cfi_endproc
+.endm
+
+_first:
+  .cfi_startproc
+  .cfi_b_key_frame
+  pacibsppc
+  .cfi_negate_ra_state_with_pc
+  frame
+  finish
+
+_offset:
+  .cfi_startproc
+  .cfi_b_key_frame
+  nop
+  nop
+  pacibsppc
+  .cfi_negate_ra_state_with_pc
+  frame
+  stp x20, x19, [sp, #-16]!
+  .cfi_offset x19, -24
+  .cfi_offset x20, -32
+  stp d9, d8, [sp, #-16]!
+  .cfi_offset d8, -40
+  .cfi_offset d9, -48
+  ldp d9, d8, [sp], #16
+  ldp x20, x19, [sp], #16
+  finish
+
+_maximum:
+  .cfi_startproc
+  .cfi_b_key_frame
+  .rept 4095
+  nop
+  .endr
+  pacibsppc
+  .cfi_negate_ra_state_with_pc
+  frame
+  finish
+
+_overflow:
+  .cfi_startproc
+  .cfi_b_key_frame
+  .rept 4096
+  nop
+  .endr
+  pacibsppc
+  .cfi_negate_ra_state_with_pc
+  frame
+  finish
+
+_akey:
+  .cfi_startproc
+  paciasppc
+  .cfi_negate_ra_state_with_pc
+  frame
+  finish
+
+_frameless:
+  .cfi_startproc
+  .cfi_b_key_frame
+  pacibsppc
+  .cfi_negate_ra_state_with_pc
+  ret
+  .cfi_endproc
+
+_repeated:
+  .cfi_startproc
+  .cfi_b_key_frame
+  pacibsppc
+  .cfi_negate_ra_state_with_pc
+  frame
+  autibsppc _repeated
+  .cfi_negate_ra_state_with_pc
+  finish
+
+_no_instruction:
+  .cfi_startproc
+  .cfi_b_key_frame
+  .cfi_negate_ra_state_with_pc
+  frame
+  finish
+
+_unaligned:
+  .cfi_startproc
+  .cfi_b_key_frame
+  .byte 0
+  pacibsppc
+  .cfi_negate_ra_state_with_pc
+  frame
+  finish
+  .p2align 2
+
+_noncanonical:
+  .cfi_startproc
+  .cfi_b_key_frame
+  pacibsppc
+  .cfi_negate_ra_state_with_pc
+  frame 32
+  finish
+
+_variable:
+  .cfi_startproc
+  .cfi_b_key_frame
+  nop
+  .p2align 6
+  pacibsppc
+  .cfi_negate_ra_state_with_pc
+  frame
+  finish
+.subsections_via_symbols

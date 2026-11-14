@@ -14,10 +14,13 @@
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCDwarf.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -515,6 +518,8 @@ namespace CU {
 
 /// Compact unwind encoding values.
 enum CompactUnwindEncodings {
+#define ARM64_COMPACT_VALUE(Name, Value) Name = Value,
+#include "llvm/BinaryFormat/AArch64CompactUnwind.def"
   /// A "frameless" leaf function, where no non-volatile registers are
   /// saved. The return remains in LR throughout the function.
   UNWIND_ARM64_MODE_FRAMELESS = 0x02000000,
@@ -592,6 +597,8 @@ public:
       return CU::UNWIND_ARM64_MODE_DWARF;
 
     bool HasFP = false;
+    bool HasCanonicalFrame = false;
+    std::optional<uint64_t> SigningOffset;
     uint64_t StackSize = 0;
 
     uint64_t CompactUnwindEncoding = 0;
@@ -603,6 +610,52 @@ public:
       default:
         // Cannot handle this directive:  bail out.
         return CU::UNWIND_ARM64_MODE_DWARF;
+      case MCCFIInstruction::OpNegateRAStateWithPC: {
+        // A single B-key PC signing rule can use the PAuth_LR frame mode.
+        // CFI takes effect after PACIBSPPC, but compact unwind names the
+        // instruction itself. Before layout, only fixed fragment contents
+        // prove that difference; alignment and relaxation retain DWARF.
+        const auto *Label = Inst.getLabel();
+        const auto *Begin = FI->Begin;
+        if (!TheTriple.isArm64e() || !FI->IsBKeyFrame || SigningOffset ||
+            !Label || !Begin || Label->isVariable() || Begin->isVariable())
+          return CU::UNWIND_ARM64_MODE_DWARF;
+        const auto *Fragment = Begin->getFragment();
+        const auto *EndFragment = Label->getFragment();
+        constexpr unsigned Word = CU::UNWIND_ARM64_PAUTH_LR_INSTRUCTION_SIZE;
+        constexpr uint64_t MaxOffset = CU::UNWIND_ARM64_PAUTH_LR_OFFSET_MASK >>
+                                       CU::UNWIND_ARM64_PAUTH_LR_OFFSET_SHIFT;
+        if (!Fragment || !EndFragment ||
+            Begin->getOffset() > Fragment->getFixedSize() ||
+            Label->getOffset() > EndFragment->getFixedSize() ||
+            EndFragment->isLinkerRelaxable())
+          return CU::UNWIND_ARM64_MODE_DWARF;
+        uint64_t Delta = 0;
+        if (Fragment == EndFragment) {
+          if (Begin->getOffset() > Label->getOffset())
+            return CU::UNWIND_ARM64_MODE_DWARF;
+          Delta = Label->getOffset() - Begin->getOffset();
+        } else {
+          Delta = Fragment->getFixedSize() - Begin->getOffset();
+          while (Fragment != EndFragment) {
+            if (Fragment->getKind() != MCFragment::FT_Data ||
+                Fragment->isLinkerRelaxable() || Delta > (MaxOffset + 1) * Word)
+              return CU::UNWIND_ARM64_MODE_DWARF;
+            Fragment = Fragment->getNext();
+            if (!Fragment)
+              return CU::UNWIND_ARM64_MODE_DWARF;
+            Delta += Fragment == EndFragment ? Label->getOffset()
+                                             : Fragment->getFixedSize();
+          }
+        }
+        if (Delta < Word || Delta % Word)
+          return CU::UNWIND_ARM64_MODE_DWARF;
+        const uint64_t Offset = (Delta - Word) / Word;
+        if (Offset > MaxOffset)
+          return CU::UNWIND_ARM64_MODE_DWARF;
+        SigningOffset = Offset;
+        break;
+      }
       case MCCFIInstruction::OpDefCfa: {
         // Defines a frame pointer.
         MCRegister XReg =
@@ -641,6 +694,10 @@ public:
         // Indicate that the function has a frame.
         CompactUnwindEncoding |= CU::UNWIND_ARM64_MODE_FRAME;
         HasFP = true;
+        HasCanonicalFrame =
+            Inst.getOffset() == CU::UNWIND_ARM64_FRAME_CFA_OFFSET &&
+            LRPush.getOffset() == CU::UNWIND_ARM64_FRAME_LR_OFFSET &&
+            FPPush.getOffset() == CU::UNWIND_ARM64_FRAME_FP_OFFSET;
         break;
       }
       case MCCFIInstruction::OpDefCfaOffset: {
@@ -724,7 +781,14 @@ public:
       }
     }
 
-    if (!HasFP) {
+    if (SigningOffset) {
+      if (!HasFP || !HasCanonicalFrame)
+        return CU::UNWIND_ARM64_MODE_DWARF;
+      CompactUnwindEncoding &= ~CU::UNWIND_ARM64_MODE_FRAME;
+      CompactUnwindEncoding |= CU::UNWIND_ARM64_MODE_FRAME_PAUTH_LR;
+      CompactUnwindEncoding |= *SigningOffset
+                               << CU::UNWIND_ARM64_PAUTH_LR_OFFSET_SHIFT;
+    } else if (!HasFP) {
       // With compact unwind info we can only represent stack adjustments of up
       // to 65520 bytes.
       if (StackSize > 65520)
