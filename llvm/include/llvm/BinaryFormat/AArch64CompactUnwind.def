@@ -1,0 +1,21 @@
+//===-- AArch64CompactUnwind.def - Darwin PAuth_LR compact encoding --------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+// The PAuth_LR offset names PACIBSPPC, in four-byte units from the range start.
+// Format constants shared with the target's compact-unwind producer.
+//===----------------------------------------------------------------------===//
+
+ARM64_COMPACT_VALUE(UNWIND_ARM64_MODE_FRAME_PAUTH_LR, 0x05000000)
+ARM64_COMPACT_VALUE(UNWIND_ARM64_PAUTH_LR_OFFSET_MASK, 0x00fff000)
+ARM64_COMPACT_VALUE(UNWIND_ARM64_PAUTH_LR_OFFSET_SHIFT, 12)
+ARM64_COMPACT_VALUE(UNWIND_ARM64_PAUTH_LR_INSTRUCTION_SIZE, 4)
+
+ARM64_COMPACT_VALUE(UNWIND_ARM64_FRAME_CFA_OFFSET, 16)
+ARM64_COMPACT_VALUE(UNWIND_ARM64_FRAME_LR_OFFSET, -8)
+ARM64_COMPACT_VALUE(UNWIND_ARM64_FRAME_FP_OFFSET, -16)
+
+#undef ARM64_COMPACT_VALUE
