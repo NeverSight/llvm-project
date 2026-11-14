@@ -70,6 +70,10 @@ public:
 
   bool X86Sse2Avx = false;
 
+  /// The consumer installs compact records directly into the final image.
+  /// Permit final-image payloads that a platform object linker may discard.
+  bool EmitCompactUnwindForFinalImage = false;
+
   // For ELF relocations, controls section symbol conversion.
   RelocSectionSymType RelocSectionSym = RelocSectionSymType::All;
 

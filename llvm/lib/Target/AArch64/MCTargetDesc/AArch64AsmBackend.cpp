@@ -653,6 +653,14 @@ public:
         const uint64_t Offset = (Delta - Word) / Word;
         if (Offset > MaxOffset)
           return CU::UNWIND_ARM64_MODE_DWARF;
+        // The offset payload is a final-image encoding. Apple's linker may
+        // canonicalize a raw object record with a nonzero offset to ordinary
+        // FP mode, losing the signing-PC rule. Only the provenance-bound
+        // final-image writer or an explicit direct installer consumes this
+        // encoding; regular objects preserve the PC rule in DWARF instead.
+        if (Offset && !Ctxt->requiresRewriteFunctionProvenance() &&
+            !Ctxt->getTargetOptions().EmitCompactUnwindForFinalImage)
+          return CU::UNWIND_ARM64_MODE_DWARF;
         SigningOffset = Offset;
         break;
       }
