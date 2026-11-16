@@ -236,13 +236,18 @@ std::unique_ptr<CSEConfigBase> MipsPassConfig::getCSEConfig() const {
 }
 
 void MipsPassConfig::addIRPasses() {
+  // Run the module transform before the common function passes so ordinary
+  // MIPS functions keep a single function-pass pipeline. Per-function MIPS16
+  // attributes still need the transform in a classic-mode translation unit.
+  // OS16 first decides each function's mode and retains its original order.
+  if (!getMipsSubtarget().os16())
+    addPass(createMips16HardFloatPass());
   TargetPassConfig::addIRPasses();
   addPass(createAtomicExpandLegacyPass());
-  if (getMipsSubtarget().os16())
+  if (getMipsSubtarget().os16()) {
     addPass(createMipsOs16Pass());
-  // Individual functions may enable MIPS16 in a classic-mode module. The pass
-  // checks the effective subtarget of each definition.
-  addPass(createMips16HardFloatPass());
+    addPass(createMips16HardFloatPass());
+  }
 }
 // Install an instruction selector pass using
 // the ISelDag to gen Mips code.
