@@ -12,7 +12,6 @@
 
 #include "Mips16HardFloatInfo.h"
 #include "MipsTargetMachine.h"
-#include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Debug.h"
@@ -28,17 +27,15 @@ using namespace llvm::Mips16HardFloatInfo;
 namespace {
 
   class Mips16HardFloat : public ModulePass {
+    const MipsTargetMachine &TM;
+
   public:
     static char ID;
 
-    Mips16HardFloat() : ModulePass(ID) {}
+    explicit Mips16HardFloat(const MipsTargetMachine &TM)
+        : ModulePass(ID), TM(TM) {}
 
     StringRef getPassName() const override { return "MIPS16 Hard Float Pass"; }
-
-    void getAnalysisUsage(AnalysisUsage &AU) const override {
-      AU.addRequired<TargetPassConfig>();
-      ModulePass::getAnalysisUsage(AU);
-    }
 
     bool runOnModule(Module &M) override;
   };
@@ -403,8 +400,6 @@ static void removeUseSoftFloat(Function &F) {
 //       predefined helper functions in libc but this work is currently done
 //       during call lowering but it should be moved here in the future.
 bool Mips16HardFloat::runOnModule(Module &M) {
-  auto &TM = static_cast<const MipsTargetMachine &>(
-      getAnalysis<TargetPassConfig>().getTM<TargetMachine>());
   LLVM_DEBUG(errs() << "Run on Module Mips16HardFloat\n");
   bool Modified = false;
   for (Module::iterator F = M.begin(), E = M.end(); F != E; ++F) {
@@ -427,6 +422,6 @@ bool Mips16HardFloat::runOnModule(Module &M) {
   return Modified;
 }
 
-ModulePass *llvm::createMips16HardFloatPass() {
-  return new Mips16HardFloat();
+ModulePass *llvm::createMips16HardFloatPass(const MipsTargetMachine &TM) {
+  return new Mips16HardFloat(TM);
 }

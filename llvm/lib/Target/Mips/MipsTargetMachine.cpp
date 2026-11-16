@@ -228,7 +228,13 @@ public:
 } // end anonymous namespace
 
 TargetPassConfig *MipsTargetMachine::createPassConfig(PassManagerBase &PM) {
-  return new MipsPassConfig(*this, PM);
+  auto *Config = new MipsPassConfig(*this, PM);
+  // Insert the module transform before addISelPasses starts its function
+  // pipeline. Adding it inside addIRPasses splits that pipeline even when
+  // every function uses classic MIPS. OS16 must first select function modes.
+  if (!getSubtargetImpl()->os16())
+    Config->addPass(createMips16HardFloatPass(*this));
+  return Config;
 }
 
 std::unique_ptr<CSEConfigBase> MipsPassConfig::getCSEConfig() const {
@@ -238,11 +244,10 @@ std::unique_ptr<CSEConfigBase> MipsPassConfig::getCSEConfig() const {
 void MipsPassConfig::addIRPasses() {
   TargetPassConfig::addIRPasses();
   addPass(createAtomicExpandLegacyPass());
-  if (getMipsSubtarget().os16())
+  if (getMipsSubtarget().os16()) {
     addPass(createMipsOs16Pass());
-  // Individual functions may enable MIPS16 in a classic-mode module. The pass
-  // checks the effective subtarget of each definition.
-  addPass(createMips16HardFloatPass());
+    addPass(createMips16HardFloatPass(getMipsTargetMachine()));
+  }
 }
 // Install an instruction selector pass using
 // the ISelDag to gen Mips code.
