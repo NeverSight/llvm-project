@@ -68,6 +68,7 @@ tests = sorted(set(test_dir.glob("mips16*.ll")) |
 write("inventory.json", {str(path.relative_to(root)):
                          hashlib.sha256(path.read_bytes()).hexdigest()
                          for path in tests})
-run("lit", [sys.executable, build / "bin/llvm-lit", "-v", "-j", "4",
+lit = build / "bin" / ("llvm-lit.py" if windows else "llvm-lit")
+run("lit", [sys.executable, lit, "-v", "-j", "4",
             "--xunit-xml-output", evidence / "results.xml", *tests])
 write("complete.json", {"source": source, "test_files": len(tests), "exit": 0})
