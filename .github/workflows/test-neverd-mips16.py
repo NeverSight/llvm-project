@@ -1,4 +1,4 @@
-"""Qualify MIPS16 code generation from the checked-out LLVM fork commit."""
+"""Qualify the MIPS codegen pipeline from the checked-out LLVM fork commit."""
 
 import hashlib
 import json
@@ -56,19 +56,23 @@ elif platform.system() == "Linux":
 run("configure", config)
 run("build", ["cmake", "--build", build, "--target", "llc", "FileCheck",
               "llvm-mc", "llvm-objdump", "llvm-config", "llvm-readobj", "not", "count",
+              "llvm-readelf", "split-file", "opt", "llvm-as",
               "--parallel", "4"])
 suffix = ".exe" if windows else ""
 write("products.json", {name: hashlib.sha256(
     (build / "bin" / (name + suffix)).read_bytes()).hexdigest()
     for name in ("llc", "FileCheck", "llvm-mc", "llvm-objdump")})
-# Existing mixed-mode and hard-float cases run beside all new regressions.
+# Module preparation changes the common pass pipeline. Enumerate the complete
+# MIPS suite through lit, including MIR tests, rather than filename prefixes.
 test_dir = root / "llvm/test/CodeGen/Mips"
-tests = sorted(set(test_dir.glob("mips16*.ll")) |
-               set(test_dir.glob("fp16*.ll")) | {test_dir / "nomips16.ll"})
+lit = build / "bin" / ("llvm-lit.py" if windows else "llvm-lit")
+listed = output([sys.executable, lit, "--show-tests", test_dir])
+tests = sorted(root / "llvm/test" / line.strip().split(" :: ", 1)[1]
+               for line in listed.splitlines() if " :: " in line)
+assert tests and len(tests) == len(set(tests))
 write("inventory.json", {str(path.relative_to(root)):
                          hashlib.sha256(path.read_bytes()).hexdigest()
                          for path in tests})
-lit = build / "bin" / ("llvm-lit.py" if windows else "llvm-lit")
 run("lit", [sys.executable, lit, "-v", "-j", "4",
-            "--xunit-xml-output", evidence / "results.xml", *tests])
+            "--xunit-xml-output", evidence / "results.xml", test_dir])
 write("complete.json", {"source": source, "test_files": len(tests), "exit": 0})
