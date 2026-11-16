@@ -174,4 +174,3 @@ define double @convert_integer(i64 %a) {
 ; RET-BE64: mfc1 $3, $f0
 ; RET-BE64-NEXT: mfhc1 $2, $f0
 ; RET-BE64: jr $18
-
