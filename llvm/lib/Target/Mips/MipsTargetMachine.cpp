@@ -211,6 +211,11 @@ public:
     return *getMipsTargetMachine().getSubtargetImpl();
   }
 
+  void addMips16Preparation() {
+    if (!getMipsSubtarget().os16())
+      addPass(createMips16HardFloatPass(getMipsTargetMachine()));
+  }
+
   void addIRPasses() override;
   bool addInstSelector() override;
   void addPreEmitPass() override;
@@ -232,8 +237,7 @@ TargetPassConfig *MipsTargetMachine::createPassConfig(PassManagerBase &PM) {
   // Insert the module transform before addISelPasses starts its function
   // pipeline. Adding it inside addIRPasses splits that pipeline even when
   // every function uses classic MIPS. OS16 must first select function modes.
-  if (!getSubtargetImpl()->os16())
-    Config->addPass(createMips16HardFloatPass(*this));
+  Config->addMips16Preparation();
   return Config;
 }
 
