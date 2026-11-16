@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=mipsel-linux-gnu -mcpu=mips32 -mattr=-fp64 -relocation-model=static < %s | FileCheck %s --check-prefixes=ALL,LE
-; RUN: llc -mtriple=mips-linux-gnu -mcpu=mips32 -mattr=-fp64 -relocation-model=static < %s | FileCheck %s --check-prefixes=ALL,BE
+; RUN: llc -mtriple=mipsel-linux-gnu -mcpu=mips32 -relocation-model=static < %s | FileCheck %s --check-prefixes=ALL,LE
+; RUN: llc -mtriple=mips-linux-gnu -mcpu=mips32 -relocation-model=static < %s | FileCheck %s --check-prefixes=ALL,BE
 ;
 ; The function's ISA/FPR attributes must survive on both kinds of generated
 ; stub; using the module defaults would reject or misencode the high-word move.

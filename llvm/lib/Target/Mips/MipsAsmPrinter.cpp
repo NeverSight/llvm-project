@@ -730,11 +730,16 @@ void MipsAsmPrinter::emitStartOfAsmFile(Module &M) {
     // around it by re-initializing the PIC state here.
     TS.setPic(OutContext.getObjectFileInfo()->isPositionIndependent());
 
-    // Try to get target-features from the first function.
+    // When using the first function's features, keep its CPU as well. A
+    // function can require a newer ISA than the translation-unit default.
     StringRef FS = TM.getTargetFeatureString();
+    StringRef CPU = TM.getTargetCPU();
     Module::iterator F = M.begin();
-    if (FS.empty() && M.size() && F->hasFnAttribute("target-features"))
+    if (FS.empty() && M.size() && F->hasFnAttribute("target-features")) {
       FS = F->getFnAttribute("target-features").getValueAsString();
+      if (F->hasFnAttribute("target-cpu"))
+        CPU = F->getFnAttribute("target-cpu").getValueAsString();
+    }
 
     std::string strFS = FS.str();
     if (M.size() && F->getFnAttribute("use-soft-float").getValueAsBool())
@@ -744,7 +749,7 @@ void MipsAsmPrinter::emitStartOfAsmFile(Module &M) {
     // that we'd have constructed.
     // FIXME: For ifunc related functions we could iterate over and look
     // for a feature string that doesn't match the default one.
-    StringRef CPU = MIPS_MC::selectMipsCPU(TT, TM.getTargetCPU());
+    CPU = MIPS_MC::selectMipsCPU(TT, CPU);
     const MipsTargetMachine &MTM = static_cast<const MipsTargetMachine &>(TM);
     const MipsSubtarget STI(TT, CPU, StringRef(strFS), MTM.isLittleEndian(),
                             MTM, std::nullopt);
