@@ -82,7 +82,7 @@ bool MipsAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   MipsFI = MF.getInfo<MipsFunctionInfo>();
   if (Subtarget->inMips16Mode())
     for (const auto &I : MipsFI->StubsNeeded)
-      StubsNeeded.insert(I);
+      StubsNeeded.try_emplace(I.first, FPCallStub{I.second, Subtarget});
   MCP = MF.getConstantPool();
 
   AsmPrinter::runOnMachineFunction(MF);
@@ -886,89 +886,34 @@ void MipsAsmPrinter::EmitInstrRegRegReg(const MCSubtargetInfo &STI,
   OutStreamer->emitInstruction(I, STI);
 }
 
-void MipsAsmPrinter::EmitMovFPIntPair(const MCSubtargetInfo &STI,
-                                      unsigned MovOpc, unsigned Reg1,
-                                      unsigned Reg2, unsigned FPReg1,
-                                      unsigned FPReg2, bool LE) {
-  if (!LE) {
-    unsigned temp = Reg1;
-    Reg1 = Reg2;
-    Reg2 = temp;
-  }
-  EmitInstrRegReg(STI, MovOpc, Reg1, FPReg1);
-  EmitInstrRegReg(STI, MovOpc, Reg2, FPReg2);
-}
-
-void MipsAsmPrinter::EmitSwapFPIntParams(const MCSubtargetInfo &STI,
-                                         Mips16HardFloatInfo::FPParamVariant PV,
-                                         bool LE, bool ToFP) {
-  using namespace Mips16HardFloatInfo;
-
-  unsigned MovOpc = ToFP ? Mips::MTC1 : Mips::MFC1;
-  switch (PV) {
-  case FSig:
-    EmitInstrRegReg(STI, MovOpc, Mips::A0, Mips::F12);
-    break;
-  case FFSig:
-    EmitMovFPIntPair(STI, MovOpc, Mips::A0, Mips::A1, Mips::F12, Mips::F14, LE);
-    break;
-  case FDSig:
-    EmitInstrRegReg(STI, MovOpc, Mips::A0, Mips::F12);
-    EmitMovFPIntPair(STI, MovOpc, Mips::A2, Mips::A3, Mips::F14, Mips::F15, LE);
-    break;
-  case DSig:
-    EmitMovFPIntPair(STI, MovOpc, Mips::A0, Mips::A1, Mips::F12, Mips::F13, LE);
-    break;
-  case DDSig:
-    EmitMovFPIntPair(STI, MovOpc, Mips::A0, Mips::A1, Mips::F12, Mips::F13, LE);
-    EmitMovFPIntPair(STI, MovOpc, Mips::A2, Mips::A3, Mips::F14, Mips::F15, LE);
-    break;
-  case DFSig:
-    EmitMovFPIntPair(STI, MovOpc, Mips::A0, Mips::A1, Mips::F12, Mips::F13, LE);
-    EmitInstrRegReg(STI, MovOpc, Mips::A2, Mips::F14);
-    break;
-  case NoSig:
-    return;
+void MipsAsmPrinter::EmitFPIntMoves(
+    const MCSubtargetInfo &STI,
+    ArrayRef<Mips16HardFloatInfo::FPIntRegMove> Moves, bool ToFP) {
+  for (const auto &Move : Moves) {
+    unsigned Opcode = ToFP ? (Move.HighWord ? Mips::MTHC1_D64 : Mips::MTC1)
+                           : (Move.HighWord ? Mips::MFHC1_D64 : Mips::MFC1);
+    unsigned GPR = Mips::GPR32RegClass.getRegister(Move.GPR);
+    unsigned FPR = Move.HighWord ? Mips::FGR64RegClass.getRegister(Move.FPR)
+                                 : Mips::FGR32RegClass.getRegister(Move.FPR);
+    if (ToFP && Move.HighWord)
+      EmitInstrRegRegReg(STI, Opcode, FPR, FPR, GPR);
+    else
+      EmitInstrRegReg(STI, Opcode, GPR, FPR);
   }
 }
 
-void MipsAsmPrinter::EmitSwapFPIntRetval(
-    const MCSubtargetInfo &STI, Mips16HardFloatInfo::FPReturnVariant RV,
-    bool LE) {
-  using namespace Mips16HardFloatInfo;
-
-  unsigned MovOpc = Mips::MFC1;
-  switch (RV) {
-  case FRet:
-    EmitInstrRegReg(STI, MovOpc, Mips::V0, Mips::F0);
-    break;
-  case DRet:
-    EmitMovFPIntPair(STI, MovOpc, Mips::V0, Mips::V1, Mips::F0, Mips::F1, LE);
-    break;
-  case CFRet:
-    EmitMovFPIntPair(STI, MovOpc, Mips::V0, Mips::V1, Mips::F0, Mips::F1, LE);
-    break;
-  case CDRet:
-    EmitMovFPIntPair(STI, MovOpc, Mips::V0, Mips::V1, Mips::F0, Mips::F1, LE);
-    EmitMovFPIntPair(STI, MovOpc, Mips::A0, Mips::A1, Mips::F2, Mips::F3, LE);
-    break;
-  case NoFPRet:
-    break;
-  }
-}
-
-void MipsAsmPrinter::EmitFPCallStub(
-    const char *Symbol, const Mips16HardFloatInfo::FuncSignature *Signature) {
+void MipsAsmPrinter::EmitFPCallStub(const char *Symbol,
+                                    const FPCallStub &StubInfo) {
   using namespace Mips16HardFloatInfo;
 
   MCSymbol *MSymbol = OutContext.getOrCreateSymbol(StringRef(Symbol));
   bool LE = getDataLayout().isLittleEndian();
-  // Construct a local MCSubtargetInfo here.
-  // This is because the MachineFunction won't exist (but have not yet been
-  // freed) and since we're at the global level we can use the default
-  // constructed subtarget.
+  const auto *Signature = StubInfo.Signature;
+  const MipsSubtarget &CallerSTI = *StubInfo.Subtarget;
+  // Keep the originating function's ISA and FPR mode after MachineFunctions
+  // have been released. Translation-unit defaults can differ from this caller.
   std::unique_ptr<MCSubtargetInfo> STI(TM.getTarget().createMCSubtargetInfo(
-      TM.getTargetTriple(), TM.getTargetCPU(), TM.getTargetFeatureString()));
+      TM.getTargetTriple(), CallerSTI.getCPU(), CallerSTI.getFeatureString()));
 
   //
   // .global xxxx
@@ -1079,14 +1024,18 @@ void MipsAsmPrinter::EmitFPCallStub(
 
   EmitInstrRegRegReg(*STI, Mips::OR, Mips::S2, Mips::RA, Mips::ZERO);
 
-  EmitSwapFPIntParams(*STI, Signature->ParamSig, LE, true);
+  EmitFPIntMoves(
+      *STI, getFPParamMoves(Signature->ParamSig, LE, CallerSTI.isFP64bit()),
+      true);
 
   // Jal xxxx
   //
   EmitJal(*STI, MSymbol);
 
   // fix return values
-  EmitSwapFPIntRetval(*STI, Signature->RetSig, LE);
+  EmitFPIntMoves(*STI,
+                 getFPReturnMoves(Signature->RetSig, LE, CallerSTI.isFP64bit()),
+                 false);
   //
   // do the return
   // if (Signature->RetSig == NoFPRet)
@@ -1107,15 +1056,8 @@ void MipsAsmPrinter::EmitFPCallStub(
 void MipsAsmPrinter::emitEndOfAsmFile(Module &M) {
   // Emit needed stubs
   //
-  for (std::map<
-           const char *,
-           const Mips16HardFloatInfo::FuncSignature *>::const_iterator
-           it = StubsNeeded.begin();
-       it != StubsNeeded.end(); ++it) {
-    const char *Symbol = it->first;
-    const Mips16HardFloatInfo::FuncSignature *Signature = it->second;
-    EmitFPCallStub(Symbol, Signature);
-  }
+  for (const auto &[Symbol, Stub] : StubsNeeded)
+    EmitFPCallStub(Symbol, Stub);
   // return to the text section
   OutStreamer->switchSection(OutContext.getObjectFileInfo()->getTextSection());
 }

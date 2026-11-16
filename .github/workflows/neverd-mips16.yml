@@ -1,0 +1,57 @@
+name: NeverD MIPS16 code generation
+
+on:
+  pull_request:
+    paths:
+      - 'llvm/lib/Target/Mips/**'
+      - 'llvm/test/CodeGen/Mips/**'
+      - '.github/workflows/neverd-mips16.yml'
+      - '.github/workflows/test-neverd-mips16.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neverd-mips16-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codegen:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ninja-build clang lld
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        run: brew install ninja
+      - name: Enable MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
+        with:
+          arch: x64
+      - name: Build and qualify exact source
+        run: python .github/workflows/test-neverd-mips16.py
+      - name: Upload source identity and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mips16-${{ runner.os }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: mips16-evidence/
+          if-no-files-found: error

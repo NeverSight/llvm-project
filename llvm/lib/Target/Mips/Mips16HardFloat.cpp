@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Mips16HardFloatInfo.h"
 #include "MipsTargetMachine.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/Module.h"
@@ -20,6 +21,7 @@
 #include <string>
 
 using namespace llvm;
+using namespace llvm::Mips16HardFloatInfo;
 
 #define DEBUG_TYPE "mips16-hard-float"
 
@@ -57,14 +59,6 @@ static void emitInlineAsm(LLVMContext &C, BasicBlock *BB, StringRef AsmText) {
 char Mips16HardFloat::ID = 0;
 
 //
-// Return types that matter for hard float are:
-// float, double, complex float, and complex double
-//
-enum FPReturnVariant {
-  FRet, DRet, CFRet, CDRet, NoFPRet
-};
-
-//
 // Determine which FP return type this function has
 //
 static FPReturnVariant whichFPReturnVariant(Type *T) {
@@ -90,13 +84,6 @@ static FPReturnVariant whichFPReturnVariant(Type *T) {
   }
   return NoFPRet;
 }
-
-// Parameter type that matter are float, (float, float), (float, double),
-// double, (double, double), (double, float)
-enum FPParamVariant {
-  FSig, FFSig, FDSig,
-  DSig, DDSig, DFSig, NoSig
-};
 
 // which floating point parameter signature variant we are dealing with
 using TypeID = Type::TypeID;
@@ -181,79 +168,29 @@ static bool needsFPHelperFromSig(Function &F) {
   return needsFPStubFromParams(F) || needsFPReturnHelper(F);
 }
 
-// We swap between FP and Integer registers to allow Mips16 and Mips32 to
-// interoperate
-static std::string swapFPIntParams(FPParamVariant PV, Module *M, bool LE,
-                                   bool ToFP) {
-  std::string MI = ToFP ? "mtc1 ": "mfc1 ";
+// The register mapping is shared with MC-emitted libcall stubs.
+static std::string moveFPIntRegisters(ArrayRef<FPIntRegMove> Moves, bool ToFP) {
   std::string AsmText;
-
-  switch (PV) {
-  case FSig:
-    AsmText += MI + "$$4, $$f12\n";
-    break;
-
-  case FFSig:
-    AsmText += MI + "$$4, $$f12\n";
-    AsmText += MI + "$$5, $$f14\n";
-    break;
-
-  case FDSig:
-    AsmText += MI + "$$4, $$f12\n";
-    if (LE) {
-      AsmText += MI + "$$6, $$f14\n";
-      AsmText += MI + "$$7, $$f15\n";
-    } else {
-      AsmText += MI + "$$7, $$f14\n";
-      AsmText += MI + "$$6, $$f15\n";
-    }
-    break;
-
-  case DSig:
-    if (LE) {
-      AsmText += MI + "$$4, $$f12\n";
-      AsmText += MI + "$$5, $$f13\n";
-    } else {
-      AsmText += MI + "$$5, $$f12\n";
-      AsmText += MI + "$$4, $$f13\n";
-    }
-    break;
-
-  case DDSig:
-    if (LE) {
-      AsmText += MI + "$$4, $$f12\n";
-      AsmText += MI + "$$5, $$f13\n";
-      AsmText += MI + "$$6, $$f14\n";
-      AsmText += MI + "$$7, $$f15\n";
-    } else {
-      AsmText += MI + "$$5, $$f12\n";
-      AsmText += MI + "$$4, $$f13\n";
-      AsmText += MI + "$$7, $$f14\n";
-      AsmText += MI + "$$6, $$f15\n";
-    }
-    break;
-
-  case DFSig:
-    if (LE) {
-      AsmText += MI + "$$4, $$f12\n";
-      AsmText += MI + "$$5, $$f13\n";
-    } else {
-      AsmText += MI + "$$5, $$f12\n";
-      AsmText += MI + "$$4, $$f13\n";
-    }
-    AsmText += MI + "$$6, $$f14\n";
-    break;
-
-  case NoSig:
-    break;
+  for (const FPIntRegMove &Move : Moves) {
+    AsmText += ToFP ? (Move.HighWord ? "mthc1 " : "mtc1 ")
+                    : (Move.HighWord ? "mfhc1 " : "mfc1 ");
+    AsmText += "$$" + std::to_string(Move.GPR) + ", $$f" +
+               std::to_string(Move.FPR) + "\n";
   }
-
   return AsmText;
+}
+
+// The stub executes in classic mode but must retain the originating function's
+// ISA and FPR width, including attributes that override translation-unit flags.
+static void setStubTargetAttributes(Function &Stub, const Function &F) {
+  for (StringRef Name : {"target-cpu", "target-features"})
+    if (Attribute A = F.getFnAttribute(Name); A.isValid())
+      Stub.addFnAttr(A);
 }
 
 // Make sure that we know we already need a stub for this function.
 // Having called needsFPHelperFromSig
-static void assureFPCallStub(Function &F, Module *M,
+static void assureFPCallStub(Function &F, Function &Caller, Module *M,
                              const MipsTargetMachine &TM) {
   // for now we only need them for static relocation
   if (TM.isPositionIndependent())
@@ -277,12 +214,14 @@ static void assureFPCallStub(Function &F, Module *M,
   FStub->addFnAttr("nomips16");
   FStub->setSection(SectionName);
   BasicBlock *BB = BasicBlock::Create(Context, "entry", FStub);
+  setStubTargetAttributes(*FStub, Caller);
+  bool FP64 = TM.getSubtargetImpl(Caller)->isFP64bit();
   FPReturnVariant RV = whichFPReturnVariant(FStub->getReturnType());
   FPParamVariant PV = whichFPParamVariantNeeded(F);
 
   std::string AsmText;
   AsmText += ".set reorder\n";
-  AsmText += swapFPIntParams(PV, M, LE, true);
+  AsmText += moveFPIntRegisters(getFPParamMoves(PV, LE, FP64), true);
   if (RV != NoFPRet) {
     AsmText += "move $$18, $$31\n";
     AsmText += "jal " + Name + "\n";
@@ -291,49 +230,7 @@ static void assureFPCallStub(Function &F, Module *M,
     AsmText += "addiu  $$25, $$25, %lo(" + Name + ")\n";
   }
 
-  switch (RV) {
-  case FRet:
-    AsmText += "mfc1 $$2, $$f0\n";
-    break;
-
-  case DRet:
-    if (LE) {
-      AsmText += "mfc1 $$2, $$f0\n";
-      AsmText += "mfc1 $$3, $$f1\n";
-    } else {
-      AsmText += "mfc1 $$3, $$f0\n";
-      AsmText += "mfc1 $$2, $$f1\n";
-    }
-    break;
-
-  case CFRet:
-    if (LE) {
-      AsmText += "mfc1 $$2, $$f0\n";
-      AsmText += "mfc1 $$3, $$f2\n";
-    } else {
-      AsmText += "mfc1 $$3, $$f0\n";
-      AsmText += "mfc1 $$3, $$f2\n";
-    }
-    break;
-
-  case CDRet:
-    if (LE) {
-      AsmText += "mfc1 $$4, $$f2\n";
-      AsmText += "mfc1 $$5, $$f3\n";
-      AsmText += "mfc1 $$2, $$f0\n";
-      AsmText += "mfc1 $$3, $$f1\n";
-
-    } else {
-      AsmText += "mfc1 $$5, $$f2\n";
-      AsmText += "mfc1 $$4, $$f3\n";
-      AsmText += "mfc1 $$3, $$f0\n";
-      AsmText += "mfc1 $$2, $$f1\n";
-    }
-    break;
-
-  case NoFPRet:
-    break;
-  }
+  AsmText += moveFPIntRegisters(getFPReturnMoves(RV, LE, FP64), false);
 
   if (RV != NoFPRet)
     AsmText += "jr $$18\n";
@@ -430,7 +327,7 @@ static bool fixupFPReturnAndCall(Function &F, Module *M,
           }
           if (!TM.isPositionIndependent()) {
             if (needsFPHelperFromSig(*F_)) {
-              assureFPCallStub(*F_, M, TM);
+              assureFPCallStub(*F_, F, M, TM);
               Modified=true;
             }
           }
@@ -469,7 +366,9 @@ static void createFPFnStub(Function *F, Module *M, FPParamVariant PV,
     AsmText += "la $$25, " + LocalName + "\n";
   } else
     AsmText += "la $$25, " + Name + "\n";
-  AsmText += swapFPIntParams(PV, M, LE, false);
+  setStubTargetAttributes(*FStub, *F);
+  AsmText += moveFPIntRegisters(
+      getFPParamMoves(PV, LE, TM.getSubtargetImpl(*F)->isFP64bit()), false);
   AsmText += "jr $$25\n";
   AsmText += LocalName + " = " + Name + "\n";
   emitInlineAsm(Context, BB, AsmText);
@@ -509,13 +408,15 @@ bool Mips16HardFloat::runOnModule(Module &M) {
   LLVM_DEBUG(errs() << "Run on Module Mips16HardFloat\n");
   bool Modified = false;
   for (Module::iterator F = M.begin(), E = M.end(); F != E; ++F) {
-    if (F->hasFnAttribute("nomips16") &&
-        F->hasFnAttribute("use-soft-float")) {
+    if (TM.getSubtargetImpl()->inMips16HardFloat() &&
+        F->hasFnAttribute("nomips16") && F->hasFnAttribute("use-soft-float")) {
       removeUseSoftFloat(*F);
+      Modified = true;
       continue;
     }
     if (F->isDeclaration() || F->hasFnAttribute("mips16_fp_stub") ||
-        F->hasFnAttribute("nomips16")) continue;
+        !TM.getSubtargetImpl(*F)->inMips16HardFloat())
+      continue;
     Modified |= fixupFPReturnAndCall(*F, &M, TM);
     FPParamVariant V = whichFPParamVariantNeeded(*F);
     if (V != NoSig) {

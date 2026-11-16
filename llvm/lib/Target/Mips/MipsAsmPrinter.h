@@ -63,8 +63,11 @@ private:
   /// pool entries so we can properly mark them as data regions.
   bool InConstantPool = false;
 
-  std::map<const char *, const Mips16HardFloatInfo::FuncSignature *>
-      StubsNeeded;
+  struct FPCallStub {
+    const Mips16HardFloatInfo::FuncSignature *Signature;
+    const MipsSubtarget *Subtarget;
+  };
+  std::map<const char *, FPCallStub> StubsNeeded;
 
   void EmitSled(const MachineInstr &MI, SledKind Kind);
 
@@ -100,18 +103,11 @@ private:
   void EmitInstrRegRegReg(const MCSubtargetInfo &STI, unsigned Opcode,
                           unsigned Reg1, unsigned Reg2, unsigned Reg3);
 
-  void EmitMovFPIntPair(const MCSubtargetInfo &STI, unsigned MovOpc,
-                        unsigned Reg1, unsigned Reg2, unsigned FPReg1,
-                        unsigned FPReg2, bool LE);
+  void EmitFPIntMoves(const MCSubtargetInfo &STI,
+                      ArrayRef<Mips16HardFloatInfo::FPIntRegMove> Moves,
+                      bool ToFP);
 
-  void EmitSwapFPIntParams(const MCSubtargetInfo &STI,
-                           Mips16HardFloatInfo::FPParamVariant, bool LE,
-                           bool ToFP);
-
-  void EmitSwapFPIntRetval(const MCSubtargetInfo &STI,
-                           Mips16HardFloatInfo::FPReturnVariant, bool LE);
-
-  void EmitFPCallStub(const char *, const Mips16HardFloatInfo::FuncSignature *);
+  void EmitFPCallStub(const char *, const FPCallStub &);
 
   bool isLongBranchPseudo(int Opcode) const;
 

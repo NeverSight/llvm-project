@@ -240,8 +240,9 @@ void MipsPassConfig::addIRPasses() {
   addPass(createAtomicExpandLegacyPass());
   if (getMipsSubtarget().os16())
     addPass(createMipsOs16Pass());
-  if (getMipsSubtarget().inMips16HardFloat())
-    addPass(createMips16HardFloatPass());
+  // Individual functions may enable MIPS16 in a classic-mode module. The pass
+  // checks the effective subtarget of each definition.
+  addPass(createMips16HardFloatPass());
 }
 // Install an instruction selector pass using
 // the ISelDag to gen Mips code.

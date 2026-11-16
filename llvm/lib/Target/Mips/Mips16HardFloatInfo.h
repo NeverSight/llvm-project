@@ -15,6 +15,8 @@
 #ifndef LLVM_LIB_TARGET_MIPS_MIPS16HARDFLOATINFO_H
 #define LLVM_LIB_TARGET_MIPS_MIPS16HARDFLOATINFO_H
 
+#include "llvm/ADT/SmallVector.h"
+
 namespace llvm {
 
 namespace Mips16HardFloatInfo {
@@ -29,6 +31,18 @@ enum FPReturnVariant { FRet, DRet, CFRet, CDRet, NoFPRet };
 // double, (double, double), (double, float)
 //
 enum FPParamVariant { FSig, FFSig, FDSig, DSig, DDSig, DFSig, NoSig };
+
+// Architectural register numbers, shared by the IR stub pass and MC printer.
+// HighWord selects the upper word of one FR=1 FPR, not the adjacent FPR.
+struct FPIntRegMove {
+  unsigned GPR;
+  unsigned FPR;
+  bool HighWord;
+};
+
+using FPIntRegMoves = SmallVector<FPIntRegMove, 4>;
+FPIntRegMoves getFPParamMoves(FPParamVariant PV, bool LE, bool FP64);
+FPIntRegMoves getFPReturnMoves(FPReturnVariant RV, bool LE, bool FP64);
 
 struct FuncSignature {
   FPParamVariant ParamSig;
