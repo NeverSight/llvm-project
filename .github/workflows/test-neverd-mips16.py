@@ -55,7 +55,8 @@ elif platform.system() == "Linux":
                "-DLLVM_USE_LINKER=lld"]
 run("configure", config)
 run("build", ["cmake", "--build", build, "--target", "llc", "FileCheck",
-              "llvm-mc", "llvm-objdump", "not", "count", "--parallel", "4"])
+              "llvm-mc", "llvm-objdump", "llvm-config", "llvm-readobj", "not", "count",
+              "--parallel", "4"])
 suffix = ".exe" if windows else ""
 write("products.json", {name: hashlib.sha256(
     (build / "bin" / (name + suffix)).read_bytes()).hexdigest()
