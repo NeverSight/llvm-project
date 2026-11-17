@@ -1,6 +1,6 @@
 name: NeverD LLVM Release
 
-# Builds the NeverD-flavored LLVM (static libs only, X86;ARM;AArch64, Release)
+# Builds the NeverD-flavored LLVM (static libs only, X86;ARM;AArch64;Mips, Release)
 # and publishes host packages for macOS arm64, Linux x86_64, and Windows x64.
 # The packages are consumed by NeverD via -DNEVERD_LLVM_PREBUILT=ON.
 #
@@ -244,7 +244,7 @@ jobs:
             -DCMAKE_C_COMPILER=clang
             -DCMAKE_CXX_COMPILER=clang++
             -DLLVM_CCACHE_BUILD=ON
-            "-DLLVM_TARGETS_TO_BUILD=X86;ARM;AArch64"
+            "-DLLVM_TARGETS_TO_BUILD=X86;ARM;AArch64;Mips"
             "-DLLVM_ENABLE_PROJECTS="
             "-DLLVM_ENABLE_RUNTIMES="
             -DLLVM_BUILD_TOOLS=OFF
@@ -298,7 +298,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang-cl `
             -DCMAKE_C_COMPILER_LAUNCHER=sccache `
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
-            "-DLLVM_TARGETS_TO_BUILD=X86;ARM;AArch64" `
+            "-DLLVM_TARGETS_TO_BUILD=X86;ARM;AArch64;Mips" `
             "-DLLVM_ENABLE_PROJECTS=" `
             "-DLLVM_ENABLE_RUNTIMES=" `
             -DLLVM_BUILD_TOOLS=OFF `
@@ -358,6 +358,7 @@ jobs:
           test -f "$dest/include/llvm/MC/BinaryRewrite.h"
           for required in \
             lib/libLLVMSwiftDemangle.a \
+            lib/libLLVMMipsCodeGen.a \
             include/llvm/Demangle/SwiftDemangle.h \
             share/licenses/llvm/LICENSE.TXT \
             share/licenses/llvm/swift-demangling/LICENSE.txt \
@@ -373,7 +374,7 @@ jobs:
           host_arch: ${{ matrix.arch }}
           runner: ${{ matrix.runner }}
           compiler: $(clang --version | head -n1)
-          targets: X86;ARM;AArch64
+          targets: X86;ARM;AArch64;Mips
           build_type: Release
           link: static (.a)
           swift_demangling: LLVMSwiftDemangle (static; Swift 6.3.3 grammar)
@@ -395,6 +396,7 @@ jobs:
           if (!(Test-Path $binaryRewrite)) { throw "Missing $binaryRewrite" }
           foreach ($required in @(
             'lib/LLVMSwiftDemangle.lib',
+            'lib/LLVMMipsCodeGen.lib',
             'include/llvm/Demangle/SwiftDemangle.h',
             'share/licenses/llvm/LICENSE.TXT',
             'share/licenses/llvm/swift-demangling/LICENSE.txt',
@@ -414,7 +416,7 @@ jobs:
           host_arch: ${{ matrix.arch }}
           runner: ${{ matrix.runner }}
           compiler: $compiler
-          targets: X86;ARM;AArch64
+          targets: X86;ARM;AArch64;Mips
           build_type: Release
           link: static (.lib)
           swift_demangling: LLVMSwiftDemangle (static; Swift 6.3.3 grammar)
@@ -423,7 +425,7 @@ jobs:
           "@ | Set-Content -Path (Join-Path $dest 'BUILDINFO.txt') -Encoding utf8NoBOM
           Get-Content (Join-Path $dest 'BUILDINFO.txt')
 
-      - name: Consume relocated Unix package without Swift tools
+      - name: Consume relocated Unix package without external tools
         if: runner.os != 'Windows'
         shell: bash
         run: |
@@ -463,8 +465,12 @@ jobs:
           # CTest gives only the probe an empty PATH and invalid legacy tool
           # setting, and enforces its 30-second deadline. Build tools retain PATH.
           ctest --test-dir "$smoke_build" --output-on-failure --no-tests=error
+          mips_smoke_build="${RUNNER_TEMP}/mips-package-smoke"
+          cmake -S llvm/utils/neverd-mips-smoke -B "$mips_smoke_build" -G Ninja "${cmake_args[@]}"
+          cmake --build "$mips_smoke_build" --parallel 2
+          ctest --test-dir "$mips_smoke_build" --output-on-failure --no-tests=error
 
-      - name: Consume relocated Windows package without Swift tools
+      - name: Consume relocated Windows package without external tools
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -495,6 +501,17 @@ jobs:
             # and 30-second deadline without changing the build-tool environment.
             ctest --test-dir $smokeBuild --output-on-failure --no-tests=error
             if ($LASTEXITCODE -ne 0) { throw 'Installed LLVM package smoke execution failed' }
+            $mipsSmokeBuild = Join-Path $env:RUNNER_TEMP 'mips-package-smoke'
+            cmake -S llvm/utils/neverd-mips-smoke -B $mipsSmokeBuild -G Ninja `
+              -DCMAKE_BUILD_TYPE=Release `
+              -DCMAKE_C_COMPILER=clang-cl `
+              -DCMAKE_CXX_COMPILER=clang-cl `
+              "-DNEVERD_LLVM_PACKAGE_ROOT=$relocated"
+            if ($LASTEXITCODE -ne 0) { throw 'MIPS package smoke configuration failed' }
+            cmake --build $mipsSmokeBuild --parallel 2
+            if ($LASTEXITCODE -ne 0) { throw 'MIPS package smoke build failed' }
+            ctest --test-dir $mipsSmokeBuild --output-on-failure --no-tests=error
+            if ($LASTEXITCODE -ne 0) { throw 'MIPS package smoke execution failed' }
           } finally {
             Move-Item -LiteralPath $relocated -Destination $dest
           }
