@@ -182,6 +182,17 @@ MipsTargetMachine::getSubtargetImpl(const Function &F) const {
   return I.get();
 }
 
+bool MipsTargetMachine::isMips16HardFloat(const Function &F) const {
+  // Only these function attributes can enable MIPS16 over a classic default.
+  // Keep feature ordering, CPU defaults and soft-float interpretation in the
+  // existing subtarget resolver whenever an override is present. Use the
+  // immutable default, not the last MachineFunction's selected subtarget.
+  if (!DefaultSubtarget.inMips16Mode() && !F.hasFnAttribute("mips16") &&
+      !F.hasFnAttribute("target-cpu") && !F.hasFnAttribute("target-features"))
+    return false;
+  return getSubtargetImpl(F)->inMips16HardFloat();
+}
+
 void MipsTargetMachine::resetSubtarget(MachineFunction *MF) {
   LLVM_DEBUG(dbgs() << "resetSubtarget\n");
 

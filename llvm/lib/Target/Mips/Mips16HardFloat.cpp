@@ -410,7 +410,7 @@ bool Mips16HardFloat::runOnModule(Module &M) {
       continue;
     }
     if (F->isDeclaration() || F->hasFnAttribute("mips16_fp_stub") ||
-        !TM.getSubtargetImpl(*F)->inMips16HardFloat())
+        !TM.isMips16HardFloat(*F))
       continue;
     Modified |= fixupFPReturnAndCall(*F, &M, TM);
     FPParamVariant V = whichFPParamVariantNeeded(*F);
