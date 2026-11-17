@@ -193,6 +193,11 @@ static std::string computeMipsDataLayout(const Triple &TT, StringRef ABIName) {
   if (ABI != MipsABI::N64)
     Ret += "-p:32:32";
 
+  // MIPS16 and microMIPS function pointers carry an ISA tag in bit zero.
+  // Function code alignment therefore does not imply pointer alignment, even
+  // in a translation unit whose default instruction mode is classic MIPS.
+  Ret += "-Fi8";
+
   // 8 and 16 bit integers only need to have natural alignment, but try to
   // align them to 32 bits. 64 bit integers have natural alignment.
   Ret += "-i8:8:32-i16:16:32-i64:64";

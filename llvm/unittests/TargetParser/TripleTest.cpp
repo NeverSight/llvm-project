@@ -3500,6 +3500,15 @@ TEST(TripleTest, isCompatibleWith) {
   }
 }
 
+TEST(DataLayoutTest, MIPSFunctionPointerAlignment) {
+  for (const char *Arch : {"mips", "mipsel", "mips64", "mips64el"}) {
+    Triple TT(Arch);
+    EXPECT_THAT(TT.computeDataLayout(), testing::HasSubstr("-Fi8-"));
+    for (const char *ABI : {"o32", "n32", "n64"})
+      EXPECT_THAT(TT.computeDataLayout(ABI), testing::HasSubstr("-Fi8-"));
+  }
+}
+
 TEST(DataLayoutTest, UEFI) {
   Triple TT = Triple("x86_64-unknown-uefi");
 
