@@ -5,6 +5,10 @@ on:
     paths:
       - 'llvm/lib/Target/Mips/**'
       - 'llvm/test/CodeGen/Mips/**'
+      - 'llvm/lib/TargetParser/TargetDataLayout.cpp'
+      - 'llvm/unittests/TargetParser/**'
+      - 'clang/test/CodeGen/mips-function-pointer-tag.c'
+      - 'clang/test/CodeGen/target-data.c'
       - '.github/workflows/neverd-mips16.yml'
       - '.github/workflows/test-neverd-mips16.py'
   workflow_dispatch:

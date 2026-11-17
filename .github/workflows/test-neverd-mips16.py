@@ -44,7 +44,7 @@ windows = os.name == "nt"
 config = ["cmake", "-S", root / "llvm", "-B", build, "-G", "Ninja",
           "-DCMAKE_BUILD_TYPE=Release", "-DLLVM_TARGETS_TO_BUILD=Mips",
           "-DLLVM_ENABLE_RTTI=ON", "-DLLVM_ENABLE_ASSERTIONS=ON",
-          "-DLLVM_ENABLE_PROJECTS=", "-DLLVM_INCLUDE_TESTS=ON",
+          "-DLLVM_ENABLE_PROJECTS=clang", "-DLLVM_INCLUDE_TESTS=ON",
           "-DLLVM_INCLUDE_BENCHMARKS=OFF", "-DLLVM_INCLUDE_EXAMPLES=OFF",
           "-DLLVM_ENABLE_ZSTD=OFF", "-DLLVM_ENABLE_ZLIB=OFF",
           "-DLLVM_ENABLE_LIBXML2=OFF"]
@@ -57,11 +57,12 @@ run("configure", config)
 run("build", ["cmake", "--build", build, "--target", "llc", "FileCheck",
               "llvm-mc", "llvm-objdump", "llvm-config", "llvm-readobj", "not", "count",
               "llvm-readelf", "split-file", "opt", "llvm-as",
+              "clang", "TargetParserTests",
               "--parallel", "4"])
 suffix = ".exe" if windows else ""
 write("products.json", {name: hashlib.sha256(
     (build / "bin" / (name + suffix)).read_bytes()).hexdigest()
-    for name in ("llc", "FileCheck", "llvm-mc", "llvm-objdump")})
+    for name in ("llc", "FileCheck", "llvm-mc", "llvm-objdump", "clang")})
 # Module preparation changes the common pass pipeline. Enumerate the complete
 # MIPS suite through lit, including MIR tests, rather than filename prefixes.
 test_dir = root / "llvm/test/CodeGen/Mips"
@@ -75,4 +76,17 @@ write("inventory.json", {str(path.relative_to(root)):
                          for path in tests})
 run("lit", [sys.executable, lit, "-v", "-j", "4",
             "--xunit-xml-output", evidence / "results.xml", test_dir])
+run("target-layout", [build / "unittests/TargetParser" /
+                      ("TargetParserTests" + suffix),
+                      "--gtest_filter=DataLayoutTest.*",
+                      "--gtest_output=xml:" + str(evidence / "target-layout.xml")])
+clang_tests = [root / "clang/test/CodeGen" / name for name in
+               ("mips-function-pointer-tag.c", "mips16-attr.c",
+                "micromips-attr.c", "target-data.c")]
+write("clang-inventory.json", {str(path.relative_to(root)):
+                               hashlib.sha256(path.read_bytes()).hexdigest()
+                               for path in clang_tests})
+run("clang-lit", [sys.executable, lit, "-v", "-j", "4",
+                  "--xunit-xml-output", evidence / "clang-results.xml",
+                  *clang_tests])
 write("complete.json", {"source": source, "test_files": len(tests), "exit": 0})
