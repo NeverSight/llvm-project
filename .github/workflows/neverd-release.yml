@@ -140,7 +140,7 @@ jobs:
           - name: macOS arm64
             platform: macos
             arch: arm64
-            runner: macos-14
+            runner: macos-15
             pkg: neverd-llvm-macos-arm64
             archive: tar.xz
             deploy: '11.0'
