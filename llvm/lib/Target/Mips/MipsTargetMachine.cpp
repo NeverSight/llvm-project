@@ -182,6 +182,17 @@ MipsTargetMachine::getSubtargetImpl(const Function &F) const {
   return I.get();
 }
 
+bool MipsTargetMachine::isMips16HardFloat(const Function &F) const {
+  // Only these function attributes can enable MIPS16 over a classic default.
+  // Keep feature ordering, CPU defaults and soft-float interpretation in the
+  // existing subtarget resolver whenever an override is present. Use the
+  // immutable default, not the last MachineFunction's selected subtarget.
+  if (!DefaultSubtarget.inMips16Mode() && !F.hasFnAttribute("mips16") &&
+      !F.hasFnAttribute("target-cpu") && !F.hasFnAttribute("target-features"))
+    return false;
+  return getSubtargetImpl(F)->inMips16HardFloat();
+}
+
 void MipsTargetMachine::resetSubtarget(MachineFunction *MF) {
   LLVM_DEBUG(dbgs() << "resetSubtarget\n");
 
@@ -211,6 +222,11 @@ public:
     return *getMipsTargetMachine().getSubtargetImpl();
   }
 
+  void addMips16Preparation() {
+    if (!getMipsSubtarget().os16())
+      addPass(createMips16HardFloatPass(getMipsTargetMachine()));
+  }
+
   void addIRPasses() override;
   bool addInstSelector() override;
   void addPreEmitPass() override;
@@ -228,7 +244,12 @@ public:
 } // end anonymous namespace
 
 TargetPassConfig *MipsTargetMachine::createPassConfig(PassManagerBase &PM) {
-  return new MipsPassConfig(*this, PM);
+  auto *Config = new MipsPassConfig(*this, PM);
+  // Insert the module transform before addISelPasses starts its function
+  // pipeline. Adding it inside addIRPasses splits that pipeline even when
+  // every function uses classic MIPS. OS16 must first select function modes.
+  Config->addMips16Preparation();
+  return Config;
 }
 
 std::unique_ptr<CSEConfigBase> MipsPassConfig::getCSEConfig() const {
@@ -238,10 +259,10 @@ std::unique_ptr<CSEConfigBase> MipsPassConfig::getCSEConfig() const {
 void MipsPassConfig::addIRPasses() {
   TargetPassConfig::addIRPasses();
   addPass(createAtomicExpandLegacyPass());
-  if (getMipsSubtarget().os16())
+  if (getMipsSubtarget().os16()) {
     addPass(createMipsOs16Pass());
-  if (getMipsSubtarget().inMips16HardFloat())
-    addPass(createMips16HardFloatPass());
+    addPass(createMips16HardFloatPass(getMipsTargetMachine()));
+  }
 }
 // Install an instruction selector pass using
 // the ISelDag to gen Mips code.

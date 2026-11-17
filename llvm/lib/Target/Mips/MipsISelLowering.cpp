@@ -3217,7 +3217,7 @@ getOpndList(SmallVectorImpl<SDValue> &Ops,
       StringRef Sym = G->getGlobal()->getName();
       Function *F = G->getGlobal()->getParent()->getFunction(Sym);
       if (F && F->hasFnAttribute("__Mips16RetHelper")) {
-        Mask = MipsRegisterInfo::getMips16RetHelperMask();
+        Mask = MipsRegisterInfo::getMips16RetHelperMask(Subtarget.isFP64bit());
       }
     }
   }

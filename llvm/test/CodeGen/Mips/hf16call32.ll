@@ -1006,10 +1006,12 @@ declare { double, double } @dc_v() #1
 ; stel: .ent __call_stub_fp_dc_v
 ; stel: move $18, $ra
 ; stel: jal dc_v
-; stel: mfc1 $4, $f2
-; stel: mfc1 $5, $f3
-; stel: mfc1 $2, $f0
-; stel: mfc1 $3, $f1
+; These four independent transfers must stay between this call and return;
+; their emission order does not change the complex double result.
+; stel-DAG: mfc1 $4, $f2
+; stel-DAG: mfc1 $5, $f3
+; stel-DAG: mfc1 $2, $f0
+; stel-DAG: mfc1 $3, $f1
 ; stel: jr $18
 ; stel: .end __call_stub_fp_dc_v
 
@@ -1019,10 +1021,10 @@ declare { double, double } @dc_sf(float) #1
 ; stel: mtc1 $4, $f12
 ; stel: move $18, ${{31|ra}}
 ; stel: jal dc_sf
-; stel: mfc1 $4, $f2
-; stel: mfc1 $5, $f3
-; stel: mfc1 $2, $f0
-; stel: mfc1 $3, $f1
+; stel-DAG: mfc1 $4, $f2
+; stel-DAG: mfc1 $5, $f3
+; stel-DAG: mfc1 $2, $f0
+; stel-DAG: mfc1 $3, $f1
 ; stel: jr $18
 ; stel: .end __call_stub_fp_dc_sf
 

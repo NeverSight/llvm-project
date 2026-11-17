@@ -151,8 +151,8 @@ MipsRegisterInfo::getCallPreservedMask(const MachineFunction &MF,
   return CSR_O32_RegMask;
 }
 
-const uint32_t *MipsRegisterInfo::getMips16RetHelperMask() {
-  return CSR_Mips16RetHelper_RegMask;
+const uint32_t *MipsRegisterInfo::getMips16RetHelperMask(bool FP64) {
+  return FP64 ? CSR_Mips16RetHelper_FP64_RegMask : CSR_Mips16RetHelper_RegMask;
 }
 
 BitVector MipsRegisterInfo::

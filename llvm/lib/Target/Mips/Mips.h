@@ -34,12 +34,11 @@ class InstructionSelector;
 class MipsRegisterBankInfo;
 class MipsSubtarget;
 class MipsTargetMachine;
-class MipsTargetMachine;
 class ModulePass;
 class PassRegistry;
 
 ModulePass *createMipsOs16Pass();
-ModulePass *createMips16HardFloatPass();
+ModulePass *createMips16HardFloatPass(const MipsTargetMachine &TM);
 
 FunctionPass *createMipsModuleISelDagPass();
 FunctionPass *createMipsOptimizePICCallPass();

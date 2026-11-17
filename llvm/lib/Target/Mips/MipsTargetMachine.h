@@ -54,6 +54,10 @@ public:
 
   const MipsSubtarget *getSubtargetImpl(const Function &F) const override;
 
+  /// Query compressed hard-float preparation without constructing a per-function
+  /// subtarget when neither the default mode nor the function can enable it.
+  bool isMips16HardFloat(const Function &F) const;
+
   /// Reset the subtarget for the Mips target.
   void resetSubtarget(MachineFunction *MF);
 

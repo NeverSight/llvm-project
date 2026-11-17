@@ -377,6 +377,11 @@ def CSR_Mips16RetHelper :
                    (sequence "A%u", 3, 0), (sequence "S%u", 7, 0),
                    (sequence "D%u", 15, 10))>;
 
+def CSR_Mips16RetHelper_FP64 :
+  CalleeSavedRegs<(add V0, V1, FP,
+                   (sequence "A%u", 3, 0), (sequence "S%u", 7, 0),
+                   (decimate (sequence "D%u_64", 30, 20), 2))>;
+
 def CSR_Interrupt_32R6 : CalleeSavedRegs<(add (sequence "A%u", 3, 0),
                                               (sequence "S%u", 7, 0),
                                               (sequence "V%u", 1, 0),

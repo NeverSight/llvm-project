@@ -18,6 +18,66 @@ namespace llvm {
 
 namespace Mips16HardFloatInfo {
 
+static void addDoubleMoves(FPIntRegMoves &Moves, unsigned GPR, unsigned FPR,
+                           bool LE, bool FP64) {
+  Moves.push_back({GPR + !LE, FPR, false});
+  Moves.push_back({GPR + LE, FPR + !FP64, FP64});
+}
+
+FPIntRegMoves getFPParamMoves(FPParamVariant PV, bool LE, bool FP64) {
+  FPIntRegMoves Moves;
+  switch (PV) {
+  case FSig:
+    Moves.push_back({4, 12, false});
+    break;
+  case FFSig:
+    Moves.push_back({4, 12, false});
+    Moves.push_back({5, 14, false});
+    break;
+  case FDSig:
+    Moves.push_back({4, 12, false});
+    addDoubleMoves(Moves, 6, 14, LE, FP64);
+    break;
+  case DSig:
+    addDoubleMoves(Moves, 4, 12, LE, FP64);
+    break;
+  case DDSig:
+    addDoubleMoves(Moves, 4, 12, LE, FP64);
+    addDoubleMoves(Moves, 6, 14, LE, FP64);
+    break;
+  case DFSig:
+    addDoubleMoves(Moves, 4, 12, LE, FP64);
+    Moves.push_back({6, 14, false});
+    break;
+  case NoSig:
+    break;
+  }
+  return Moves;
+}
+
+FPIntRegMoves getFPReturnMoves(FPReturnVariant RV, bool LE, bool FP64) {
+  FPIntRegMoves Moves;
+  switch (RV) {
+  case FRet:
+    Moves.push_back({2, 0, false});
+    break;
+  case DRet:
+    addDoubleMoves(Moves, 2, 0, LE, FP64);
+    break;
+  case CFRet:
+    Moves.push_back({2, 0, false});
+    Moves.push_back({3, 2, false});
+    break;
+  case CDRet:
+    addDoubleMoves(Moves, 2, 0, LE, FP64);
+    addDoubleMoves(Moves, 4, 2, LE, FP64);
+    break;
+  case NoFPRet:
+    break;
+  }
+  return Moves;
+}
+
 const FuncNameSignature PredefinedFuncs[] = {
   { "__floatdidf", { NoSig, DRet } },
   { "__floatdisf", { NoSig, FRet } },
