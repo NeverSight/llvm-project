@@ -404,10 +404,11 @@ static bool supportsMips32(uint64_t Type) {
 }
 
 static uint64_t resolveMips32(uint64_t Type, uint64_t Offset, uint64_t S,
-                              uint64_t LocData, int64_t /*Addend*/) {
-  // FIXME: Take in account implicit addends to get correct results.
+                              uint64_t LocData, int64_t Addend) {
+  // resolveRelocation supplies the in-place addend for O32 REL and the
+  // explicit addend for N32 RELA, with the unused contribution zero.
   if (Type == ELF::R_MIPS_32)
-    return (S + LocData) & 0xFFFFFFFF;
+    return (S + LocData + Addend) & 0xFFFFFFFF;
   if (Type == ELF::R_MIPS_TLS_DTPREL32)
     return (S + LocData) & 0xFFFFFFFF;
   llvm_unreachable("Invalid relocation type");
