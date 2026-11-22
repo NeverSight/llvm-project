@@ -1509,6 +1509,15 @@ def BR_JumpTable : Pseudo<(outs), (ins i32imm:$jti), []>, Sched<[]> {
   let Size = 44; // 28 fixed + 16 variable, for table size materialization
 }
 
+// In order to prevent the address register of the Darwin stack checking
+// function from being spilled, and thus potentially exposed to corruption,
+// we bundle the addr materialization and branch into this pseudo.
+def StkChkIndirectCall : Pseudo<(outs), (ins), []>, Sched<[]> {
+  let isCall = 1;
+  let Uses = [X9, SP];
+  let Defs = [LR, X16, X17];
+}
+
 // Space-consuming pseudo to aid testing of placement and reachability
 // algorithms. Immediate operand is the number of bytes this "instruction"
 // occupies; register operands can be used to enforce dependency and constrain
@@ -2344,6 +2353,12 @@ let Predicates = [HasPAuth] in {
       : Pseudo<(outs), (ins tcGPRx16x17:$dst, i32imm:$FPDiff, i32imm:$Key,
                             i64imm:$Disc, tcGPRnotx16x17:$AddrDisc),
                []>, Sched<[WriteBrReg]>;
+    // x16 is the PACM return modifier during the epilogue. Keep both the
+    // signed target and its address discriminator live until after AUT*SPPC.
+    def AUTH_TCRETURN_PAUTH_LR
+      : Pseudo<(outs), (ins tcGPRx17:$dst, i32imm:$FPDiff, i32imm:$Key,
+                            i64imm:$Disc, tcGPRnotx16x17:$AddrDisc),
+               []>, Sched<[WriteBrReg]>;
   }
 
   let Predicates = [TailCallAny] in
@@ -2358,6 +2373,14 @@ let Predicates = [HasPAuth] in {
                                 tcGPRnotx16x17:$AddrDisc),
               (AUTH_TCRETURN_BTI tcGPRx16x17:$dst, imm:$FPDiff, imm:$Key,
                                  imm:$Disc, tcGPRnotx16x17:$AddrDisc)>;
+
+  foreach Pred = [TailCallX17, TailCallNotX16] in
+    let Predicates = [Pred] in
+    def : Pat<(AArch64authtcret tcGPRx17:$dst, (i32 timm:$FPDiff),
+                                (i32 timm:$Key), (i64 timm:$Disc),
+                                tcGPRnotx16x17:$AddrDisc),
+              (AUTH_TCRETURN_PAUTH_LR tcGPRx17:$dst, imm:$FPDiff, imm:$Key,
+                                      imm:$Disc, tcGPRnotx16x17:$AddrDisc)>;
 }
 
 // v9.5-A pointer authentication extensions

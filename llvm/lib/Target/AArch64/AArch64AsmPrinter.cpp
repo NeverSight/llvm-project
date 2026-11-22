@@ -163,6 +163,9 @@ public:
   void LowerHWASAN_CHECK_MEMACCESS(const MachineInstr &MI);
   void emitHwasanMemaccessSymbols(Module &M);
 
+  void LowerStkChkIndirectCall(const MachineInstr &MI);
+  void LowerPtrAuthStkChkIndirectCall(const MachineInstr &MI);
+
   void emitSled(const MachineInstr &MI, SledKind Kind);
 
   // Returns whether Reg may be used to store sensitive temporary values when
@@ -372,6 +375,16 @@ private:
   using MInstToMCSymbol = std::map<const MachineInstr *, MCSymbol *>;
 
   MInstToMCSymbol LOHInstToLabel;
+
+  // LOHs for instructions emitted directly by the AsmPrinter (e.g. when
+  // lowering StkChkIndirectCall), which aren't in the LOH container.
+  struct LateLOHEntry {
+    MCLOHType Kind;
+    SmallVector<MCSymbol *, 4> Syms;
+    LateLOHEntry(MCLOHType Kind, SmallVectorImpl<MCSymbol *> &Syms)
+        : Kind(Kind), Syms(Syms.begin(), Syms.end()) {}
+  };
+  SmallVector<struct LateLOHEntry> LateLOHs;
 
   bool shouldEmitWeakSwiftAsyncExtendedFramePointerFlags() const override {
     return ShouldEmitWeakSwiftAsyncExtendedFramePointerFlags;
@@ -992,6 +1005,126 @@ void AArch64AsmPrinter::emitHwasanMemaccessSymbols(Module &M) {
   this->STI = nullptr;
 }
 
+void AArch64AsmPrinter::LowerStkChkIndirectCall(const MachineInstr &MI) {
+  const MachineBasicBlock &MBB = *MI.getParent();
+  const MachineFunction &MF = *MBB.getParent();
+
+  if (MF.getFunction().hasFnAttribute(AArch64StackProbe::AuthCalls))
+    return LowerPtrAuthStkChkIndirectCall(MI);
+
+  StringRef TargetFn = AArch64StackProbe::Helper;
+
+  // We emit:
+  // ADRP x16, symbol
+  // LDR x16, x16, sym offset
+  // BLR x16
+  // We also expect x9 as an input to contain the amount of bytes
+  // to check.
+  MCSymbol *TargetFnSym = OutContext.getOrCreateSymbol(
+      Twine(MF.getDataLayout().getGlobalPrefix()) + TargetFn);
+
+  unsigned LDROpcode, LDRDstReg;
+  if (STI->isTargetILP32()) {
+    LDROpcode = AArch64::LDRWui;
+    LDRDstReg = AArch64::W16;
+  } else {
+    LDROpcode = AArch64::LDRXui;
+    LDRDstReg = AArch64::X16;
+  }
+
+  MCSymbol *LOHLabel = createTempSymbol(AArch64StackProbe::LOHLabel);
+  OutStreamer->emitLabel(LOHLabel);
+
+  OutStreamer->emitInstruction(
+      MCInstBuilder(AArch64::ADRP)
+          .addReg(AArch64::X16)
+          .addExpr(MCSymbolRefExpr::create(
+              TargetFnSym, AArch64::S_MACHO_GOTPAGE, OutContext)),
+      *STI);
+
+  MCSymbol *LOHLabel2 = createTempSymbol(AArch64StackProbe::LOHLabel);
+  OutStreamer->emitLabel(LOHLabel2);
+
+  OutStreamer->emitInstruction(
+      MCInstBuilder(LDROpcode)
+          .addReg(LDRDstReg)
+          .addReg(AArch64::X16)
+          .addExpr(MCSymbolRefExpr::create(
+              TargetFnSym, AArch64::S_MACHO_GOTPAGEOFF, OutContext)),
+      *STI);
+
+  OutStreamer->emitInstruction(MCInstBuilder(AArch64::BLR).addReg(AArch64::X16),
+                               *STI);
+
+  SmallVector<MCSymbol *, 2> MCArgs({LOHLabel, LOHLabel2});
+  LateLOHs.push_back(LateLOHEntry(MCLOH_AdrpLdrGot, MCArgs));
+}
+
+void AArch64AsmPrinter::LowerPtrAuthStkChkIndirectCall(const MachineInstr &MI) {
+  const MachineBasicBlock &MBB = *MI.getParent();
+  const MachineFunction &MF = *MBB.getParent();
+  auto *MachOTLOF =
+      static_cast<AArch64_MachoTargetObjectFile *>(TM.getObjFileLowering());
+
+  StringRef TargetFn = AArch64StackProbe::Helper;
+
+  MCSymbol *TargetFnSym = OutContext.getOrCreateSymbol(
+      Twine(MF.getDataLayout().getGlobalPrefix()) + TargetFn);
+
+  MCSymbol *LOHLabel = createTempSymbol(AArch64StackProbe::LOHLabel);
+  OutStreamer->emitLabel(LOHLabel);
+
+  // On arm64e with ptrauth-calls we emit:
+  // ADRP X17, l_symbol$auth_ptr$ia$0$addr@PAGE
+  // ADD X17, X17, l_symbol$auth_ptr$ia$0$addr@PAGEOFF
+  // LDR X16, [X17]
+  // BLRAA X16, X17
+  //
+  // Where the $auth_ptr$ symbol is the stub slot containing the signed pointer
+  // to _symbol, with the scheme matching the BLRAA.
+  // We defined the stub ourselves, so we don't need a GOT access.
+  // Note that this isn't beholden to any kind of ABI constraint, so we use
+  // a function-specific scheme.  Address-diversity without a blended constant
+  // discriminator is the cheapest that's still uniquable.
+  //
+  // We also expect x9 as an input to contain the amount of bytes to check.
+
+  TargetFnSym = MachOTLOF->getAuthPtrSlotSymbol(
+      TM, MMI, TargetFnSym, AArch64PACKey::IA,
+      /*Discriminator=*/0, /*HasAddressDiversity=*/true);
+
+  OutStreamer->emitInstruction(
+      MCInstBuilder(AArch64::ADRP)
+          .addReg(AArch64::X17)
+          .addExpr(MCSymbolRefExpr::create(TargetFnSym, AArch64::S_MACHO_PAGE,
+                                           OutContext)),
+      *STI);
+
+  MCSymbol *LOHLabel2 = createTempSymbol(AArch64StackProbe::LOHLabel);
+  OutStreamer->emitLabel(LOHLabel2);
+  OutStreamer->emitInstruction(
+      MCInstBuilder(AArch64::ADDXri)
+          .addReg(AArch64::X17)
+          .addReg(AArch64::X17)
+          .addExpr(MCSymbolRefExpr::create(
+              TargetFnSym, AArch64::S_MACHO_PAGEOFF, OutContext))
+          .addImm(0),
+      *STI);
+
+  OutStreamer->emitInstruction(MCInstBuilder(AArch64::LDRXui)
+                                   .addReg(AArch64::X16)
+                                   .addReg(AArch64::X17)
+                                   .addImm(0),
+                               *STI);
+
+  OutStreamer->emitInstruction(
+      MCInstBuilder(AArch64::BLRAA).addReg(AArch64::X16).addReg(AArch64::X17),
+      *STI);
+
+  SmallVector<MCSymbol *, 2> MCArgs({LOHLabel, LOHLabel2});
+  LateLOHs.push_back(LateLOHEntry(MCLOH_AdrpAdd, MCArgs));
+}
+
 static void emitAuthenticatedPointer(MCStreamer &OutStreamer,
                                      MCSymbol *StubLabel,
                                      const MCExpr *StubAuthPtrRef) {
@@ -1116,10 +1249,13 @@ void AArch64AsmPrinter::emitLOHs() {
     OutStreamer->emitLOHDirective(D.getKind(), MCArgs);
     MCArgs.clear();
   }
+  for (auto &E : LateLOHs)
+    OutStreamer->emitLOHDirective(E.Kind, E.Syms);
+  LateLOHs.clear();
 }
 
 void AArch64AsmPrinter::emitFunctionBodyEnd() {
-  if (!AArch64FI->getLOHRelated().empty())
+  if (!AArch64FI->getLOHRelated().empty() || !LateLOHs.empty())
     emitLOHs();
 }
 
@@ -1921,6 +2057,21 @@ void AArch64AsmPrinter::emitPAC(AArch64PACKey::ID Key, Register Pointer,
 
 void AArch64AsmPrinter::emitBLRA(bool IsCall, AArch64PACKey::ID Key,
                                  Register Target, Register Disc) {
+  if (AArch64PACKey::isDataKey(Key)) {
+    // Branch-and-authenticate only encodes instruction keys. Keep the
+    // authenticated target in an IP register through the consuming branch.
+    // This also identifies an indirect tail call correctly on BTI pages.
+    Register IP = Disc == AArch64::X16 ? AArch64::X17 : AArch64::X16;
+    if (Target == AArch64::X16 || Target == AArch64::X17)
+      IP = Target;
+    else
+      emitMovXReg(IP, Target);
+    emitAUT(Key, IP, Disc);
+    EmitToStreamer(
+        MCInstBuilder(IsCall ? AArch64::BLR : AArch64::BR).addReg(IP));
+    return;
+  }
+
   bool IsZeroDisc = Disc == AArch64::XZR;
   unsigned Opcode = getBranchOpcodeForKey(IsCall, Key, IsZeroDisc);
 
@@ -3361,7 +3512,8 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
   // attributes (isCall, isReturn, etc.). We lower them to the real
   // instruction here.
   case AArch64::AUTH_TCRETURN:
-  case AArch64::AUTH_TCRETURN_BTI: {
+  case AArch64::AUTH_TCRETURN_BTI:
+  case AArch64::AUTH_TCRETURN_PAUTH_LR: {
     Register Callee = MI->getOperand(0).getReg();
     const auto Key = (AArch64PACKey::ID)MI->getOperand(2).getImm();
     const uint64_t Disc = MI->getOperand(3).getImm();
@@ -3609,6 +3761,10 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
   case AArch64::HWASAN_CHECK_MEMACCESS_FIXEDSHADOW:
   case AArch64::HWASAN_CHECK_MEMACCESS_SHORTGRANULES_FIXEDSHADOW:
     LowerHWASAN_CHECK_MEMACCESS(*MI);
+    return;
+
+  case AArch64::StkChkIndirectCall:
+    LowerStkChkIndirectCall(*MI);
     return;
 
   case AArch64::SEH_StackAlloc:

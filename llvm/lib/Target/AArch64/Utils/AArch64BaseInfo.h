@@ -1015,6 +1015,13 @@ enum ID : uint8_t {
   DB = 3,
   LAST = DB
 };
+#define AARCH64_AUTH_CALL_TEXT(Name, Value)                                    \
+  inline constexpr char Name[] = Value;
+#define AARCH64_AUTH_CALL_UINT(Name, Value)                                    \
+  inline constexpr unsigned Name = Value;
+#include "llvm/BinaryFormat/AArch64AuthenticatedCalls.def"
+
+inline bool isDataKey(uint64_t Key) { return Key == DA || Key == DB; }
 } // namespace AArch64PACKey
 
 /// Return 2-letter identifier string for numeric key ID.

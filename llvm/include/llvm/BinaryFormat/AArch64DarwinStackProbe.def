@@ -1,0 +1,20 @@
+//===- AArch64DarwinStackProbe.def - Darwin stack probe ABI ------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+AARCH64_STACK_PROBE_TEXT(Helper, "__chkstk_darwin")
+AARCH64_STACK_PROBE_TEXT(MethodAttr, "probe-stack")
+AARCH64_STACK_PROBE_TEXT(SizeAttr, "stack-probe-size")
+AARCH64_STACK_PROBE_TEXT(Inline, "inline-asm")
+AARCH64_STACK_PROBE_TEXT(Unsupported, "Unsupported stack probing method")
+AARCH64_STACK_PROBE_TEXT(AuthCalls, "ptrauth-calls")
+AARCH64_STACK_PROBE_TEXT(LOHLabel, "loh")
+AARCH64_STACK_PROBE_UINT(DefaultProbeSize, 4096)
+AARCH64_STACK_PROBE_UINT(PlainCallBytes, 12)
+AARCH64_STACK_PROBE_UINT(AuthenticatedCallBytes, 16)
+#undef AARCH64_STACK_PROBE_UINT
+#undef AARCH64_STACK_PROBE_TEXT

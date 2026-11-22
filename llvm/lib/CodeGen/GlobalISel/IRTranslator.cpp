@@ -3248,12 +3248,18 @@ bool IRTranslator::translateAlloca(const User &U,
   // by add SA-1 to the size. This doesn't overflow because we're computing
   // an address inside an alloca.
   Align StackAlign = MF->getSubtarget().getFrameLowering()->getStackAlign();
-  auto SAMinusOne = MIRBuilder.buildConstant(IntPtrTy, StackAlign.value() - 1);
-  auto AllocAdd = MIRBuilder.buildAdd(IntPtrTy, AllocSize, SAMinusOne,
-                                      MachineInstr::NoUWrap);
-  auto AlignCst =
-      MIRBuilder.buildConstant(IntPtrTy, ~(uint64_t)(StackAlign.value() - 1));
-  auto AlignedAlloc = MIRBuilder.buildAnd(IntPtrTy, AllocAdd, AlignCst);
+  Register AlignedAlloc = AllocSize;
+  if (!MF->getSubtarget().getTargetLowering()->probesUnroundedDynamicAlloca(
+          *MF)) {
+    auto Mask = StackAlign.value() - 1;
+    auto Add = MIRBuilder.buildAdd(IntPtrTy, AllocSize,
+                                   MIRBuilder.buildConstant(IntPtrTy, Mask),
+                                   MachineInstr::NoUWrap);
+    AlignedAlloc =
+        MIRBuilder
+            .buildAnd(IntPtrTy, Add, MIRBuilder.buildConstant(IntPtrTy, ~Mask))
+            .getReg(0);
+  }
 
   Align Alignment = AI.getAlign();
   if (Alignment <= StackAlign)

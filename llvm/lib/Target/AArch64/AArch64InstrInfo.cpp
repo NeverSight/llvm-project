@@ -176,6 +176,12 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   if (!MI.isBundle() && isTailCallReturnInst(MI)) {
     NumBytes = Desc.getSize() ? Desc.getSize() : 4;
 
+    if ((MI.getOpcode() == AArch64::AUTH_TCRETURN ||
+         MI.getOpcode() == AArch64::AUTH_TCRETURN_BTI ||
+         MI.getOpcode() == AArch64::AUTH_TCRETURN_PAUTH_LR) &&
+        AArch64PACKey::isDataKey(MI.getOperand(2).getImm()))
+      NumBytes += AArch64PACKey::DataKeyExtraBytes;
+
     const auto *MFI = MF->getInfo<AArch64FunctionInfo>();
     if (!MFI->shouldSignReturnAddress(*MF))
       return NumBytes;
@@ -231,6 +237,18 @@ unsigned AArch64InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   case TargetOpcode::PATCHABLE_EVENT_CALL:
     // EVENT_CALL XRay sleds are exactly 6 instructions long (no alignment).
     NumBytes = 24;
+    break;
+
+  case AArch64::BRA:
+  case AArch64::BLRA:
+    NumBytes = Desc.getSize();
+    if (AArch64PACKey::isDataKey(MI.getOperand(1).getImm()))
+      NumBytes += AArch64PACKey::DataKeyExtraBytes;
+    break;
+  case AArch64::StkChkIndirectCall:
+    NumBytes = F.hasFnAttribute(AArch64StackProbe::AuthCalls)
+                   ? AArch64StackProbe::AuthenticatedCallBytes
+                   : AArch64StackProbe::PlainCallBytes;
     break;
 
   case AArch64::SPACE:
@@ -3253,6 +3271,7 @@ bool AArch64InstrInfo::isTailCallReturnInst(const MachineInstr &MI) {
   case AArch64::TCRETURNriALL:
   case AArch64::AUTH_TCRETURN:
   case AArch64::AUTH_TCRETURN_BTI:
+  case AArch64::AUTH_TCRETURN_PAUTH_LR:
     return true;
   }
 }

@@ -2510,6 +2510,16 @@ void AArch64FrameLowering::determineCalleeSaves(MachineFunction &MF,
   MachineFrameInfo &MFI = MF.getFrameInfo();
   const MCPhysReg *CSRegs = MF.getRegInfo().getCalleeSavedRegs();
 
+  const uint64_t EstimatedStackSize = MFI.estimateStackSize(MF);
+  if (AFI->needsDarwinStackProbe(EstimatedStackSize)) {
+    // A prologue call is introduced after register allocation. Preserve
+    // any helper clobbers that the caller's convention treats as callee-saved.
+    const auto *Mask = RegInfo->getDarwinStackProbePreservedMask();
+    for (const MCPhysReg *Reg = CSRegs; *Reg; ++Reg)
+      if (MachineOperand::clobbersPhysReg(Mask, *Reg))
+        SavedRegs.set(*Reg);
+  }
+
   MCRegister BasePointerReg =
       RegInfo->hasBasePointer(MF) ? RegInfo->getBaseRegister() : MCRegister();
 
@@ -2655,8 +2665,9 @@ void AArch64FrameLowering::determineCalleeSaves(MachineFunction &MF,
     SavedRegs.set(AArch64::LR);
 
   // The frame record needs to be created by saving the appropriate registers
-  uint64_t EstimatedStackSize = MFI.estimateStackSize(MF);
-  if (hasFP(MF) ||
+  // The Darwin probe is a call even in an otherwise leaf function. Record
+  // its saved LR before return signing and asynchronous CFI are selected.
+  if (hasFP(MF) || AFI->needsDarwinStackProbe(EstimatedStackSize) ||
       windowsRequiresStackProbe(MF, EstimatedStackSize + CSStackSize + 16)) {
     SavedRegs.set(AArch64::FP);
     SavedRegs.set(AArch64::LR);

@@ -1089,33 +1089,26 @@ static unsigned getCallOpcode(const MachineFunction &CallerF, bool IsIndirect,
       return IsIndirect ? getBLRCallOpcode(CallerF) : (unsigned)AArch64::BL;
 
     assert(IsIndirect && "Direct call should not be authenticated");
-    assert((PAI->Key == AArch64PACKey::IA || PAI->Key == AArch64PACKey::IB) &&
-           "Invalid auth call key");
+    if (uint64_t(PAI->Key) > AArch64PACKey::LAST)
+      report_fatal_error(AArch64PACKey::InvalidKey);
     return AArch64::BLRA;
   }
 
   if (!IsIndirect)
     return AArch64::TCRETURNdi;
 
-  // When BTI or PAuthLR are enabled, there are restrictions on using x16 and
-  // x17 to hold the function pointer.
-  if (FuncInfo->branchTargetEnforcement()) {
-    if (FuncInfo->branchProtectionPAuthLR()) {
-      assert(!PAI && "ptrauth tail-calls not yet supported with PAuthLR");
-      return AArch64::TCRETURNrix17;
-    }
-    if (PAI)
-      return AArch64::AUTH_TCRETURN_BTI;
-    return AArch64::TCRETURNrix16x17;
+  if (PAI) {
+    if (FuncInfo->branchProtectionPAuthLR())
+      return AArch64::AUTH_TCRETURN_PAUTH_LR;
+    return FuncInfo->branchTargetEnforcement() ? AArch64::AUTH_TCRETURN_BTI
+                                               : AArch64::AUTH_TCRETURN;
   }
 
-  if (FuncInfo->branchProtectionPAuthLR()) {
-    assert(!PAI && "ptrauth tail-calls not yet supported with PAuthLR");
+  if (FuncInfo->branchTargetEnforcement())
+    return FuncInfo->branchProtectionPAuthLR() ? AArch64::TCRETURNrix17
+                                               : AArch64::TCRETURNrix16x17;
+  if (FuncInfo->branchProtectionPAuthLR())
     return AArch64::TCRETURNrinotx16;
-  }
-
-  if (PAI)
-    return AArch64::AUTH_TCRETURN;
   return AArch64::TCRETURNri;
 }
 
@@ -1174,10 +1167,9 @@ bool AArch64CallLowering::lowerTailCall(
   MIB.addImm(0);
 
   // Authenticated tail calls always take key/discriminator arguments.
-  if (Opc == AArch64::AUTH_TCRETURN || Opc == AArch64::AUTH_TCRETURN_BTI) {
-    assert((Info.PAI->Key == AArch64PACKey::IA ||
-            Info.PAI->Key == AArch64PACKey::IB) &&
-           "Invalid auth call key");
+  if (Info.PAI) {
+    if (uint64_t(Info.PAI->Key) > AArch64PACKey::LAST)
+      report_fatal_error(AArch64PACKey::InvalidKey);
     MIB.addImm(Info.PAI->Key);
 
     Register AddrDisc = 0;
@@ -1450,9 +1442,8 @@ bool AArch64CallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
   Mask = getMaskForArgs(OutArgs, Info, *TRI, MF);
 
   if (Opc == AArch64::BLRA || Opc == AArch64::BLRA_RVMARKER) {
-    assert((Info.PAI->Key == AArch64PACKey::IA ||
-            Info.PAI->Key == AArch64PACKey::IB) &&
-           "Invalid auth call key");
+    if (uint64_t(Info.PAI->Key) > AArch64PACKey::LAST)
+      report_fatal_error(AArch64PACKey::InvalidKey);
     MIB.addImm(Info.PAI->Key);
 
     Register AddrDisc = 0;
