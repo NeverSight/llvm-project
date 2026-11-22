@@ -951,9 +951,8 @@ bool AArch64ExpandPseudoImpl::expandCALL_RVMARKER(
     const MachineOperand &IntDisc = MI.getOperand(4);
     const MachineOperand &AddrDisc = MI.getOperand(5);
 
-    assert((Key.getImm() == AArch64PACKey::IA ||
-            Key.getImm() == AArch64PACKey::IB) &&
-           "Invalid auth call key");
+    if (uint64_t(Key.getImm()) > AArch64PACKey::LAST)
+      report_fatal_error(AArch64PACKey::InvalidKey);
 
     MachineOperand Ops[] = {CallTarget, Key, IntDisc, AddrDisc};
 

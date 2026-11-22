@@ -1,0 +1,86 @@
+# The live w9 value must survive Darwin probing in the shrink-wrapped prologue.
+# RUN: llc -O0 -run-pass=prologepilog -verify-machineinstrs %s -o - | FileCheck %s
+
+# This test checks that if X9 or X10 is live after shrink wrapping changes the prolog insertion
+# point, then we save the registers before calling the probing routine.
+--- |
+  target datalayout = "e-m:o-i64:64-i128:128-n32:64-S128"
+  target triple = "aarch64-apple-darwin"
+
+  define i32 @foo(i32 %a, i32 %b) #0 {
+    %tmp = alloca i32, align 4
+    %bigalloc = alloca [4096 x i32], align 4
+    %tmp2 = icmp slt i32 %a, %b
+    br i1 %tmp2, label %true, label %false
+
+  true:                                             ; preds = %0
+    store i32 %a, ptr %tmp, align 4
+    %tmp4 = call i32 @doSomething(i32 0, ptr %tmp, ptr %bigalloc)
+    br label %false
+
+  false:                                            ; preds = %true, %0
+    %tmp.0 = phi i32 [ %tmp4, %true ], [ %a, %0 ]
+    ret i32 %tmp.0
+  }
+
+  declare i32 @doSomething(i32, ptr, ptr)
+
+  attributes #0 = { "probe-stack"="__chkstk_darwin" }
+
+...
+---
+name:            foo
+alignment:       2
+tracksRegLiveness: true
+liveins:
+  - { reg: '$w0' }
+  - { reg: '$w1' }
+  - { reg: '$w0' }
+  - { reg: '$w1' }
+frameInfo:
+  maxAlignment:    4
+  adjustsStack:    true
+  hasCalls:        true
+  maxCallFrameSize: 0
+  savePoint:
+    - point:           '%bb.1'
+  restorePoint:
+    - point:           '%bb.1'
+stack:
+  - { id: 0, name: tmp, size: 4, alignment: 4, stack-id: default, local-offset: -4 }
+  - { id: 1, name: bigalloc, size: 16384, alignment: 4, stack-id: default, local-offset: -16388 }
+  - { id: 2, name: tmp, size: 4, alignment: 4, stack-id: default, local-offset: -16392 }
+  - { id: 3, name: bigalloc, size: 16384, alignment: 4, stack-id: default, local-offset: -32776 }
+body:             |
+  ; CHECK-LABEL: name: foo
+  ; CHECK: bb.1
+  ; CHECK: liveins: {{.*}}$w9
+  ; CHECK: $sp = frame-setup STPXpre $x9, undef $x10, $sp, -2
+  ; CHECK-NEXT: $w9 = frame-setup MOVi32imm
+  ; CHECK-NEXT: frame-setup StkChkIndirectCall
+  ; CHECK-NEXT: {{.*}}$x9, $x10 = frame-setup LDPXpost $sp, 2
+  bb.0 (%ir-block.0):
+    liveins: $w0, $w1
+
+    dead $wzr = SUBSWrr renamable $w0, renamable $w1, implicit-def $nzcv
+    $w9 = ADDWri $w0, 0, 0
+    Bcc 11, %bb.1, implicit killed $nzcv
+    B %bb.2
+
+  bb.1.true:
+    liveins: $w0, $w9
+
+    STRWui renamable $w0, %stack.0.tmp, 0 :: (store 4 into %ir.tmp)
+    ADJCALLSTACKDOWN 0, 0, implicit-def dead $sp, implicit $sp
+    $x1 = ADDXri %stack.0.tmp, 0, 0
+    $x2 = ADDXri %stack.1.bigalloc, 0, 0
+    $w0 = COPY $wzr
+    BL @doSomething, csr_aarch64_aapcs, implicit-def dead $lr, implicit $sp, implicit $w0, implicit $x1, implicit killed $x2, implicit-def $sp, implicit-def dead $w0
+    ADJCALLSTACKUP 0, 0, implicit-def dead $sp, implicit $sp
+
+  bb.2.false:
+    liveins: $w0, $w9
+    $w0 = ADDWrs $w0, $w9, 0
+    RET_ReallyLR implicit $w0
+
+...

@@ -2211,6 +2211,12 @@ public:
 
   virtual bool hasInlineStackProbe(const MachineFunction &MF) const { return false; }
 
+  /// A target that probes the original allocation size performs stack alignment
+  /// after the probe, so rounding cannot hide an overflowing request.
+  virtual bool probesUnroundedDynamicAlloca(const MachineFunction &MF) const {
+    return false;
+  }
+
   virtual StringRef getStackProbeSymbolName(const MachineFunction &MF) const {
     return "";
   }

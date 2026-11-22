@@ -29,6 +29,13 @@
 #include <optional>
 
 namespace llvm {
+namespace AArch64StackProbe {
+#define AARCH64_STACK_PROBE_TEXT(Name, Text)                                   \
+  inline constexpr char Name[] = Text;
+#define AARCH64_STACK_PROBE_UINT(Name, Value)                                  \
+  inline constexpr unsigned Name = Value;
+#include "llvm/BinaryFormat/AArch64DarwinStackProbe.def"
+} // namespace AArch64StackProbe
 
 namespace yaml {
 struct AArch64FunctionInfo;
@@ -224,6 +231,7 @@ class AArch64FunctionInfo final : public MachineFunctionInfo {
   mutable std::optional<bool> NeedsAsyncDwarfUnwindInfo;
 
   int64_t StackProbeSize = 0;
+  bool DarwinStackProbe = false;
 
   // Holds a register containing pstate.sm. This is set
   // on function entry to record the initial pstate of a function.
@@ -603,6 +611,10 @@ public:
     HasStreamingModeChanges = HasChanges;
   }
 
+  bool hasDarwinStackProbe() const { return DarwinStackProbe; }
+  bool needsDarwinStackProbe(uint64_t Bytes) const {
+    return DarwinStackProbe && Bytes >= uint64_t(StackProbeSize);
+  }
   bool hasStackProbing() const { return StackProbeSize != 0; }
 
   int64_t getStackProbeSize() const { return StackProbeSize; }

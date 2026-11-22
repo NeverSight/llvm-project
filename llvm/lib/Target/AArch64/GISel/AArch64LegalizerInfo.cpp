@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "AArch64LegalizerInfo.h"
+#include "AArch64MachineFunctionInfo.h"
 #include "AArch64Subtarget.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/CodeGen/GlobalISel/GenericMachineInstrs.h"
@@ -2580,15 +2581,32 @@ bool AArch64LegalizerInfo::legalizeExtractVectorElt(
 
 bool AArch64LegalizerInfo::legalizeDynStackAlloc(
     MachineInstr &MI, LegalizerHelper &Helper) const {
+  assert(MI.getOpcode() == TargetOpcode::G_DYN_STACKALLOC);
+
   MachineFunction &MF = *MI.getParent()->getParent();
   MachineIRBuilder &MIRBuilder = Helper.MIRBuilder;
   MachineRegisterInfo &MRI = *MIRBuilder.getMRI();
 
-  // If stack probing is not enabled for this function, use the default
-  // lowering.
-  if (!MF.getFunction().hasFnAttribute("probe-stack") ||
-      MF.getFunction().getFnAttribute("probe-stack").getValueAsString() !=
-          "inline-asm") {
+  const auto *AFI = MF.getInfo<AArch64FunctionInfo>();
+  if (AFI->hasDarwinStackProbe()) {
+    MIRBuilder.setInstr(MI);
+    Register Size = MI.getOperand(1).getReg();
+    LLT Ty = MRI.getType(Size);
+    auto ByteCount = MIRBuilder.buildZExtOrTrunc(LLT::scalar(64), Size);
+    MIRBuilder.buildCopy(AArch64::X9, ByteCount);
+    const auto &ST = MF.getSubtarget<AArch64Subtarget>();
+    MIRBuilder.buildInstr(AArch64::StkChkIndirectCall)
+        .addRegMask(ST.getRegisterInfo()->getDarwinStackProbePreservedMask());
+    auto Mask = ST.getFrameLowering()->getStackAlign().value() - 1;
+    auto Rounded = MIRBuilder.buildAdd(
+        Ty, Size, MIRBuilder.buildConstant(Ty, Mask), MachineInstr::NoUWrap);
+    MI.getOperand(1).setReg(
+        MIRBuilder.buildAnd(Ty, Rounded, MIRBuilder.buildConstant(Ty, ~Mask))
+            .getReg(0));
+    return Helper.lowerDynStackAlloc(MI) == LegalizerHelper::Legalized;
+  }
+
+  if (!MF.getSubtarget().getTargetLowering()->hasInlineStackProbe(MF)) {
     Helper.lowerDynStackAlloc(MI);
     return true;
   }

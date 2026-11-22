@@ -10485,8 +10485,8 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
 
   if (CLI.PAI) {
     const uint64_t Key = CLI.PAI->Key;
-    assert((Key == AArch64PACKey::IA || Key == AArch64PACKey::IB) &&
-           "Invalid auth call key");
+    if (Key > AArch64PACKey::LAST)
+      report_fatal_error(AArch64PACKey::InvalidKey);
 
     // Split the discriminator into address/integer components.
     SDValue AddrDisc, IntDisc;
@@ -17738,6 +17738,8 @@ AArch64TargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
     return LowerWindowsDYNAMIC_STACKALLOC(Op, DAG);
   else if (hasInlineStackProbe(MF))
     return LowerInlineDYNAMIC_STACKALLOC(Op, DAG);
+  else if (MF.getInfo<AArch64FunctionInfo>()->hasDarwinStackProbe())
+    return LowerDarwinDYNAMIC_STACKALLOC(Op, DAG);
   else
     return SDValue();
 }
@@ -17749,6 +17751,54 @@ SDValue AArch64TargetLowering::LowerAVG(SDValue Op, SelectionDAG &DAG,
 
   // Default to expand.
   return SDValue();
+}
+
+SDValue
+AArch64TargetLowering::LowerDarwinDYNAMIC_STACKALLOC(SDValue Op,
+                                                     SelectionDAG &DAG) const {
+  assert(Subtarget->isTargetDarwin());
+  SDLoc DL(Op);
+  // Get the inputs.
+  SDNode *Node = Op.getNode();
+  SDValue Chain = Op.getOperand(0);
+  SDValue Size = DAG.getZExtOrTrunc(Op.getOperand(1), DL, MVT::i64);
+
+  MaybeAlign Align =
+      cast<ConstantSDNode>(Op.getOperand(2))->getMaybeAlignValue();
+  EVT VT = Node->getValueType(0);
+
+  Chain = DAG.getCALLSEQ_START(Chain, 0, 0, DL);
+
+  Chain = DAG.getCopyToReg(Chain, DL, AArch64::X9, Size, SDValue());
+  const auto Mask =
+      Subtarget->getRegisterInfo()->getDarwinStackProbePreservedMask();
+  auto CallPseudo = DAG.getMachineNode(AArch64::StkChkIndirectCall, DL,
+                                       MVT::Other, DAG.getRegisterMask(Mask),
+                                       Chain.getValue(0), Chain.getValue(1));
+  Chain = SDValue(CallPseudo, 0);
+
+  // For Darwin arm64 we delayed rounding up to stack alignment so we could do
+  // the check before any potential overflow occurred. Now we do it here.
+  auto MaskBytes = Subtarget->getFrameLowering()->getStackAlign().value() - 1;
+  SDNodeFlags Flags;
+  Flags.setNoUnsignedWrap(true);
+  Size = DAG.getNode(ISD::ADD, DL, Size.getValueType(), Size,
+                     DAG.getConstant(MaskBytes, DL, MVT::i64), Flags);
+  Size = DAG.getNode(ISD::AND, DL, Size.getValueType(), Size,
+                     DAG.getConstant(~MaskBytes, DL, MVT::i64));
+
+  SDValue SP = DAG.getCopyFromReg(Chain, DL, AArch64::SP, MVT::i64);
+  Chain = SP.getValue(1);
+  SP = DAG.getNode(ISD::SUB, DL, MVT::i64, SP, Size);
+  if (Align)
+    SP = DAG.getNode(ISD::AND, DL, MVT::i64, SP,
+                     DAG.getConstant(-(uint64_t)Align->value(), DL, MVT::i64));
+  Chain = DAG.getCopyToReg(Chain, DL, AArch64::SP, SP);
+
+  Chain = DAG.getCALLSEQ_END(Chain, 0, 0, SDValue(), DL);
+
+  SDValue Ops[2] = {DAG.getZExtOrTrunc(SP, DL, VT), Chain};
+  return DAG.getMergeValues(Ops, DL);
 }
 
 SDValue AArch64TargetLowering::LowerVSCALE(SDValue Op,
@@ -31645,6 +31695,18 @@ void AArch64TargetLowering::finalizeLowering(MachineFunction &MF) const {
 // Unlike X86, we let frame lowering assign offsets to all catch objects.
 bool AArch64TargetLowering::needsFixedCatchObjects() const { return true; }
 
+bool AArch64TargetLowering::probesUnroundedDynamicAlloca(
+    const MachineFunction &MF) const {
+  return MF.getInfo<AArch64FunctionInfo>()->hasDarwinStackProbe();
+}
+
+StringRef AArch64TargetLowering::getStackProbeSymbolName(
+    const MachineFunction &MF) const {
+  return MF.getInfo<AArch64FunctionInfo>()->hasDarwinStackProbe()
+             ? AArch64StackProbe::Helper
+             : StringRef();
+}
+
 bool AArch64TargetLowering::shouldLocalize(
     const MachineInstr &MI, const TargetTransformInfo *TTI) const {
   auto &MF = *MI.getMF();
@@ -33983,8 +34045,9 @@ unsigned AArch64TargetLowering::getVectorTypeBreakdownForCallingConv(
 
 bool AArch64TargetLowering::hasInlineStackProbe(
     const MachineFunction &MF) const {
-  return !Subtarget->isTargetWindows() &&
-         MF.getInfo<AArch64FunctionInfo>()->hasStackProbing();
+  const auto *AFI = MF.getInfo<AArch64FunctionInfo>();
+  return !Subtarget->isTargetWindows() && AFI->hasStackProbing() &&
+         !AFI->hasDarwinStackProbe();
 }
 
 bool AArch64TargetLowering::isTypeDesirableForOp(unsigned Opc, EVT VT) const {

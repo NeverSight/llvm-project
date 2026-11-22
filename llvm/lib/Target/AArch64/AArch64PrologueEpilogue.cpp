@@ -333,7 +333,8 @@ bool AArch64PrologueEpilogueCommon::shouldCombineCSRLocalStackBump(
   // 512 is the maximum immediate for stp/ldp that will be used for
   // callee-save save/restores
   if (StackBumpBytes >= 512 ||
-      AFL.windowsRequiresStackProbe(MF, StackBumpBytes))
+      AFL.windowsRequiresStackProbe(MF, StackBumpBytes) ||
+      AFI->needsDarwinStackProbe(StackBumpBytes))
     return false;
 
   if (MFI.hasVarSizedObjects())
@@ -478,6 +479,33 @@ void AArch64PrologueEmitter::verifyPrologueClobbers() const {
   // Check if any of the newly instructions clobber any of the live registers.
   for (MachineInstr &MI :
        make_range(MBB.instr_begin(), PrologueEndI->getIterator())) {
+
+    const AArch64FunctionInfo &MFI = *MF.getInfo<AArch64FunctionInfo>();
+    if (MFI.hasDarwinStackProbe()) {
+      // Darwin stack probing may spill some live registers and restore them
+      // later. Update their liveness here accordingly.
+      auto StackProbeSpilledReg = [](Register Reg) {
+        return Reg == AArch64::X9 || Reg == AArch64::X10 ||
+               Reg == AArch64::X11 || Reg == AArch64::X12 ||
+               Reg == AArch64::X16 || Reg == AArch64::X17;
+      };
+      if (MI.getOpcode() == AArch64::STPXpre) {
+        Register R1 = MI.getOperand(1).getReg();
+        Register R2 = MI.getOperand(2).getReg();
+        if (StackProbeSpilledReg(R1))
+          LiveRegs.removeReg(R1);
+        if (StackProbeSpilledReg(R2))
+          LiveRegs.removeReg(R2);
+      } else if (MI.getOpcode() == AArch64::LDPXpost) {
+        Register R1 = MI.getOperand(1).getReg();
+        Register R2 = MI.getOperand(2).getReg();
+        if (StackProbeSpilledReg(R1))
+          LiveRegs.addReg(R1);
+        if (StackProbeSpilledReg(R2))
+          LiveRegs.addReg(R2);
+      }
+    }
+
     for (auto &Op : MI.operands())
       if (Op.isReg() && Op.isDef())
         assert(!LiveRegs.contains(Op.getReg()) &&
@@ -831,6 +859,9 @@ void AArch64PrologueEmitter::emitPrologue() {
   assert(!(AFL.canUseRedZone(MF) && NeedsRealignment) &&
          "Cannot use redzone with stack realignment");
   if (!AFL.canUseRedZone(MF)) {
+    if (AFI->needsDarwinStackProbe(NumBytes + RealignmentPadding))
+      emitDarwinStackProbe(AfterSVESavesI, DL, NumBytes + RealignmentPadding,
+                           CFAOffset.getFixed());
     // FIXME: in the case of dynamic re-alignment, NumBytes doesn't have the
     // correct value here, as NumBytes also includes padding bytes, which
     // shouldn't be counted here.
@@ -995,6 +1026,9 @@ void AArch64PrologueEmitter::emitEmptyStackFramePrologue(
     AFI->setHasRedZone(true);
     ++NumRedZoneFunctions;
   } else {
+    if (AFI->needsDarwinStackProbe(NumBytes))
+      emitDarwinStackProbe(MBBI, DL, NumBytes);
+
     emitFrameOffset(MBB, MBBI, DL, AArch64::SP, AArch64::SP,
                     StackOffset::getFixed(-NumBytes), TII,
                     MachineInstr::FrameSetup, false, NeedsWinCFI, &HasWinCFI);
@@ -1079,6 +1113,89 @@ void AArch64PrologueEmitter::emitDefineCFAWithFP(
   Register FramePtr = RegInfo.getFrameRegister(MF);
   CFIInstBuilder(MBB, MBBI, MachineInstr::FrameSetup)
       .buildDefCFA(FramePtr, FixedObject - OffsetToFirstCalleeSaveFromFP);
+}
+
+void AArch64PrologueEmitter::emitDarwinStackProbe(
+    MachineBasicBlock::iterator MBBI, DebugLoc DL, uint64_t NumBytes,
+    int64_t CFAOffset) const {
+  const bool SavedLR =
+      llvm::any_of(MFI.getCalleeSavedInfo(),
+                   [](const auto &SI) { return SI.getReg() == AArch64::LR; });
+  const int64_t SlotBytes = AFL.getStackAlign().value();
+  const int64_t PairOffset = SlotBytes / int64_t(sizeof(uint64_t));
+  CFIInstBuilder CFI(MBB, MBBI, MachineInstr::FrameSetup);
+  const bool TrackSP = EmitAsyncCFI && !HasFP;
+  if (!SavedLR) {
+    BuildMI(MBB, MBBI, DL, TII->get(AArch64::STRXpre), AArch64::SP)
+        .addReg(AArch64::LR)
+        .addReg(AArch64::SP)
+        .addImm(-SlotBytes)
+        .setMIFlag(MachineInstr::FrameSetup);
+    if (TrackSP) {
+      CFI.buildAdjustCFAOffset(SlotBytes);
+      CFI.buildOffset(AArch64::LR, -CFAOffset - SlotBytes);
+    }
+  }
+
+  // At a shrink-wrapped entry or with a custom calling convention, IP and
+  // the helper's scratch registers can still contain live function values.
+  const auto Live = [&](MCRegister Reg) {
+    return llvm::any_of(MBB.liveins(), [&](const auto &Use) {
+      return RegInfo.regsOverlap(Use.PhysReg, Reg);
+    });
+  };
+  SmallVector<std::pair<MCRegister, MCRegister>, 3> Saved;
+  for (auto Pair : {std::pair{AArch64::X9, AArch64::X10},
+                    std::pair{AArch64::X11, AArch64::X12},
+                    std::pair{AArch64::X16, AArch64::X17}}) {
+    const auto [Lo, Hi] = Pair;
+    bool LoLive = Live(Lo), HiLive = Live(Hi);
+    if (!LoLive && !HiLive)
+      continue;
+    Saved.emplace_back(Lo, Hi);
+    BuildMI(MBB, MBBI, DL, TII->get(AArch64::STPXpre), AArch64::SP)
+        .addReg(Lo, getUndefRegState(!LoLive))
+        .addReg(Hi, getUndefRegState(!HiLive))
+        .addReg(AArch64::SP)
+        .addImm(-PairOffset)
+        .setMIFlag(MachineInstr::FrameSetup);
+    if (TrackSP)
+      CFI.buildAdjustCFAOffset(SlotBytes);
+  }
+
+  // The Darwin helper takes a byte count in x9.
+  bool FitsW9 = isUInt<32>(NumBytes);
+  BuildMI(MBB, MBBI, DL,
+          TII->get(FitsW9 ? AArch64::MOVi32imm : AArch64::MOVi64imm),
+          FitsW9 ? AArch64::W9 : AArch64::X9)
+      .addImm(NumBytes)
+      .setMIFlags(MachineInstr::FrameSetup);
+
+  BuildMI(MBB, MBBI, DL, TII->get(AArch64::StkChkIndirectCall))
+      .addRegMask(RegInfo.getDarwinStackProbePreservedMask())
+      .setMIFlags(MachineInstr::FrameSetup);
+
+  for (auto [Lo, Hi] : llvm::reverse(Saved)) {
+    BuildMI(MBB, MBBI, DL, TII->get(AArch64::LDPXpost), AArch64::SP)
+        .addReg(Lo, RegState::Define)
+        .addReg(Hi, RegState::Define)
+        .addReg(AArch64::SP)
+        .addImm(PairOffset)
+        .setMIFlag(MachineInstr::FrameSetup);
+    if (TrackSP)
+      CFI.buildAdjustCFAOffset(-SlotBytes);
+  }
+  if (!SavedLR) {
+    BuildMI(MBB, MBBI, DL, TII->get(AArch64::LDRXpost), AArch64::SP)
+        .addReg(AArch64::LR, RegState::Define)
+        .addReg(AArch64::SP)
+        .addImm(SlotBytes)
+        .setMIFlag(MachineInstr::FrameSetup);
+    if (TrackSP) {
+      CFI.buildAdjustCFAOffset(-SlotBytes);
+      CFI.buildRestore(AArch64::LR);
+    }
+  }
 }
 
 void AArch64PrologueEmitter::emitWindowsStackProbe(

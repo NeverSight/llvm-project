@@ -130,11 +130,11 @@ AArch64FunctionInfo::AArch64FunctionInfo(const Function &F,
   // The default stack probe size is 4096 if the function has no
   // stack-probe-size attribute. This is a safe default because it is the
   // smallest possible guard page size.
-  uint64_t ProbeSize = 4096;
-  if (F.hasFnAttribute("stack-probe-size"))
-    ProbeSize = F.getFnAttributeAsParsedInteger("stack-probe-size");
+  uint64_t ProbeSize = AArch64StackProbe::DefaultProbeSize;
+  if (F.hasFnAttribute(AArch64StackProbe::SizeAttr))
+    ProbeSize = F.getFnAttributeAsParsedInteger(AArch64StackProbe::SizeAttr);
   else if (const auto *PS = mdconst::extract_or_null<ConstantInt>(
-               F.getParent()->getModuleFlag("stack-probe-size")))
+               F.getParent()->getModuleFlag(AArch64StackProbe::SizeAttr)))
     ProbeSize = PS->getZExtValue();
   assert(int64_t(ProbeSize) > 0 && "Invalid stack probe size");
 
@@ -147,14 +147,17 @@ AArch64FunctionInfo::AArch64FunctionInfo(const Function &F,
         STI->getFrameLowering()->getTransientStackAlign().value();
     ProbeSize = std::max(StackAlign, ProbeSize & ~(StackAlign - 1U));
     StringRef ProbeKind;
-    if (F.hasFnAttribute("probe-stack"))
-      ProbeKind = F.getFnAttribute("probe-stack").getValueAsString();
+    if (F.hasFnAttribute(AArch64StackProbe::MethodAttr))
+      ProbeKind =
+          F.getFnAttribute(AArch64StackProbe::MethodAttr).getValueAsString();
     else if (const auto *PS = dyn_cast_or_null<MDString>(
-                 F.getParent()->getModuleFlag("probe-stack")))
+                 F.getParent()->getModuleFlag(AArch64StackProbe::MethodAttr)))
       ProbeKind = PS->getString();
-    if (ProbeKind.size()) {
-      if (ProbeKind != "inline-asm")
-        report_fatal_error("Unsupported stack probing method");
+    if (!ProbeKind.empty()) {
+      DarwinStackProbe =
+          STI->isTargetDarwin() && ProbeKind == AArch64StackProbe::Helper;
+      if (!DarwinStackProbe && ProbeKind != AArch64StackProbe::Inline)
+        report_fatal_error(AArch64StackProbe::Unsupported);
       StackProbeSize = ProbeSize;
     }
   }

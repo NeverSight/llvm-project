@@ -1,0 +1,13 @@
+//===- AArch64AuthenticatedCalls.def - Authenticated calls ------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+AARCH64_AUTH_CALL_TEXT(InvalidKey, "Invalid authenticated call key")
+AARCH64_AUTH_CALL_TEXT(AddressDiverseSuffix, "$addr")
+AARCH64_AUTH_CALL_UINT(DataKeyExtraBytes, 8)
+#undef AARCH64_AUTH_CALL_UINT
+#undef AARCH64_AUTH_CALL_TEXT

@@ -808,3 +808,11 @@ def CSR_AArch64_SVE_AAPCS_SCS
     : CalleeSavedRegs<(add CSR_AArch64_SVE_AAPCS, X18)>;
 def CSR_AArch64_AAPCS_SCS
     : CalleeSavedRegs<(add CSR_AArch64_AAPCS, X18)>;
+
+// The Darwin stack helper clobbers X9-X11, the call veneer uses IP0/IP1,
+// and the call itself clobbers LR.
+def CSR_AArch64_StackProbe_Darwin
+    : CalleeSavedRegs<(add (sequence "X%u", 0, 8),
+                           (sequence "X%u", 12, 15),
+                           (sequence "X%u", 18, 28), FP, SP,
+                           (sequence "Q%u", 0, 31))>;
