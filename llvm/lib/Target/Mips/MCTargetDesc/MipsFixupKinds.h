@@ -39,6 +39,12 @@ enum Fixups {
 
   // Jump 26 bit fixup resulting in - R_MIPS_26.
   fixup_Mips_26,
+  fixup_Mips16_26, // R_MIPS16_26, two instruction-order halfwords.
+  fixup_Mips16_HI16,
+  fixup_Mips16_LO16,
+  fixup_Mips16_GOT16,
+  fixup_Mips16_CALL16,
+  fixup_Mips16_GPREL,
 
   // Pure upper 16 bit fixup resulting in - R_MIPS_HI16.
   fixup_Mips_HI16,

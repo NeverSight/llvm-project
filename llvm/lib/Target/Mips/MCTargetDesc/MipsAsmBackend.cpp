@@ -22,8 +22,10 @@
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCSymbolELF.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/MCValue.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -31,7 +33,7 @@
 using namespace llvm;
 
 // Prepare value for the target space for it
-static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
+static uint64_t adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
                                  MCContext &Ctx) {
 
   unsigned Kind = Fixup.getKind();
@@ -41,6 +43,10 @@ static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
   default:
     return 0;
   case FK_Data_2:
+  case Mips::fixup_Mips16_LO16:
+  case Mips::fixup_Mips16_GPREL:
+  case Mips::fixup_Mips16_CALL16:
+  case Mips::fixup_Mips_16:
   case Mips::fixup_Mips_LO16:
   case Mips::fixup_Mips_GPREL16:
   case Mips::fixup_Mips_GPOFF_HI:
@@ -71,6 +77,8 @@ static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
   case Mips::fixup_Mips_TPREL64:
   case FK_Data_4:
   case FK_Data_8:
+  case Mips::fixup_Mips_32:
+  case Mips::fixup_Mips_64:
   case Mips::fixup_Mips_SUB:
   case Mips::fixup_MICROMIPS_SUB:
     break;
@@ -94,12 +102,15 @@ static unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
       return 0;
     }
     break;
+  case Mips::fixup_Mips16_26:
   case Mips::fixup_Mips_26:
     // So far we are only using this type for jumps.
     // The displacement is then divided by 4 to give us an 28 bit
     // address range.
     Value >>= 2;
     break;
+  case Mips::fixup_Mips16_HI16:
+  case Mips::fixup_Mips16_GOT16:
   case Mips::fixup_Mips_HI16:
   case Mips::fixup_Mips_GOT:
   case Mips::fixup_MICROMIPS_GOT16:
@@ -226,9 +237,10 @@ MipsAsmBackend::createObjectTargetWriter() const {
 //   microMIPS:  x | x | a | b
 
 static bool needsMMLEByteOrder(unsigned Kind) {
-  return Kind != Mips::fixup_MICROMIPS_PC10_S1 &&
-         Kind >= Mips::fixup_MICROMIPS_26_S1 &&
-         Kind < Mips::LastTargetFixupKind;
+  return Kind == Mips::fixup_Mips16_26 ||
+         (Kind != Mips::fixup_MICROMIPS_PC10_S1 &&
+          Kind >= Mips::fixup_MICROMIPS_26_S1 &&
+          Kind < Mips::LastTargetFixupKind);
 }
 
 // Calculate index for microMIPS specific little endian byte order
@@ -243,6 +255,8 @@ static bool shouldForceRelocation(const MCFixup &Fixup) {
   switch (FixupKind) {
   default:
     return false;
+  case Mips::fixup_Mips16_CALL16:
+  case Mips::fixup_Mips16_GOT16:
   // All these relocations require special processing
   // at linking time. Delegate this work to a linker.
   case Mips::fixup_Mips_CALL_HI16:
@@ -279,21 +293,194 @@ static bool shouldForceRelocation(const MCFixup &Fixup) {
   }
 }
 
+// The ELF linker folds the ISA mode into a compressed code address before
+// adding the relocation addend. A resolved final-image fixup has no linker.
+static bool materializesMipsAddress(MCFixupKind Kind) {
+  switch ((unsigned)Kind) {
+  case FK_Data_4:
+  case FK_Data_8:
+  case Mips::fixup_Mips_32:
+  case Mips::fixup_Mips_64:
+  case Mips::fixup_Mips16_HI16:
+  case Mips::fixup_Mips16_LO16:
+  case Mips::fixup_Mips_HI16:
+  case Mips::fixup_Mips_LO16:
+  case Mips::fixup_Mips_HIGHER:
+  case Mips::fixup_Mips_HIGHEST:
+  case Mips::fixup_MICROMIPS_HI16:
+  case Mips::fixup_MICROMIPS_LO16:
+  case Mips::fixup_MICROMIPS_HIGHER:
+  case Mips::fixup_MICROMIPS_HIGHEST:
+    return true;
+  default:
+    return false;
+  }
+}
+
+// A locally defined compressed symbol has an even section offset and an ELF
+// mode tag. An external resolver returns the callable address with bit zero
+// set.
+static unsigned compressedMode(const MCSymbolELF &Symbol) {
+  unsigned Other = Symbol.getOther();
+  if ((Other & ELF::STO_MIPS_MIPS16) == ELF::STO_MIPS_MIPS16)
+    return ELF::STO_MIPS_MIPS16;
+  return Other & ELF::STO_MIPS_MICROMIPS;
+}
+
+static bool isPseudoDirectJump(MCFixupKind Kind) {
+  return Kind == Mips::fixup_Mips_26 || Kind == Mips::fixup_Mips16_26 ||
+         Kind == Mips::fixup_MICROMIPS_26_S1;
+}
+
+static bool needsGPOrTLSBase(MCFixupKind Kind) {
+  switch (static_cast<unsigned>(Kind)) {
+  case Mips::fixup_Mips16_GPREL:
+  case Mips::fixup_Mips_GPREL16:
+  case Mips::fixup_Mips_GPREL32:
+  case Mips::fixup_Mips_LITERAL:
+  case Mips::fixup_Mips_GPOFF_HI:
+  case Mips::fixup_Mips_GPOFF_LO:
+  case Mips::fixup_MICROMIPS_GPOFF_HI:
+  case Mips::fixup_MICROMIPS_GPOFF_LO:
+  case Mips::fixup_Mips_DTPREL32:
+  case Mips::fixup_Mips_DTPREL64:
+  case Mips::fixup_Mips_TPREL32:
+  case Mips::fixup_Mips_TPREL64:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static uint32_t mips16JumpField(uint32_t Word) {
+  return (Word & 0xffff) | ((Word & 0x1f0000) << 5) | ((Word & 0x3e00000) >> 5);
+}
+
+// The jump instruction concatenates high bits of PC+4 with its immediate.
+// JALX exchanges ISA mode and, for microMIPS, also changes the target scale.
+static void applyFinalJump(MCContext &Ctx, endianness Endian,
+                           const MCFixup &Fixup, const MCValue &Target,
+                           uint8_t *Data, uint64_t Value, uint64_t NextPC) {
+  const bool Micro = Fixup.getKind() == Mips::fixup_MICROMIPS_26_S1;
+  const bool Mips16 = Fixup.getKind() == Mips::fixup_Mips16_26;
+  unsigned Mode = 0;
+  if (const auto *Sym = Target.getAddSym(); Sym && Sym->isInSection()) {
+    Mode = compressedMode(*static_cast<const MCSymbolELF *>(Sym));
+  } else if ((Value - Target.getConstant()) & 1) {
+    // The external pointer distinguishes classic from compressed; direct calls
+    // between MIPS16 and microMIPS require a linker stub.
+    Mode = Mips16 ? ELF::STO_MIPS_MIPS16 : ELF::STO_MIPS_MICROMIPS;
+    --Value;
+  }
+  if ((Micro && Mode == ELF::STO_MIPS_MIPS16) ||
+      (Mips16 && Mode == ELF::STO_MIPS_MICROMIPS)) {
+    Ctx.reportError(Fixup.getLoc(), "direct call between MIPS16 and microMIPS");
+    return;
+  }
+  bool Exchange = bool(Mode) != (Micro || Mips16);
+  unsigned Scale = Micro && !Exchange ? 1 : 2;
+  if ((Value & ((1u << Scale) - 1)) || ((Value ^ NextPC) >> (26 + Scale))) {
+    Ctx.reportError(Fixup.getLoc(),
+                    "MIPS jump target is misaligned or outside the PC region");
+    return;
+  }
+  uint32_t Field = (Value >> Scale) & 0x03ffffff;
+  if (Mips16) {
+    Field = mips16JumpField(Field);
+    support::endian::write16(Data, (Exchange ? 0x1c00 : 0x1800) | (Field >> 16),
+                             Endian);
+    support::endian::write16(Data + 2, Field, Endian);
+    return;
+  }
+  unsigned Opcode = Micro ? support::endian::read16(Data, Endian) >> 10
+                          : support::endian::read32(Data, Endian) >> 26;
+  const unsigned Jal = Micro ? 0x3d : 0x03, Jalx = Micro ? 0x3c : 0x1d;
+  if (Opcode == Jal || Opcode == Jalx)
+    Opcode = Exchange ? Jalx : Jal;
+  else if (Exchange) {
+    Ctx.reportError(Fixup.getLoc(),
+                    "MIPS jump requires a linker stub to exchange ISA mode");
+    return;
+  }
+  const uint32_t Word = (uint32_t(Opcode) << 26) | Field;
+  if (Micro) {
+    support::endian::write16(Data, Word >> 16, Endian);
+    support::endian::write16(Data + 2, Word, Endian);
+  } else
+    support::endian::write32(Data, Word, Endian);
+}
+
 /// ApplyFixup - Apply the \p Value for given \p Fixup into the provided
 /// data fragment, at the offset specified by the fixup and following the
 /// fixup kind as appropriate.
 void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
                                 const MCValue &Target, uint8_t *Data,
                                 uint64_t Value, bool IsResolved) {
-  if (shouldForceRelocation(Fixup))
-    IsResolved = false;
-  maybeAddReloc(F, Fixup, Target, Value, IsResolved);
   MCFixupKind Kind = Fixup.getKind();
+  bool ForceRelocation = shouldForceRelocation(Fixup);
+  if ((ForceRelocation || needsGPOrTLSBase(Kind)) &&
+      TheTriple.isOSBinFormatELF() &&
+      !dynamic_cast<ELFObjectWriter *>(&Asm->getWriter())) {
+    getContext().reportError(
+        Fixup.getLoc(), Twine("MIPS final image requires an ELF linker for ") +
+                            getFixupKindInfo(Kind).Name);
+    return;
+  }
+  if (ForceRelocation)
+    IsResolved = false;
+  if (TheTriple.isOSBinFormatELF() && IsResolved && isPseudoDirectJump(Kind)) {
+    if (auto PC = Asm->getWriter().getFinalFixupVA(F, Fixup)) {
+      uint64_t NextPC = *PC + 4;
+      if (TheTriple.isArch32Bit())
+        NextPC = static_cast<uint32_t>(NextPC);
+      applyFinalJump(getContext(), Endian, Fixup, Target, Data, Value, NextPC);
+      return;
+    }
+  }
+  if (TheTriple.isOSBinFormatELF() && IsResolved && !Fixup.isPCRel() &&
+      !Target.getSubSym() && materializesMipsAddress(Kind))
+    if (const auto *Symbol = Target.getAddSym();
+        Symbol && Symbol->isInSection())
+      if (compressedMode(*static_cast<const MCSymbolELF *>(Symbol)))
+        ++Value;
+  maybeAddReloc(F, Fixup, Target, Value, IsResolved);
   MCContext &Ctx = getContext();
-  Value = adjustFixupValue(Fixup, Value, Ctx);
+  // O32 REL stores JAL's word addend in linear order. The final encoding
+  // swaps the two five-bit fields and uses JALX for a classic callee.
+  if (IsResolved && Kind == Mips::fixup_Mips16_26) {
+    const MCSymbol *Symbol = Target.getAddSym();
+    unsigned Mode =
+        Symbol && Symbol->isInSection()
+            ? compressedMode(*static_cast<const MCSymbolELF *>(Symbol))
+            : ((Value & 1) ? ELF::STO_MIPS_MIPS16 : 0);
+    if (Mode == ELF::STO_MIPS_MICROMIPS || (Value & 2)) {
+      Ctx.reportError(Fixup.getLoc(), "invalid target for MIPS16 JAL");
+      return;
+    }
+    if (!Mode)
+      Data[Endian == llvm::endianness::little ? 1 : 0] |= 4;
+    uint32_t Word = (Value >> 2) & 0x03ffffff;
+    Value = mips16JumpField(Word);
+  } else if (Kind == Mips::fixup_MICROMIPS_26_S1 &&
+             (support::endian::read16(Data, Endian) >> 10) == 0x3c) {
+    // The microMIPS JALX REL addend is word-scaled even though it uses
+    // R_MICROMIPS_26_S1 like JAL.
+    Value >>= 2;
+  } else
+    Value = adjustFixupValue(Fixup, Value, Ctx);
 
   if (!Value)
     return; // Doesn't change encoding.
+
+  if (Kind >= Mips::fixup_Mips16_HI16 && Kind <= Mips::fixup_Mips16_GPREL) {
+    // EXTEND carries bits 10:5 and 15:11. The opcode halfword carries 4:0.
+    uint16_t Ext = support::endian::read16(Data, Endian);
+    uint16_t Op = support::endian::read16(Data + 2, Endian);
+    support::endian::write16(Data, Ext | (Value & 0x7e0) | ((Value >> 11) & 31),
+                             Endian);
+    support::endian::write16(Data + 2, Op | (Value & 31), Endian);
+    return;
+  }
 
   // Where do we start in the object
   // Number of bytes we need to fixup
@@ -406,6 +593,12 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_Mips_TPREL32",      0,     32,   0 },
     { "fixup_Mips_TPREL64",      0,     64,   0 },
     { "fixup_Mips_26",           0,     26,   0 },
+    { "fixup_Mips16_26",         0,     26,   0 },
+    { "fixup_Mips16_HI16", 0, 16, 0 },
+    { "fixup_Mips16_LO16", 0, 16, 0 },
+    { "fixup_Mips16_GOT16", 0, 16, 0 },
+    { "fixup_Mips16_CALL16", 0, 16, 0 },
+    { "fixup_Mips16_GPREL", 0, 16, 0 },
     { "fixup_Mips_HI16",         0,     16,   0 },
     { "fixup_Mips_LO16",         0,     16,   0 },
     { "fixup_Mips_AnyImm16",     0,     16,   0 },
@@ -492,6 +685,12 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_Mips_TPREL32",      0,     32,   0 },
     { "fixup_Mips_TPREL64",      0,     64,   0 },
     { "fixup_Mips_26",           6,     26,   0 },
+    { "fixup_Mips16_26",         6,     26,   0 },
+    { "fixup_Mips16_HI16", 0, 16, 0 },
+    { "fixup_Mips16_LO16", 0, 16, 0 },
+    { "fixup_Mips16_GOT16", 0, 16, 0 },
+    { "fixup_Mips16_CALL16", 0, 16, 0 },
+    { "fixup_Mips16_GPREL", 0, 16, 0 },
     { "fixup_Mips_HI16",        16,     16,   0 },
     { "fixup_Mips_LO16",        16,     16,   0 },
     { "fixup_Mips_AnyImm16",    16,     16,   0 },

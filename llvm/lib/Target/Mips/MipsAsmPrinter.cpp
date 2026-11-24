@@ -818,7 +818,7 @@ void MipsAsmPrinter::emitInlineAsmEnd(const MCSubtargetInfo &StartInfo,
                                       const MCSubtargetInfo *EndInfo,
                                       const MachineInstr *MI) {
   OutStreamer->addBlankLine();
-  getTargetStreamer().emitDirectiveSetPop();
+  getTargetStreamer().emitDirectiveSetPop(StartInfo);
 }
 
 void MipsAsmPrinter::emitJumpTableEntry(const MachineJumpTableInfo &MJTI,

@@ -152,6 +152,43 @@ void MipsMCCodeEmitter::EmitByte(unsigned char C, raw_ostream &OS) const {
   OS << (char)C;
 }
 
+uint64_t
+MipsMCCodeEmitter::getMips16FrameEncoding(const MCInst &MI, uint64_t Encoding,
+                                          const MCSubtargetInfo &) const {
+  const bool Extended =
+      MI.getOpcode() == Mips::SaveX16 || MI.getOpcode() == Mips::RestoreX16;
+  const int64_t Frame = MI.getOperand(MI.getNumOperands() - 1).getImm();
+  if ((Frame & 7) || !isUInt<11>(Frame) ||
+      (!Extended && (!Frame || Frame > 128))) {
+    Ctx.reportError(MI.getLoc(), "unencodable MIPS16 SAVE/RESTORE frame size");
+    return 0;
+  }
+  unsigned Units = Frame / 8;
+  Encoding |= Units & 15;
+  unsigned Prefix = 0xf000 | (Units & 0xf0);
+  for (unsigned I = 0; I + 1 < MI.getNumOperands(); ++I) {
+    switch (MI.getOperand(I).getReg().id()) {
+    case Mips::RA:
+      Encoding |= 0x40;
+      break;
+    case Mips::S0:
+      Encoding |= 0x20;
+      break;
+    case Mips::S1:
+      Encoding |= 0x10;
+      break;
+    case Mips::S2:
+      assert(Extended && "S2 needs extended SAVE/RESTORE");
+      Prefix |= 0x100;
+      break;
+    default:
+      Ctx.reportError(MI.getLoc(), "unencodable MIPS16 SAVE/RESTORE register");
+      return 0;
+    }
+  }
+  return Encoding | (Extended ? uint64_t(Prefix) << 16 : 0);
+}
+
 /// encodeInstruction - Emit the instruction.
 /// Size the instruction with Desc.getSize().
 void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
@@ -163,8 +200,22 @@ void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
   // If this list of instructions get much longer we will move
   // the check to a function call. Until then, this is more efficient.
   MCInst TmpInst = MI;
+  const auto &InputDesc = MCII.get(MI.getOpcode());
+  if ((InputDesc.TSFlags & MipsII::IsMips16) && InputDesc.isPseudo()) {
+    Ctx.reportError(MI.getLoc(), Twine("unexpanded MIPS16 instruction: ") +
+                                     MCII.getName(MI.getOpcode()));
+    return;
+  }
   switch (MI.getOpcode()) {
   // If shift amount is >= 32 it the inst needs to be lowered further
+  case Mips::LwRxSpImmX16:
+  case Mips::SwRxSpImmX16:
+    // Frame-index elimination can also select a compact GPR as the base.
+    if (MI.getOperand(1).getReg() != Mips::SP)
+      TmpInst.setOpcode(MI.getOpcode() == Mips::LwRxSpImmX16
+                            ? Mips::LwRxRyOffMemX16
+                            : Mips::SwRxRyOffMemX16);
+    break;
   case Mips::DSLL:
   case Mips::DSRL:
   case Mips::DSRA:
@@ -234,12 +285,16 @@ void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
       IsLittleEndian ? llvm::endianness::little : llvm::endianness::big;
   if (Size == 2) {
     support::endian::write<uint16_t>(CB, Binary, Endian);
-  } else if (IsLittleEndian && isMicroMips(STI)) {
+  } else if (IsLittleEndian &&
+             (isMicroMips(STI) || (Desc.TSFlags & MipsII::IsMips16))) {
     support::endian::write<uint16_t>(CB, Binary >> 16, Endian);
     support::endian::write<uint16_t>(CB, Binary & 0xffff, Endian);
   } else {
     support::endian::write<uint32_t>(CB, Binary, Endian);
   }
+  // These six-byte call sequences own their delay slot in the assembly form.
+  if (Opcode == Mips::Jal16 || Opcode == Mips::JalB16)
+    support::endian::write<uint16_t>(CB, 0x6500, Endian); // move $zero,$s0
 }
 
 /// getBranchTargetOpValue - Return binary encoding of the branch
@@ -508,7 +563,12 @@ getJumpTargetOpValue(const MCInst &MI, unsigned OpNo,
          "getJumpTargetOpValue expects only expressions or an immediate");
 
   const MCExpr *Expr = MO.getExpr();
-  addFixup(Fixups, 0, Expr, Mips::fixup_Mips_26);
+  auto Kind = Mips::fixup_Mips_26;
+  if (MCII.get(MI.getOpcode()).TSFlags & MipsII::IsMips16)
+    Kind = Mips::fixup_Mips16_26;
+  else if (MI.getOpcode() == Mips::JALX_MM)
+    Kind = Mips::fixup_MICROMIPS_26_S1;
+  addFixup(Fixups, 0, Expr, Kind);
   return 0;
 }
 
@@ -741,7 +801,38 @@ unsigned MipsMCCodeEmitter::getImmOpValue(const MCInst &MI, const MCOperand &MO,
   int64_t Res;
   if (Expr->evaluateAsAbsolute(Res))
     return Res;
-  unsigned MIFrm = MipsII::getFormat(MCII.get(MI.getOpcode()).TSFlags);
+  auto Flags = MCII.get(MI.getOpcode()).TSFlags;
+  if (Flags & MipsII::IsMips16) {
+    const auto *Spec = dyn_cast<MCSpecifierExpr>(Expr);
+    if (Spec && !Mips::isGpOff(*Spec)) {
+      Mips::Fixups Kind;
+      switch (Spec->getSpecifier()) {
+      case Mips::S_HI:
+        Kind = Mips::fixup_Mips16_HI16;
+        break;
+      case Mips::S_LO:
+        Kind = Mips::fixup_Mips16_LO16;
+        break;
+      case Mips::S_GOT:
+        Kind = Mips::fixup_Mips16_GOT16;
+        break;
+      case Mips::S_GOT_CALL:
+        Kind = Mips::fixup_Mips16_CALL16;
+        break;
+      case Mips::S_GPREL:
+        Kind = Mips::fixup_Mips16_GPREL;
+        break;
+      default:
+        Ctx.reportError(MI.getLoc(), "unsupported MIPS16 immediate relocation");
+        return 0;
+      }
+      addFixup(Fixups, 0, Expr, Kind);
+      return 0;
+    }
+    Ctx.reportError(MI.getLoc(), "unsupported MIPS16 symbolic immediate");
+    return 0;
+  }
+  unsigned MIFrm = MipsII::getFormat(Flags);
   if (!isa<MCSpecifierExpr>(Expr) && MIFrm == MipsII::FrmI) {
     addFixup(Fixups, 0, Expr, Mips::fixup_Mips_AnyImm16);
     return 0;

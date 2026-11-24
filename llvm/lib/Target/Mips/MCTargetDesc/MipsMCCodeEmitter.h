@@ -44,6 +44,9 @@ public:
 
   void EmitByte(unsigned char C, raw_ostream &OS) const;
 
+  uint64_t getMips16FrameEncoding(const MCInst &MI, uint64_t Encoding,
+                                  const MCSubtargetInfo &STI) const;
+
   void encodeInstruction(const MCInst &MI, SmallVectorImpl<char> &CB,
                          SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const override;

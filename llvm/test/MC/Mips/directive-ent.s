@@ -25,7 +25,9 @@ a:
 # OBJ:     Size: 0
 # OBJ:     Binding: Local
 # OBJ:     Type: Function
-# OBJ:     Other: 0
+# OBJ-32:  Other: 0
+# OBJ-MM:  Other [ (0x80)
+# OBJ-MM:    STO_MIPS_MICROMIPS
 # OBJ:     Section: .text
 # OBJ: }
 
@@ -45,6 +47,8 @@ b:
 # OBJ-MM:  Size: 8
 # OBJ:     Binding: Local
 # OBJ:     Type: Function
-# OBJ:     Other: 0
+# OBJ-32:  Other: 0
+# OBJ-MM:  Other [ (0x80)
+# OBJ-MM:    STO_MIPS_MICROMIPS
 # OBJ:     Section: .text
 # OBJ: }

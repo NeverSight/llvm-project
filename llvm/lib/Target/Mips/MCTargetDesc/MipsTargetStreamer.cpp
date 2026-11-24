@@ -113,7 +113,9 @@ void MipsTargetStreamer::emitDirectiveSetMips64R2() { forbidModuleDirective(); }
 void MipsTargetStreamer::emitDirectiveSetMips64R3() { forbidModuleDirective(); }
 void MipsTargetStreamer::emitDirectiveSetMips64R5() { forbidModuleDirective(); }
 void MipsTargetStreamer::emitDirectiveSetMips64R6() { forbidModuleDirective(); }
-void MipsTargetStreamer::emitDirectiveSetPop() { forbidModuleDirective(); }
+void MipsTargetStreamer::emitDirectiveSetPop(const MCSubtargetInfo &) {
+  forbidModuleDirective();
+}
 void MipsTargetStreamer::emitDirectiveSetPush() { forbidModuleDirective(); }
 void MipsTargetStreamer::emitDirectiveSetSoftFloat() {
   forbidModuleDirective();
@@ -688,9 +690,9 @@ void MipsTargetAsmStreamer::emitDirectiveSetNoMips3D() {
   MipsTargetStreamer::emitDirectiveSetNoMips3D();
 }
 
-void MipsTargetAsmStreamer::emitDirectiveSetPop() {
+void MipsTargetAsmStreamer::emitDirectiveSetPop(const MCSubtargetInfo &STI) {
   OS << "\t.set\tpop\n";
-  MipsTargetStreamer::emitDirectiveSetPop();
+  MipsTargetStreamer::emitDirectiveSetPop(STI);
 }
 
 void MipsTargetAsmStreamer::emitDirectiveSetPush() {
@@ -849,12 +851,18 @@ void MipsTargetAsmStreamer::emitDirectiveModuleNoGINV() {
 }
 
 // This part is for ELF object output.
+static uint8_t getMipsSymbolMode(const MCSubtargetInfo &STI) {
+  if (STI.hasFeature(Mips::FeatureMips16))
+    return ELF::STO_MIPS_MIPS16;
+  if (STI.hasFeature(Mips::FeatureMicroMips))
+    return ELF::STO_MIPS_MICROMIPS;
+  return 0;
+}
+
 MipsTargetELFStreamer::MipsTargetELFStreamer(MCStreamer &S,
                                              const MCSubtargetInfo &STI)
-    : MipsTargetStreamer(S), MicroMipsEnabled(false), STI(STI) {
+    : MipsTargetStreamer(S), SymbolMode(getMipsSymbolMode(STI)), STI(STI) {
   MCAssembler &MCA = getStreamer().getAssembler();
-  ELFObjectWriter &W = getStreamer().getWriter();
-
   // It's possible that MCObjectFileInfo isn't fully initialized at this point
   // due to an initialization order problem where CodeGenTargetMachineImpl
   // creates the target streamer before TargetLoweringObjectFile calls
@@ -877,8 +885,6 @@ MipsTargetELFStreamer::MipsTargetELFStreamer(MCStreamer &S,
   // We can fix this by making the target streamer construct
   // the ABI, but this is fraught with wide ranging dependency
   // issues as well.
-  unsigned EFlags = W.getELFHeaderEFlags();
-
   // FIXME: Fix a dependency issue by instantiating the ABI object to some
   // default based off the triple. The triple doesn't describe the target
   // fully, but any external user of the API that uses the MCTargetStreamer
@@ -927,8 +933,9 @@ MipsTargetELFStreamer::MipsTargetELFStreamer(MCStreamer &S,
   // Other options.
   if (Features[Mips::FeatureNaN2008])
     EFlags |= ELF::EF_MIPS_NAN2008;
+  if (SymbolMode == ELF::STO_MIPS_MIPS16)
+    EFlags |= ELF::EF_MIPS_ARCH_ASE_M16;
 
-  W.setELFHeaderEFlags(EFlags);
 }
 
 void MipsTargetELFStreamer::emitLabel(MCSymbol *S) {
@@ -938,13 +945,12 @@ void MipsTargetELFStreamer::emitLabel(MCSymbol *S) {
   if (Type != ELF::STT_FUNC)
     return;
 
-  if (isMicroMipsEnabled())
-    Symbol->setOther(ELF::STO_MIPS_MICROMIPS);
+  if (SymbolMode)
+    Symbol->setOther(Symbol->getOther() | SymbolMode);
 }
 
 void MipsTargetELFStreamer::finish() {
   MCAssembler &MCA = getStreamer().getAssembler();
-  ELFObjectWriter &W = getStreamer().getWriter();
   const MCObjectFileInfo &OFI = *MCA.getContext().getObjectFileInfo();
   MCELFStreamer &S = getStreamer();
 
@@ -981,8 +987,6 @@ void MipsTargetELFStreamer::finish() {
 
   // Update e_header flags. See the FIXME and comment above in
   // the constructor for a full rundown on this.
-  unsigned EFlags = W.getELFHeaderEFlags();
-
   // ABI
   // N64 does not require any ABI bits.
   if (getABI().IsO32())
@@ -1004,7 +1008,9 @@ void MipsTargetELFStreamer::finish() {
   if (Pic)
     EFlags |= ELF::EF_MIPS_PIC | ELF::EF_MIPS_CPIC;
 
-  W.setELFHeaderEFlags(EFlags);
+  // A fixed-address rewrite emits sections directly and has no ELF header.
+  if (auto *W = S.getELFWriterOrNull())
+    W->setELFHeaderEFlags(EFlags);
 
   // Emit all the option records.
   // At the moment we are only emitting .Mips.options (ODK_REGINFO) and
@@ -1017,16 +1023,17 @@ void MipsTargetELFStreamer::finish() {
 
 void MipsTargetELFStreamer::emitAssignment(MCSymbol *S, const MCExpr *Value) {
   auto *Symbol = static_cast<MCSymbolELF *>(S);
-  // If on rhs is micromips symbol then mark Symbol as microMips.
+  // An alias of a compressed entry point uses the same instruction encoding.
   if (Value->getKind() != MCExpr::SymbolRef)
     return;
   auto &RhsSym = static_cast<const MCSymbolELF &>(
       static_cast<const MCSymbolRefExpr *>(Value)->getSymbol());
 
-  if (!(RhsSym.getOther() & ELF::STO_MIPS_MICROMIPS))
-    return;
-
-  Symbol->setOther(ELF::STO_MIPS_MICROMIPS);
+  unsigned Other = RhsSym.getOther();
+  if ((Other & ELF::STO_MIPS_MIPS16) == ELF::STO_MIPS_MIPS16)
+    Symbol->setOther(Symbol->getOther() | ELF::STO_MIPS_MIPS16);
+  else if (Other & ELF::STO_MIPS_MICROMIPS)
+    Symbol->setOther(Symbol->getOther() | ELF::STO_MIPS_MICROMIPS);
 }
 
 MCELFStreamer &MipsTargetELFStreamer::getStreamer() {
@@ -1077,35 +1084,39 @@ void MipsTargetELFStreamer::emitTPRel64Value(const MCExpr *Value) {
 }
 
 void MipsTargetELFStreamer::emitDirectiveSetMicroMips() {
-  MicroMipsEnabled = true;
+  SymbolMode = ELF::STO_MIPS_MICROMIPS;
   forbidModuleDirective();
 }
 
 void MipsTargetELFStreamer::emitDirectiveSetNoMicroMips() {
-  MicroMipsEnabled = false;
+  if (SymbolMode == ELF::STO_MIPS_MICROMIPS)
+    SymbolMode = 0;
   forbidModuleDirective();
 }
 
 void MipsTargetELFStreamer::setUsesMicroMips() {
-  ELFObjectWriter &W = getStreamer().getWriter();
-  unsigned Flags = W.getELFHeaderEFlags();
-  Flags |= ELF::EF_MIPS_MICROMIPS;
-  W.setELFHeaderEFlags(Flags);
+  EFlags |= ELF::EF_MIPS_MICROMIPS;
 }
 
 void MipsTargetELFStreamer::emitDirectiveSetMips16() {
-  ELFObjectWriter &W = getStreamer().getWriter();
-  unsigned Flags = W.getELFHeaderEFlags();
-  Flags |= ELF::EF_MIPS_ARCH_ASE_M16;
-  W.setELFHeaderEFlags(Flags);
+  SymbolMode = ELF::STO_MIPS_MIPS16;
+  EFlags |= ELF::EF_MIPS_ARCH_ASE_M16;
   forbidModuleDirective();
 }
 
+void MipsTargetELFStreamer::emitDirectiveSetNoMips16() {
+  if (SymbolMode == ELF::STO_MIPS_MIPS16)
+    SymbolMode = 0;
+  MipsTargetStreamer::emitDirectiveSetNoMips16();
+}
+
+void MipsTargetELFStreamer::emitDirectiveSetPop(const MCSubtargetInfo &STI) {
+  SymbolMode = getMipsSymbolMode(STI);
+  MipsTargetStreamer::emitDirectiveSetPop(STI);
+}
+
 void MipsTargetELFStreamer::emitDirectiveSetNoReorder() {
-  ELFObjectWriter &W = getStreamer().getWriter();
-  unsigned Flags = W.getELFHeaderEFlags();
-  Flags |= ELF::EF_MIPS_NOREORDER;
-  W.setELFHeaderEFlags(Flags);
+  EFlags |= ELF::EF_MIPS_NOREORDER;
   forbidModuleDirective();
 }
 
@@ -1159,45 +1170,30 @@ void MipsTargetELFStreamer::emitDirectiveEnt(const MCSymbol &Symbol) {
 }
 
 void MipsTargetELFStreamer::emitDirectiveAbiCalls() {
-  ELFObjectWriter &W = getStreamer().getWriter();
-  unsigned Flags = W.getELFHeaderEFlags();
-  Flags |= ELF::EF_MIPS_CPIC | ELF::EF_MIPS_PIC;
-  W.setELFHeaderEFlags(Flags);
+  EFlags |= ELF::EF_MIPS_CPIC | ELF::EF_MIPS_PIC;
 }
 
 void MipsTargetELFStreamer::emitDirectiveNaN2008() {
-  ELFObjectWriter &W = getStreamer().getWriter();
-  unsigned Flags = W.getELFHeaderEFlags();
-  Flags |= ELF::EF_MIPS_NAN2008;
-  W.setELFHeaderEFlags(Flags);
+  EFlags |= ELF::EF_MIPS_NAN2008;
 }
 
 void MipsTargetELFStreamer::emitDirectiveNaNLegacy() {
-  ELFObjectWriter &W = getStreamer().getWriter();
-  unsigned Flags = W.getELFHeaderEFlags();
-  Flags &= ~ELF::EF_MIPS_NAN2008;
-  W.setELFHeaderEFlags(Flags);
+  EFlags &= ~ELF::EF_MIPS_NAN2008;
 }
 
 void MipsTargetELFStreamer::emitDirectiveOptionPic0() {
-  ELFObjectWriter &W = getStreamer().getWriter();
-  unsigned Flags = W.getELFHeaderEFlags();
   // This option overrides other PIC options like -KPIC.
   Pic = false;
-  Flags &= ~ELF::EF_MIPS_PIC;
-  W.setELFHeaderEFlags(Flags);
+  EFlags &= ~ELF::EF_MIPS_PIC;
 }
 
 void MipsTargetELFStreamer::emitDirectiveOptionPic2() {
-  ELFObjectWriter &W = getStreamer().getWriter();
-  unsigned Flags = W.getELFHeaderEFlags();
   Pic = true;
   // NOTE: We are following the GAS behaviour here which means the directive
   // 'pic2' also sets the CPIC bit in the ELF header. This is different from
   // what is stated in the SYSV ABI which consider the bits EF_MIPS_PIC and
   // EF_MIPS_CPIC to be mutually exclusive.
-  Flags |= ELF::EF_MIPS_PIC | ELF::EF_MIPS_CPIC;
-  W.setELFHeaderEFlags(Flags);
+  EFlags |= ELF::EF_MIPS_PIC | ELF::EF_MIPS_CPIC;
 }
 
 void MipsTargetELFStreamer::emitDirectiveInsn() {
@@ -1393,5 +1389,10 @@ void MipsTargetELFStreamer::emitMipsAbiFlags() {
   OS.switchSection(Sec);
   Sec->setAlignment(Align(8));
 
+  // Function-specific ASEs survive subsequent switches back to classic MIPS.
+  if (EFlags & ELF::EF_MIPS_ARCH_ASE_M16)
+    ABIFlagsSection.addASE(Mips::AFL_ASE_MIPS16);
+  if (EFlags & ELF::EF_MIPS_MICROMIPS)
+    ABIFlagsSection.addASE(Mips::AFL_ASE_MICROMIPS);
   OS << ABIFlagsSection;
 }

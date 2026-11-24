@@ -59,6 +59,7 @@ public:
   uint8_t getFpABIValue();
   uint32_t getISAExtensionValue() { return (uint32_t)ISAExtension; }
   uint32_t getASESetValue() { return (uint32_t)ASESet; }
+  void addASE(Mips::AFL_ASE ASE) { ASESet |= ASE; }
 
   uint32_t getFlags1Value() {
     uint32_t Value = 0;

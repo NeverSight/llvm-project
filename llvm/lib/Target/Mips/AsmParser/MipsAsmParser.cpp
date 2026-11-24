@@ -472,8 +472,13 @@ class MipsAsmParser : public MCTargetAsmParser {
     FeatureBitset FeatureBits = STI.getFeatureBits();
     FeatureBits &= ~MipsAssemblerOptions::AllArchRelatedMask;
     STI.setFeatureBits(FeatureBits);
-    setAvailableFeatures(
-        ComputeAvailableFeatures(STI.ToggleFeature(ArchFeature)));
+    STI.ToggleFeature(ArchFeature);
+    // A .set arch directive selects the architecture's default register mode.
+    // Later .set fp=32 must be able to change it independently of the ISA.
+    if (STI.hasFeature(Mips::FeatureMips3) &&
+        !STI.hasFeature(Mips::FeatureFP64Bit))
+      STI.ToggleFeature(Mips::FeatureFP64Bit);
+    setAvailableFeatures(ComputeAvailableFeatures(STI.getFeatureBits()));
     AssemblerOptions.back()->setFeatures(STI.getFeatureBits());
   }
 
@@ -7419,7 +7424,7 @@ bool MipsAsmParser::parseSetPopDirective() {
       ComputeAvailableFeatures(AssemblerOptions.back()->getFeatures()));
   STI.setFeatureBits(AssemblerOptions.back()->getFeatures());
 
-  getTargetStreamer().emitDirectiveSetPop();
+  getTargetStreamer().emitDirectiveSetPop(STI);
   return false;
 }
 

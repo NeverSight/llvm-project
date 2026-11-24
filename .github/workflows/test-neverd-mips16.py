@@ -56,7 +56,7 @@ elif platform.system() == "Linux":
 run("configure", config)
 run("build", ["cmake", "--build", build, "--target", "llc", "FileCheck",
               "llvm-mc", "llvm-objdump", "llvm-config", "llvm-readobj", "not", "count",
-              "llvm-readelf", "split-file", "opt", "llvm-as",
+              "llvm-readelf", "llvm-dwarfdump", "obj2yaml", "split-file", "opt", "llvm-as",
               "clang", "TargetParserTests",
               "--parallel", "4"])
 suffix = ".exe" if windows else ""
@@ -65,9 +65,9 @@ write("products.json", {name: hashlib.sha256(
     for name in ("llc", "FileCheck", "llvm-mc", "llvm-objdump", "clang")})
 # Module preparation changes the common pass pipeline. Enumerate the complete
 # MIPS suite through lit, including MIR tests, rather than filename prefixes.
-test_dir = root / "llvm/test/CodeGen/Mips"
+test_inputs = [root / "llvm/test/CodeGen/Mips", root / "llvm/test/MC/Mips"]
 lit = build / "bin" / ("llvm-lit.py" if windows else "llvm-lit")
-listed = output([sys.executable, lit, "--show-tests", test_dir])
+listed = output([sys.executable, lit, "--show-tests", *test_inputs])
 tests = sorted(root / "llvm/test" / line.strip().split(" :: ", 1)[1]
                for line in listed.splitlines() if " :: " in line)
 assert tests and len(tests) == len(set(tests))
@@ -75,7 +75,7 @@ write("inventory.json", {str(path.relative_to(root)):
                          hashlib.sha256(path.read_bytes()).hexdigest()
                          for path in tests})
 run("lit", [sys.executable, lit, "-v", "-j", "4",
-            "--xunit-xml-output", evidence / "results.xml", test_dir])
+            "--xunit-xml-output", evidence / "results.xml", *test_inputs])
 run("target-layout", [build / "unittests/TargetParser" /
                       ("TargetParserTests" + suffix),
                       "--gtest_filter=DataLayoutTest.*",

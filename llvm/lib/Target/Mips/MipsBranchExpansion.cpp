@@ -926,7 +926,8 @@ bool MipsBranchExpansion::runOnMachineFunction(MachineFunction &MF) {
   STI = &MF.getSubtarget<MipsSubtarget>();
   TII = STI->getInstrInfo();
 
-  if (IsPIC && ABI.IsO32() &&
+  // MIPS16 calculates its own PC-relative global base in instruction selection.
+  if (IsPIC && ABI.IsO32() && !STI->inMips16Mode() &&
       MF.getInfo<MipsFunctionInfo>()->globalBaseRegSet())
     emitGPDisp(MF, TII);
 

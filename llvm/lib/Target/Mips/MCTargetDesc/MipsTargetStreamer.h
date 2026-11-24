@@ -92,7 +92,7 @@ public:
   virtual void emitDirectiveSetNoDsp();
   virtual void emitDirectiveSetMips3D();
   virtual void emitDirectiveSetNoMips3D();
-  virtual void emitDirectiveSetPop();
+  virtual void emitDirectiveSetPop(const MCSubtargetInfo &RestoredSTI);
   virtual void emitDirectiveSetPush();
   virtual void emitDirectiveSetSoftFloat();
   virtual void emitDirectiveSetHardFloat();
@@ -284,7 +284,7 @@ public:
   void emitDirectiveSetNoDsp() override;
   void emitDirectiveSetMips3D() override;
   void emitDirectiveSetNoMips3D() override;
-  void emitDirectiveSetPop() override;
+  void emitDirectiveSetPop(const MCSubtargetInfo &RestoredSTI) override;
   void emitDirectiveSetPush() override;
   void emitDirectiveSetSoftFloat() override;
   void emitDirectiveSetHardFloat() override;
@@ -327,12 +327,13 @@ public:
 
 // This part is for ELF object output
 class MipsTargetELFStreamer : public MipsTargetStreamer {
-  bool MicroMipsEnabled;
+  uint8_t SymbolMode;
+  unsigned EFlags = 0;
   const MCSubtargetInfo &STI;
   bool Pic;
 
 public:
-  bool isMicroMipsEnabled() const { return MicroMipsEnabled; }
+  uint8_t getSymbolMode() const { return SymbolMode; }
   MCELFStreamer &getStreamer();
   MipsTargetELFStreamer(MCStreamer &S, const MCSubtargetInfo &STI);
 
@@ -353,6 +354,8 @@ public:
   void emitDirectiveSetNoMicroMips() override;
   void setUsesMicroMips() override;
   void emitDirectiveSetMips16() override;
+  void emitDirectiveSetNoMips16() override;
+  void emitDirectiveSetPop(const MCSubtargetInfo &RestoredSTI) override;
 
   void emitDirectiveSetNoReorder() override;
   void emitDirectiveEnd(StringRef Name) override;

@@ -63,12 +63,9 @@
 ; R5900: ISA: MIPS3
 ; R5900: ISA Extension: Toshiba R5900
 
-; Check that we reject CPUs that are not implemented.
-
-; RUN: not llc < %s -o /dev/null -mtriple=mips64 -mcpu=mips5 2>&1 \
-; RUN:   | FileCheck %s --check-prefix=ERROR
-
-; ERROR: LLVM ERROR: Code generation for MIPS-{{.}} is not implemented
+; RUN: llc -mtriple=mips64 -mcpu=mips5 -filetype=obj < %s \
+; RUN:   | llvm-readelf -A - | FileCheck %s --check-prefix=MIPS5
+; MIPS5: ISA: MIPS5
 
 define void @foo() {
   ret void

@@ -210,7 +210,8 @@ void Mips16InstrInfo::makeFrame(unsigned SP, int64_t FrameSize,
   const BitVector Reserved = RI.getReservedRegs(MF);
   bool SaveS2 = Reserved[Mips::S2];
   MachineInstrBuilder MIB;
-  unsigned Opc = ((FrameSize <= 128) && !SaveS2)? Mips::Save16:Mips::SaveX16;
+  unsigned Opc = (FrameSize > 0 && FrameSize <= 128 && !SaveS2) ? Mips::Save16
+                                                                : Mips::SaveX16;
   MIB = BuildMI(MBB, I, DL, get(Opc));
   const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
   addSaveRestoreRegs(MIB, CSI);
@@ -240,8 +241,9 @@ void Mips16InstrInfo::restoreFrame(unsigned SP, int64_t FrameSize,
   const BitVector Reserved = RI.getReservedRegs(*MF);
   bool SaveS2 = Reserved[Mips::S2];
   MachineInstrBuilder MIB;
-  unsigned Opc = ((FrameSize <= 128) && !SaveS2)?
-    Mips::Restore16:Mips::RestoreX16;
+  unsigned Opc = (FrameSize > 0 && FrameSize <= 128 && !SaveS2)
+                     ? Mips::Restore16
+                     : Mips::RestoreX16;
 
   if (!isUInt<11>(FrameSize)) {
     unsigned Base = 2040;
