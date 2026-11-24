@@ -12,6 +12,9 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Object/ELFObjectFile.h"
+#include "llvm/Support/Endian.h"
+#include "llvm/Support/MipsABIFlags.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
@@ -24,7 +27,8 @@
 
 using namespace llvm;
 
-static std::string emit(StringRef IR, StringRef TripleName, StringRef CPU) {
+static std::string emit(StringRef IR, StringRef TripleName, StringRef CPU,
+                        CodeGenFileType Type = CodeGenFileType::AssemblyFile) {
   LLVMContext Context;
   SMDiagnostic Diagnostic;
   auto Module = parseAssemblyString(IR, Diagnostic, Context);
@@ -45,15 +49,16 @@ static std::string emit(StringRef IR, StringRef TripleName, StringRef CPU) {
     return {};
   Module->setTargetTriple(Triple(TripleName));
   Module->setDataLayout(Machine->createDataLayout());
-  SmallString<4096> Assembly;
-  raw_svector_ostream Stream(Assembly);
+  SmallString<4096> Output;
+  raw_svector_ostream Stream(Output);
   legacy::PassManager Passes;
-  if (Machine->addPassesToEmitFile(Passes, Stream, nullptr,
-                                   CodeGenFileType::AssemblyFile))
+  if (Machine->addPassesToEmitFile(Passes, Stream, nullptr, Type))
     return {};
   Passes.run(*Module);
+  if (Type == CodeGenFileType::ObjectFile)
+    return Output.str().str();
   std::string Compact;
-  for (unsigned char C : Assembly)
+  for (unsigned char C : Output)
     if (!std::isspace(C))
       Compact.push_back(C);
   return Compact;
@@ -87,6 +92,77 @@ static bool compressed(bool Little, bool FP64) {
          Text.contains(WriteLow + WriteHigh);
 }
 
+static bool objectModes(bool Little, bool N32) {
+  const StringRef IR = N32 ? "define i64 @plain(i64 %x) { ret i64 %x }" : R"(
+          @also_compact = hidden alias i32 (), ptr @compact
+          @table = global [2 x ptr] [ptr @compact, ptr @plain]
+          define hidden i32 @compact() "mips16" { ret i32 17 }
+          define i32 @plain() "nomips16" { ret i32 23 }
+        )";
+  StringRef TT =
+      N32 ? (Little ? "mips64el-linux-gnuabin32" : "mips64-linux-gnuabin32")
+          : (Little ? "mipsel-linux-gnu" : "mips-linux-gnu");
+  std::string Bytes =
+      emit(IR, TT, N32 ? "mips64r2" : "mips32r2", CodeGenFileType::ObjectFile);
+  auto Object =
+      object::ObjectFile::createObjectFile(MemoryBufferRef(Bytes, TT));
+  if (!Object) {
+    logAllUnhandledErrors(Object.takeError(), errs());
+    return false;
+  }
+  auto *ELF = dyn_cast<object::ELFObjectFileBase>(Object->get());
+  if (!ELF || ELF->getEMachine() != ELF::EM_MIPS ||
+      ELF->getBytesInAddress() != 4 || ELF->isLittleEndian() != Little ||
+      bool(ELF->getPlatformFlags() & ELF::EF_MIPS_ABI2) != N32 ||
+      bool(ELF->getPlatformFlags() & ELF::EF_MIPS_ARCH_ASE_M16) != !N32)
+    return false;
+
+  bool SawABI = false, SawPlain = false, SawCompact = false, SawAlias = false;
+  bool SawCode = false;
+  for (const auto &Section : ELF->sections()) {
+    bool IsABI =
+        object::ELFSectionRef(Section).getType() == ELF::SHT_MIPS_ABIFLAGS;
+    if (!IsABI && !Section.isText())
+      continue;
+    auto Data = Section.getContents();
+    if (!Data) {
+      logAllUnhandledErrors(Data.takeError(), errs());
+      return false;
+    }
+    if (!IsABI) {
+      if (N32)
+        SawCode |= !Data->empty();
+      else
+        SawCode |= Data->starts_with(
+            Little ? StringRef("\x00\xf0\x11\x6a\xe0\xe8", 6)
+                   : StringRef("\xf0\x00\x6a\x11\xe8\xe0", 6));
+      continue;
+    }
+    if (Data->size() != 24 || (*Data)[2] != (N32 ? 64 : 32))
+      return false;
+    const uint32_t ASE = Little ? support::endian::read32le(Data->data() + 12)
+                                : support::endian::read32be(Data->data() + 12);
+    SawABI = bool(ASE & Mips::AFL_ASE_MIPS16) == !N32;
+  }
+  for (const auto &Sym : ELF->symbols()) {
+    auto Name = Sym.getName();
+    if (!Name) {
+      logAllUnhandledErrors(Name.takeError(), errs());
+      return false;
+    }
+    if (*Name == "compact" || *Name == "also_compact") {
+      if (Sym.getOther() != (ELF::STO_MIPS_MIPS16 | ELF::STV_HIDDEN))
+        return false;
+      if (*Name == "compact")
+        SawCompact = true;
+      else
+        SawAlias = true;
+    } else if (*Name == "plain")
+      SawPlain = Sym.getOther() == 0;
+  }
+  return SawCode && SawABI && SawPlain && (N32 || (SawCompact && SawAlias));
+}
+
 int main() {
   LLVMInitializeMipsTargetInfo();
   LLVMInitializeMipsTarget();
@@ -94,6 +170,12 @@ int main() {
   LLVMInitializeMipsAsmParser();
   LLVMInitializeMipsAsmPrinter();
   for (bool Little : {false, true}) {
+    for (bool N32 : {false, true})
+      if (!objectModes(Little, N32)) {
+        errs() << "MIPS ELF object identity failure: little=" << Little
+               << ", n32=" << N32 << '\n';
+        return 1;
+      }
     for (bool FP64 : {false, true}) {
       if (!compressed(Little, FP64)) {
         errs() << "MIPS16 hard-float package failure: little=" << Little
@@ -117,6 +199,7 @@ int main() {
       }
     }
   }
-  outs() << "MIPS32/64 BE/LE and MIPS16 FR=0/1 code generation passed\n";
+  outs() << "MIPS32/64 BE/LE, n32 ELF, MIPS16 ELF mode and FR=0/1 code "
+            "generation passed\n";
   return 0;
 }

@@ -45,6 +45,7 @@ class MipsInst16_Base<dag outs, dag ins, string asmstr,
   let Pattern     = pattern;
 
   let Predicates = [InMips16Mode];
+  let TSFlags{7} = 1; // MipsII::IsMips16
 }
 
 //

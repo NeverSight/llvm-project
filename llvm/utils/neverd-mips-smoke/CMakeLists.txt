@@ -29,7 +29,7 @@ add_executable(neverd-mips-smoke main.cpp)
 target_compile_features(neverd-mips-smoke PRIVATE cxx_std_17)
 target_include_directories(neverd-mips-smoke SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
-target_link_libraries(neverd-mips-smoke PRIVATE LLVMMipsCodeGen LLVMMipsAsmParser LLVMAsmParser)
+target_link_libraries(neverd-mips-smoke PRIVATE LLVMMipsCodeGen LLVMMipsAsmParser LLVMAsmParser LLVMObject)
 
 enable_testing()
 add_test(NAME NeverDMipsPackageSmoke COMMAND neverd-mips-smoke)

@@ -130,7 +130,10 @@ enum {
   // Instruction has a forbidden slot.
   HasForbiddenSlot = 1 << 5,
   //  Instruction uses an $fcc<x> register.
-  HasFCCRegOperand = 1 << 6
+  HasFCCRegOperand = 1 << 6,
+  // Instruction encoded as MIPS16 halfwords, independently of the function
+  // mode (a MIPS16 hard-float stub contains classic instructions).
+  IsMips16 = 1 << 7
 
 };
 

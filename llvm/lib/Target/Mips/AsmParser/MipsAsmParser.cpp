@@ -7419,7 +7419,7 @@ bool MipsAsmParser::parseSetPopDirective() {
       ComputeAvailableFeatures(AssemblerOptions.back()->getFeatures()));
   STI.setFeatureBits(AssemblerOptions.back()->getFeatures());
 
-  getTargetStreamer().emitDirectiveSetPop();
+  getTargetStreamer().emitDirectiveSetPop(STI);
   return false;
 }
 

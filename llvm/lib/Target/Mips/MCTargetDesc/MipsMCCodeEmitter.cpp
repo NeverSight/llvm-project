@@ -234,7 +234,8 @@ void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
       IsLittleEndian ? llvm::endianness::little : llvm::endianness::big;
   if (Size == 2) {
     support::endian::write<uint16_t>(CB, Binary, Endian);
-  } else if (IsLittleEndian && isMicroMips(STI)) {
+  } else if (IsLittleEndian &&
+             (isMicroMips(STI) || (Desc.TSFlags & MipsII::IsMips16))) {
     support::endian::write<uint16_t>(CB, Binary >> 16, Endian);
     support::endian::write<uint16_t>(CB, Binary & 0xffff, Endian);
   } else {
