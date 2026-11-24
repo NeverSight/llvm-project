@@ -27,7 +27,7 @@
   and $3, $4, $5           # CHECK: and $3, $4, $5      # encoding: [0x00,0xa4,0x1a,0x50]
   andi $3, $4, 1234        # CHECK: andi $3, $4, 1234   # encoding: [0xd0,0x64,0x04,0xd2]
   auipc $3, -1             # CHECK: auipc $3, -1        # encoding: [0x78,0x7e,0xff,0xff]
-  align $4, $2, $3, 2      # CHECK: align $4, $2, $3, 2 # encoding: [0x00,0x43,0x24,0x1f]
+  align $4, $2, $3, 2      # CHECK: align $4, $2, $3, 2 # encoding: [0x00,0x62,0x24,0x1f]
   aui $3,$2,23             # CHECK: aui $3, $2, 23      # encoding: [0x10,0x62,0x00,0x17]
   beqc $3,$4, 16           # CHECK: beqc    $3, $4, 16  # encoding: [0x74,0x83,0x00,0x08]
   bgec $3,$4, 16           # CHECK: bgec    $3, $4, 16  # encoding: [0xf4,0x83,0x00,0x08]

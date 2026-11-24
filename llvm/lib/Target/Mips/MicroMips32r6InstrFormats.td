@@ -335,8 +335,8 @@ class POOL32A_ALIGN_FM_MMR6<bits<6> funct> : MipsR6Inst {
   bits<32> Inst;
 
   let Inst{31-26} = 0b000000;
-  let Inst{25-21} = rs;
-  let Inst{20-16} = rt;
+  let Inst{25-21} = rt;
+  let Inst{20-16} = rs;
   let Inst{15-11} = rd;
   let Inst{10-9}  = bp;
   let Inst{8-6}   = 0b000;
