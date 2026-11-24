@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "MipsSEISelDAGToDAG.h"
+#include "MCTargetDesc/MipsBaseInfo.h"
 #include "Mips.h"
 #include "MipsAnalyzeImmediate.h"
 #include "MipsMachineFunction.h"
@@ -986,6 +987,27 @@ bool MipsSEDAGToDAGISel::trySelect(SDNode *Node) {
         Opcode = Mips::DINSM;
       else
         Opcode = Mips::DINSU;
+    }
+
+    if (Opcode == Mips::DINSM && Subtarget->inMicroMips32r6Mode() &&
+        MipsII::isAmbiguousMicro64R6DinsmPosition(Pos)) {
+      // Insert each half with its unambiguous opcode. The upper half takes
+      // the remaining source bits after the lower half has been consumed.
+      auto Imm = [&](unsigned Value) {
+        return CurDAG->getTargetConstant(Value, DL, MVT::i32);
+      };
+      unsigned LowSize = 32 - Pos;
+      SDValue Src = Node->getOperand(0);
+      SDValue Low(CurDAG->getMachineNode(
+                      Mips::DINS, DL, ResTy,
+                      {Src, Imm(Pos), Imm(LowSize), Node->getOperand(3)}),
+                  0);
+      SDValue High(
+          CurDAG->getMachineNode(Mips::DSRL, DL, ResTy, Src, Imm(LowSize)), 0);
+      ReplaceNode(Node, CurDAG->getMachineNode(
+                            Mips::DINSU, DL, ResTy,
+                            {High, Imm(32), Imm(Size - LowSize), Low}));
+      return true;
     }
 
     if (Opcode) {

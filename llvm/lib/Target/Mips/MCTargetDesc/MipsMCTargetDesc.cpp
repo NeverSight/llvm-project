@@ -229,17 +229,14 @@ public:
   bool evaluateBranch(const MCInst &Inst, uint64_t Addr, uint64_t Size,
                       uint64_t &Target) const override {
     unsigned NumOps = Inst.getNumOperands();
-    if (NumOps == 0)
+    const MCInstrDesc &Desc = Info->get(Inst.getOpcode());
+    if (!NumOps || NumOps > Desc.getNumOperands() ||
+        !Inst.getOperand(NumOps - 1).isImm())
       return false;
-    switch (Info->get(Inst.getOpcode()).operands()[NumOps - 1].OperandType) {
-    case MCOI::OPERAND_UNKNOWN:
-    case MCOI::OPERAND_IMMEDIATE: {
-      // j, jal, jalx, jals
-      // Absolute branch within the current 256 MB-aligned region
-      uint64_t Region = Addr & ~uint64_t(0xfffffff);
-      Target = Region + Inst.getOperand(NumOps - 1).getImm();
+    switch (Desc.operands()[NumOps - 1].OperandType) {
+    case MipsII::OPERAND_JUMP_TARGET:
+      Target = Inst.getOperand(NumOps - 1).getImm();
       return true;
-    }
     case MCOI::OPERAND_PCREL:
       // b, beq ...
       Target = Addr + Inst.getOperand(NumOps - 1).getImm();

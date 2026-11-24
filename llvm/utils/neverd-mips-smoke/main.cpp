@@ -252,6 +252,12 @@ static bool fixedAddressLeaf(const Triple &TT, StringRef CPU,
         SawText = support::endian::read16(Text, Order) == 0xf020 &&
                   support::endian::read16(Text + 2, Order) == 0x6a05 &&
                   support::endian::read16(Text + 4, Order) == 0xe8a0;
+      else if (WideMicro && CPU == "mips64r6")
+        // R6 returns with JRC after the full-width add, without a delay slot.
+        SawText = support::endian::read16(Text, Order) == 0x58a4 &&
+                  support::endian::read16(Text + 2, Order) == 0x1150 &&
+                  support::endian::read16(Text + 4, Order) == 0x801f &&
+                  support::endian::read16(Text + 6, Order) == 0x0000;
       else if (WideMicro)
         // GNU as encodes JR $ra followed by DADDU $v0, $a0, $a1.
         SawText = support::endian::read16(Text, Order) == 0x001f &&
@@ -404,7 +410,9 @@ int main() {
           (Target.isMIPS64() &&
            (!fixedAddressLeaf(Target, "mips5") ||
             !fixedAddressLeaf(Target, "mips64r2", "micromips") ||
-            !fixedAddressLeaf(Target, "mips64r2", "micromips", false))) ||
+            !fixedAddressLeaf(Target, "mips64r2", "micromips", false) ||
+            !fixedAddressLeaf(Target, "mips64r6", "micromips") ||
+            !fixedAddressLeaf(Target, "mips64r6", "micromips", false))) ||
           (!Target.isMIPS64() &&
            (!fixedAddressLeaf(Target, "mips32r2", "mips16") ||
             !fixedAddressLeaf(Target, "mips32r2", "micromips")))) {

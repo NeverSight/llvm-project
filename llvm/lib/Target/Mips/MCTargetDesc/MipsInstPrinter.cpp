@@ -165,10 +165,8 @@ void MipsInstPrinter::printBranchOperand(const MCInst *MI, uint64_t Address,
 
   if (PrintBranchImmAsAddress) {
     uint64_t Target = Address + Op.getImm();
-    if (STI.hasFeature(Mips::FeatureMips32))
-      Target &= 0xffffffff;
-    else if (STI.hasFeature(Mips::FeatureMips16))
-      Target &= 0xffff;
+    if (!STI.hasFeature(Mips::FeatureGP64Bit))
+      Target = static_cast<uint32_t>(Target);
     markup(O, Markup::Immediate) << formatHex(Target);
   } else {
     markup(O, Markup::Immediate) << formatImm(Op.getImm());

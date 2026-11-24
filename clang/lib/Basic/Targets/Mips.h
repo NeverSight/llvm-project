@@ -81,6 +81,9 @@ public:
   bool isNan2008() const override { return IsNan2008; }
 
   bool processorSupportsGPR64() const;
+  bool supportsMicroMips() const override {
+    return ABI == "o32" || (processorSupportsGPR64() && getISARev() >= 2);
+  }
 
   StringRef getABI() const override { return ABI; }
 

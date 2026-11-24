@@ -130,9 +130,6 @@ MipsSubtarget::MipsSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
   if (IsFPXX && (isABI_N32() || isABI_N64()))
     report_fatal_error("FPXX is not permitted for the N32/N64 ABI's.", false);
 
-  if (hasMips64r6() && InMicroMipsMode)
-    report_fatal_error("microMIPS64R6 is not supported", false);
-
   if (!isABI_O32() && InMicroMipsMode && !hasMips64r2())
     report_fatal_error("microMIPS64 is not supported.", false);
 

@@ -22,7 +22,7 @@
 # RUN: not ld.lld %t-eabi32.o %t-o32.o -shared -o /dev/null 2>&1 \
 # RUN:   | FileCheck -check-prefix=CPIC2 %s
 
-# MM64: {{.*}}n64.o: microMIPS 64-bit is not supported
+# MM64: {{.*}}n64.o: microMIPS ELF64 requires MIPS64r2 or MIPS64r6
 
 # N64EABI64: {{.*}}eabi64.o: ABI 'eabi64' is incompatible with target ABI 'n64'
 # N64O64: {{.*}}o64.o: ABI 'o64' is incompatible with target ABI 'n64'

@@ -365,7 +365,7 @@ class WRDSP_MM_DESC {
 
 class BPOSGE32C_MMR3_DESC {
   dag OutOperandList = (outs);
-  dag InOperandList = (ins brtarget1SImm16:$offset);
+  dag InOperandList = (ins brtarget_mm:$offset);
   string AsmString = !strconcat("bposge32c", "\t$offset");
   bit isBranch = 1;
   bit isTerminator = 1;

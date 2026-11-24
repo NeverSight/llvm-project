@@ -107,16 +107,11 @@ void MipsAsmPrinter::emitPseudoIndirectBranch(MCStreamer &OutStreamer,
   bool InMicroMipsMode = Subtarget->inMicroMipsMode();
   MCInst TmpInst0;
 
-  if (Subtarget->hasMips64r6()) {
-    // MIPS64r6 should use (JALR64 ZERO_64, $rs)
-    TmpInst0.setOpcode(Mips::JALR64);
-    HasLinkReg = true;
-  } else if (Subtarget->hasMips32r6()) {
-    // MIPS32r6 should use (JALR ZERO, $rs)
+  if (Subtarget->hasMips32r6()) {
     if (InMicroMipsMode)
       TmpInst0.setOpcode(Mips::JRC16_MMR6);
     else {
-      TmpInst0.setOpcode(Mips::JALR);
+      TmpInst0.setOpcode(Subtarget->hasMips64r6() ? Mips::JALR64 : Mips::JALR);
       HasLinkReg = true;
     }
   } else if (Subtarget->inMicroMipsMode())

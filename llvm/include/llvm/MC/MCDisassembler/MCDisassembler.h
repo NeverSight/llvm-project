@@ -35,6 +35,8 @@ struct SymbolInfoTy {
   uint8_t Type;
   // Used by ELF to describe a mapping symbol that is usually not displayed.
   bool IsMappingSymbol;
+  // ELF function attributes, when the label comes from a real symbol.
+  std::optional<uint8_t> ELFStOther;
 
 private:
   bool IsXCOFF;

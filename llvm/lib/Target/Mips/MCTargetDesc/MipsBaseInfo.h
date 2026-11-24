@@ -26,6 +26,12 @@ namespace llvm {
 /// instruction info tracks.
 ///
 namespace MipsII {
+/// MD00594 rev. 6.05 assigns these DINSM positions to DSRA32 or DLSA
+/// in the instruction diagrams and to DINSM in the POOL32S opcode map.
+inline bool isAmbiguousMicro64R6DinsmPosition(unsigned Pos) {
+  return Pos == 2 || (Pos & 7) == 4;
+}
+
 /// Target Operand Flag enum.
 enum TOF {
   //===------------------------------------------------------------------===//
@@ -141,7 +147,8 @@ enum {
 enum OperandType : unsigned {
   OPERAND_FIRST_MIPS_MEM_IMM = MCOI::OPERAND_FIRST_TARGET,
   OPERAND_MEM_SIMM9 = OPERAND_FIRST_MIPS_MEM_IMM,
-  OPERAND_LAST_MIPS_MEM_IMM = OPERAND_MEM_SIMM9
+  OPERAND_LAST_MIPS_MEM_IMM = OPERAND_MEM_SIMM9,
+  OPERAND_JUMP_TARGET
 };
 
 static inline unsigned getFormat(uint64_t TSFlags) {

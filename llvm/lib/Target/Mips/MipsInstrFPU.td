@@ -540,7 +540,8 @@ let DecoderNamespace = "MipsFP64", mayRaiseFPException = 1, Uses = [FCR31] in {
 
 let DecoderNamespace = "MipsFP64", mayRaiseFPException = 1, Uses = [FCR31] in {
   let AdditionalPredicates = [NotInMicroMips] in {
-    def CVT_S_L   : MMRel, ABSS_FT<"cvt.s.l", FGR32Opnd, FGR64Opnd>,
+    def CVT_S_L   : Micro64R6Rel<"standard">, MMRel,
+                    ABSS_FT<"cvt.s.l", FGR32Opnd, FGR64Opnd>,
                     ABSS_FM<0x20, 21>, INSN_MIPS3_32R2, FGR_64;
     def CVT_S_D64 : ABSS_FT<"cvt.s.d", FGR32Opnd, FGR64Opnd>,
                     ABSS_FM<0x20, 17>, ISA_MIPS1, FGR_64;
@@ -548,7 +549,8 @@ let DecoderNamespace = "MipsFP64", mayRaiseFPException = 1, Uses = [FCR31] in {
                     ABSS_FM<0x21, 20>, ISA_MIPS1, FGR_64;
     def CVT_D64_S : ABSS_FT<"cvt.d.s", FGR64Opnd, FGR32Opnd>,
                     ABSS_FM<0x21, 16>, ISA_MIPS1, FGR_64;
-    def CVT_D64_L : MMRel, ABSS_FT<"cvt.d.l", FGR64Opnd, FGR64Opnd>,
+    def CVT_D64_L : Micro64R6Rel<"standard">, MMRel,
+                    ABSS_FT<"cvt.d.l", FGR64Opnd, FGR64Opnd>,
                     ABSS_FM<0x21, 21>, INSN_MIPS3_32R2, FGR_64;
   }
 }
@@ -628,10 +630,10 @@ let AdditionalPredicates = [NotInMicroMips] in {
   }
 
   let AdditionalPredicates = [IsNotSingleFloat] in {
-    def DMTC1 : MMRel, MTC1_FT<"dmtc1", FGR64Opnd, GPR64Opnd, bitconvert>,
+    def DMTC1 : Micro64R6Rel<"standard">, MMRel, MTC1_FT<"dmtc1", FGR64Opnd, GPR64Opnd, bitconvert>,
                 MFC1_FM<5>,
                 ISA_MIPS3;
-    def DMFC1 : MMRel, MFC1_FT<"dmfc1", GPR64Opnd, FGR64Opnd, bitconvert>,
+    def DMFC1 : Micro64R6Rel<"standard">, MMRel, MFC1_FT<"dmfc1", GPR64Opnd, FGR64Opnd, bitconvert>,
                 MFC1_FM<1>,
                 ISA_MIPS3;
   }

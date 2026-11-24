@@ -63,7 +63,7 @@ define i8 @f1() {
 ;
 ; MMR6-LABEL: f1:
 ; MMR6:       # %bb.0: # %entry
-; MMR6-NEXT:    lui $1, %hi(a) # <MCInst #[[#MCINST4:]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(a) # <MCInst #[[#MCINST4:]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(a)>>
 ; MMR6-NEXT:    lbu $2, %lo(a)($1) # <MCInst #[[#MCINST6:]] LBu_MM
@@ -242,7 +242,7 @@ define i32 @f2() {
 ;
 ; MMR6-LABEL: f2:
 ; MMR6:       # %bb.0: # %entry
-; MMR6-NEXT:    lui $1, %hi(a) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(a) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(a)>>
 ; MMR6-NEXT:    lb $2, %lo(a)($1) # <MCInst #[[#MCINST15:]] LB_MM
@@ -422,7 +422,7 @@ define i16 @f3() {
 ;
 ; MMR6-LABEL: f3:
 ; MMR6:       # %bb.0: # %entry
-; MMR6-NEXT:    lui $1, %hi(b) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(b) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(b)>>
 ; MMR6-NEXT:    lhu $2, %lo(b)($1) # <MCInst #[[#MCINST17:]] LHu_MM
@@ -601,7 +601,7 @@ define i32 @f4() {
 ;
 ; MMR6-LABEL: f4:
 ; MMR6:       # %bb.0: # %entry
-; MMR6-NEXT:    lui $1, %hi(b) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(b) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(b)>>
 ; MMR6-NEXT:    lh $2, %lo(b)($1) # <MCInst #[[#MCINST19:]] LH_MM
@@ -781,7 +781,7 @@ define i32 @f5() {
 ;
 ; MMR6-LABEL: f5:
 ; MMR6:       # %bb.0: # %entry
-; MMR6-NEXT:    lui $1, %hi(c) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(c) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(c)>>
 ; MMR6-NEXT:    lw $2, %lo(c)($1) # <MCInst #[[#MCINST21:]] LW_MM
@@ -971,7 +971,7 @@ define i64 @f6() {
 ;
 ; MMR6-LABEL: f6:
 ; MMR6:       # %bb.0: # %entry
-; MMR6-NEXT:    lui $1, %hi(c) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(c) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(c)>>
 ; MMR6-NEXT:    lw $3, %lo(c)($1) # <MCInst #[[#MCINST21]] LW_MM
@@ -1173,7 +1173,7 @@ define i64 @f7() {
 ;
 ; MMR6-LABEL: f7:
 ; MMR6:       # %bb.0: # %entry
-; MMR6-NEXT:    lui $1, %hi(c) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(c) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(c)>>
 ; MMR6-NEXT:    lw $3, %lo(c)($1) # <MCInst #[[#MCINST21]] LW_MM
@@ -1365,7 +1365,7 @@ define float @f8() {
 ;
 ; MMR6-LABEL: f8:
 ; MMR6:       # %bb.0: # %entry
-; MMR6-NEXT:    lui $1, %hi(e) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(e) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(e)>>
 ; MMR6-NEXT:    lwc1 $f0, %lo(e)($1) # <MCInst #[[#MCINST29:]] LWC1_MM
@@ -1540,7 +1540,7 @@ define double @f9() {
 ;
 ; MMR6-LABEL: f9:
 ; MMR6:       # %bb.0: # %entry
-; MMR6-NEXT:    lui $1, %hi(f) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(f) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(f)>>
 ; MMR6-NEXT:    ldc1 $f0, %lo(f)($1) # <MCInst #[[#MCINST33:]] LDC1_D64_MMR6

@@ -129,10 +129,10 @@ define void @slti_beq1(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:T9>>
-; MMR6-NEXT:    lui $1, 65535 # <MCInst #[[#MCINST11:]] LUi_MM
+; MMR6-NEXT:    lui $1, 65535 # <MCInst #[[#MCINST11:]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Imm:65535>>
-; MMR6-NEXT:    ori $1, $1, 32766 # <MCInst #[[#MCINST12:]] ORi_MM
+; MMR6-NEXT:    ori $1, $1, 32766 # <MCInst #[[#MCINST12:]] ORI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Imm:32766>>
@@ -251,7 +251,7 @@ define void @slti_beq3(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:T9>>
-; MMR6-NEXT:    addiu $1, $zero, 32767 # <MCInst #[[#MCINST15:]] ADDiu_MM
+; MMR6-NEXT:    addiu $1, $zero, 32767 # <MCInst #[[#MCINST15:]] ADDIU_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Reg:ZERO>
 ; MMR6-NEXT:    # <MCOperand Imm:32767>>
@@ -370,7 +370,7 @@ define void @sltiu_beq1(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:T9>>
-; MMR6-NEXT:    addiu $1, $zero, 32767 # <MCInst #[[#MCINST15]] ADDiu_MM
+; MMR6-NEXT:    addiu $1, $zero, 32767 # <MCInst #[[#MCINST15]] ADDIU_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Reg:ZERO>
 ; MMR6-NEXT:    # <MCOperand Imm:32767>>
@@ -490,10 +490,10 @@ define void @sltiu_beq3(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:T9>>
-; MMR6-NEXT:    lui $1, 65535 # <MCInst #[[#MCINST11]] LUi_MM
+; MMR6-NEXT:    lui $1, 65535 # <MCInst #[[#MCINST11]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Imm:65535>>
-; MMR6-NEXT:    ori $1, $1, 32766 # <MCInst #[[#MCINST12]] ORi_MM
+; MMR6-NEXT:    ori $1, $1, 32766 # <MCInst #[[#MCINST12]] ORI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Imm:32766>>

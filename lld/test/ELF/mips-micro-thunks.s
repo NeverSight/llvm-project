@@ -52,12 +52,12 @@
 # R2-NEXT:            nop
 
 # R6: <__start>:
-# R6-NEXT:    20100:  balc  {{.*}} <__start>
+# R6-NEXT:    20100:  balc  0x20104 <__microLA25Thunk_foo>
 
 # R6: <__microLA25Thunk_foo>:
 # R6-NEXT:    20104:  lui   $25, 2
 # R6-NEXT:            addiu $25, $25, 273
-# R6-NEXT:            bc    {{.*}} <__microLA25Thunk_foo+0x8>
+# R6-NEXT:            bc    0x20110 <foo>
 
   .text
   .set micromips

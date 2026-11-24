@@ -3032,9 +3032,10 @@ def MicroMipsDocs : Documentation {
   let Category = DocCatFunction;
   let Content = [{
 Clang supports the GNU style ``__attribute__((micromips))`` and
-``__attribute__((nomicromips))`` attributes on MIPS targets. These attributes
-may be attached to a function definition and instructs the backend to generate
-or not to generate microMIPS code for that function.
+``__attribute__((nomicromips))`` attributes on MIPS targets. They select the
+instruction encoding for a function definition and describe the callee's
+encoding on a declaration. The n32 and n64 ABIs support these attributes on
+MIPS64 Releases 2, 3, 5 and 6.
 
 These attributes override the ``-mmicromips`` and ``-mno-micromips`` options
 on the command line.

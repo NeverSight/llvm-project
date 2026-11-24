@@ -1289,7 +1289,10 @@ addDynamicElfSymbols(const ELFObjectFile<ELFT> &Obj,
     if (SecI == Obj.section_end())
       continue;
 
-    AllSymbols[*SecI].emplace_back(Address, Name, SymbolType);
+    SymbolInfoTy &Info =
+        AllSymbols[*SecI].emplace_back(Address, Name, SymbolType);
+    if (SymbolType == ELF::STT_FUNC)
+      Info.ELFStOther = Symbol.getOther();
   }
 }
 
@@ -1642,7 +1645,10 @@ SymbolInfoTy objdump::createSymbolInfo(const ObjectFile &Obj,
   } else {
     uint8_t Type =
         Obj.isELF() ? getElfSymbolType(Obj, Symbol) : (uint8_t)ELF::STT_NOTYPE;
-    return SymbolInfoTy(Addr, Name, Type, IsMappingSymbol);
+    SymbolInfoTy Info(Addr, Name, Type, IsMappingSymbol);
+    if (Obj.isELF() && Type == ELF::STT_FUNC)
+      Info.ELFStOther = ELFSymbolRef(Symbol).getOther();
+    return Info;
   }
 }
 
@@ -1855,6 +1861,8 @@ disassembleObject(ObjectFile &Obj, const ObjectFile &DbgObj,
                   SourcePrinter &SP, bool InlineRelocs, raw_ostream &OS) {
   DisassemblerTarget *DT = &PrimaryTarget;
   bool PrimaryIsThumb = false;
+  bool HasMipsModes =
+      SecondaryTarget && PrimaryTarget.TheTriple.isMIPS() && Obj.isELF();
   SmallVector<std::pair<uint64_t, uint64_t>, 0> CHPECodeMap;
 
   if (SecondaryTarget) {
@@ -2188,6 +2196,8 @@ disassembleObject(ObjectFile &Obj, const ObjectFile &DbgObj,
     std::string CurrentRISCVVendorSymbol;
     uint64_t CurrentRISCVVendorOffset = 0;
 
+    if (HasMipsModes)
+      DT = &PrimaryTarget;
     // Loop over each chunk of code between two points where at least
     // one symbol is defined.
     for (size_t SI = 0, SE = Symbols.size(); SI != SE;) {
@@ -2199,6 +2209,17 @@ disassembleObject(ObjectFile &Obj, const ObjectFile &DbgObj,
       while (SI != SE && Symbols[SI].Addr == Start)
         ++SI;
       SymbolsHere = ArrayRef<SymbolInfoTy>(&Symbols[FirstSI], SI - FirstSI);
+
+      // EF_MIPS_MICROMIPS describes the file. Each function's st_other
+      // selects its ISA, including for local labels inside that function.
+      if (HasMipsModes)
+        for (const SymbolInfoTy &Symbol : SymbolsHere)
+          if (Symbol.ELFStOther) {
+            DT = (*Symbol.ELFStOther & ELF::STO_MIPS_MICROMIPS)
+                     ? &PrimaryTarget
+                     : &*SecondaryTarget;
+            break;
+          }
 
       // Get the demangled names of all those symbols. We end up with a vector
       // of StringRef that holds the names we're going to use, and a vector of
@@ -2426,8 +2447,8 @@ disassembleObject(ObjectFile &Obj, const ObjectFile &DbgObj,
       if (SymbolizeOperands) {
         collectLocalBranchTargets(Bytes, DT->InstrAnalysis.get(),
                                   DT->DisAsm.get(), DT->InstPrinter.get(),
-                                  PrimaryTarget.SubtargetInfo.get(),
-                                  SectionAddr, Index, End, AllLabels);
+                                  DT->SubtargetInfo.get(), SectionAddr, Index,
+                                  End, AllLabels);
         collectBBAddrMapLabels(FullAddrMap, SectionAddr, Index, End,
                                BBAddrMapLabels);
       }
@@ -2881,6 +2902,13 @@ static void disassembleObject(ObjectFile *Obj, bool InlineRelocs,
         Features.AddFeature("+thumb-mode");
       SecondaryTarget.emplace(PrimaryTarget, Features);
     }
+  } else if (Obj->isELF() && PrimaryTarget.TheTriple.isMIPS() &&
+             PrimaryTarget.SubtargetInfo->checkFeatures("+micromips") &&
+             llvm::none_of(MAttrs, [](StringRef Attr) {
+               return Attr.ltrim("+-") == "micromips";
+             })) {
+    Features.AddFeature("-micromips");
+    SecondaryTarget.emplace(PrimaryTarget, Features);
   } else if (const auto *COFFObj = dyn_cast<COFFObjectFile>(Obj)) {
     const chpe_metadata *CHPEMetadata = COFFObj->getCHPEMetadata();
     if (CHPEMetadata && CHPEMetadata->CodeMapCount) {

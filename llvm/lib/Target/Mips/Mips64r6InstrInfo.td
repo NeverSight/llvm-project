@@ -144,14 +144,15 @@ let AdditionalPredicates = [NotInMicroMips] in {
   def DMUHU: DMUHU_ENC, DMUHU_DESC, ISA_MIPS64R6;
   def DMUL_R6: DMUL_R6_ENC, DMUL_R6_DESC, ISA_MIPS64R6;
   def DMULU: DMULU_ENC, DMULU_DESC, ISA_MIPS64R6;
-  def LLD_R6 : LLD_R6_ENC, LLD_R6_DESC, ISA_MIPS64R6;
+  def LLD_R6 : Micro64R6Rel<"standard">, LLD_R6_ENC, LLD_R6_DESC, ISA_MIPS64R6;
 }
 def LDPC: LDPC_ENC, LDPC_DESC, ISA_MIPS64R6;
 def LWUPC : LWUPC_ENC, LWUPC_DESC, ISA_MIPS64R6;
-def SCD_R6 : SCD_R6_ENC, SCD_R6_DESC, ISA_MIPS32R6;
+def SCD_R6 : Micro64R6Rel<"standard">, MipsR6Arch<"scd">, SCD_R6_ENC,
+             SCD_R6_DESC, ISA_MIPS64R6;
 let DecoderNamespace = "Mips32r6_64r6_GP64" in {
-  def SELEQZ64 : SELEQZ_ENC, SELEQZ64_DESC, ISA_MIPS32R6, GPR_64;
-  def SELNEZ64 : SELNEZ_ENC, SELNEZ64_DESC, ISA_MIPS32R6, GPR_64;
+  def SELEQZ64 : Micro64R6Rel<"standard">, SELEQZ_ENC, SELEQZ64_DESC, ISA_MIPS32R6, GPR_64;
+  def SELNEZ64 : Micro64R6Rel<"standard">, SELNEZ_ENC, SELNEZ64_DESC, ISA_MIPS32R6, GPR_64;
   def JR_HB64_R6 : JR_HB_R6_ENC, JR_HB64_R6_DESC, ISA_MIPS32R6;
 }
 let AdditionalPredicates = [NotInMicroMips],
@@ -162,22 +163,22 @@ let AdditionalPredicates = [NotInMicroMips],
 
 let DecoderNamespace = "Mips32r6_64r6_GP64" in {
 // Jump and Branch Instructions
-def JIALC64 : JIALC_ENC, JIALC64_DESC, ISA_MIPS64R6, GPR_64;
-def JIC64 : JIC_ENC, JIC64_DESC, ISA_MIPS64R6, GPR_64;
+def JIALC64 : Micro64R6Rel<"standard">, JIALC_ENC, JIALC64_DESC, ISA_MIPS64R6, GPR_64;
+def JIC64 : Micro64R6Rel<"standard">, JIC_ENC, JIC64_DESC, ISA_MIPS64R6, GPR_64;
 
-def BEQC64 : BEQC_ENC, BEQC64_DESC, ISA_MIPS64R6, GPR_64;
-def BEQZC64 : BEQZC_ENC, BEQZC64_DESC, ISA_MIPS64R6, GPR_64;
-def BGEC64 : BGEC_ENC, BGEC64_DESC, ISA_MIPS64R6, GPR_64;
-def BGEUC64 : BGEUC_ENC, BGEUC64_DESC, ISA_MIPS64R6, GPR_64;
-def BGTZC64 : BGTZC_ENC, BGTZC64_DESC, ISA_MIPS64R6, GPR_64;
-def BLEZC64 : BLEZC_ENC, BLEZC64_DESC, ISA_MIPS64R6, GPR_64;
-def BLTC64 : BLTC_ENC, BLTC64_DESC, ISA_MIPS64R6, GPR_64;
-def BLTUC64 : BLTUC_ENC, BLTUC64_DESC, ISA_MIPS64R6, GPR_64;
-def BNEC64 : BNEC_ENC, BNEC64_DESC, ISA_MIPS64R6, GPR_64;
-def BNEZC64 : BNEZC_ENC, BNEZC64_DESC, ISA_MIPS64R6, GPR_64;
+def BEQC64 : Micro64R6Rel<"standard">, BEQC_ENC, BEQC64_DESC, ISA_MIPS64R6, GPR_64;
+def BEQZC64 : Micro64R6Rel<"standard">, BEQZC_ENC, BEQZC64_DESC, ISA_MIPS64R6, GPR_64;
+def BGEC64 : Micro64R6Rel<"standard">, BGEC_ENC, BGEC64_DESC, ISA_MIPS64R6, GPR_64;
+def BGEUC64 : Micro64R6Rel<"standard">, BGEUC_ENC, BGEUC64_DESC, ISA_MIPS64R6, GPR_64;
+def BGTZC64 : Micro64R6Rel<"standard">, BGTZC_ENC, BGTZC64_DESC, ISA_MIPS64R6, GPR_64;
+def BLEZC64 : Micro64R6Rel<"standard">, BLEZC_ENC, BLEZC64_DESC, ISA_MIPS64R6, GPR_64;
+def BLTC64 : Micro64R6Rel<"standard">, BLTC_ENC, BLTC64_DESC, ISA_MIPS64R6, GPR_64;
+def BLTUC64 : Micro64R6Rel<"standard">, BLTUC_ENC, BLTUC64_DESC, ISA_MIPS64R6, GPR_64;
+def BNEC64 : Micro64R6Rel<"standard">, BNEC_ENC, BNEC64_DESC, ISA_MIPS64R6, GPR_64;
+def BNEZC64 : Micro64R6Rel<"standard">, BNEZC_ENC, BNEZC64_DESC, ISA_MIPS64R6, GPR_64;
 }
 let DecoderNamespace = "Mips32r6_64r6_BranchZero" in {
-def BLTZC64 : BLTZC_ENC, BLTZC64_DESC, ISA_MIPS64R6, GPR_64;
+def BLTZC64 : Micro64R6Rel<"standard">, BLTZC_ENC, BLTZC64_DESC, ISA_MIPS64R6, GPR_64;
 def BGEZC64 : BGEZC_ENC, BGEZC64_DESC, ISA_MIPS64R6, GPR_64;
 }
 let AdditionalPredicates = [NotInMicroMips] in {
@@ -202,6 +203,8 @@ def : MipsInstAlias<"jalrc $rs", (JIALC64 GPR64Opnd:$rs, 0), 1>, ISA_MIPS64R6;
 //
 //===----------------------------------------------------------------------===//
 
+// The 64-bit register views map to the same R6 select operations in both encodings.
+let EncodingPredicates = [NotInMips16Mode] in {
 // i64 selects
 def : MipsPat<(select i64:$cond, i64:$t, i64:$f),
               (OR64 (SELNEZ64 i64:$t, i64:$cond),
@@ -298,6 +301,8 @@ def : MipsPat<(select (i32 (setne i32:$cond, immz)), immz, i64:$f),
 def : MipsPat<(select (i32 (seteq i32:$cond, immz)), immz, i64:$f),
               (SELNEZ64 i64:$f, (SLL64_32 i32:$cond))>,
               ISA_MIPS64R6;
+
+} // EncodingPredicates = [NotInMips16Mode]
 
 // Patterns used for matching away redundant sign extensions.
 // MIPS32 arithmetic instructions sign extend their result implicitly.

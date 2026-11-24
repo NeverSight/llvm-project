@@ -273,11 +273,13 @@ def : InstRW<[GenericWriteALU], (instrs MOVN_I_I64, MOVN_I64_I, MOVN_I64_I64,
 // MIPS64R6
 // ========
 
-def : InstRW<[GenericWriteMDUtoGPR], (instrs DMUH, DMUHU, DMUL_R6)>;
+def : InstRW<[GenericWriteMDUtoGPR], (instrs DMUH, DMUHU, DMUL_R6,
+                                      DMUH_MMR6, DMUHU_MMR6, DMUL_MMR6,
+                                      DMULU_MMR6)>;
 
-def : InstRW<[GenericWriteDIV], (instrs DDIV, DMOD)>;
+def : InstRW<[GenericWriteDIV], (instrs DDIV, DMOD, DDIV_MMR6, DMOD_MMR6)>;
 
-def : InstRW<[GenericWriteDIVU], (instrs DDIVU, DMODU)>;
+def : InstRW<[GenericWriteDIVU], (instrs DDIVU, DMODU, DDIVU_MMR6, DMODU_MMR6)>;
 
 // CTISTD Pipeline
 // ---------------
@@ -708,9 +710,9 @@ def : InstRW<[GenericWriteStore], (instrs SDL, SDR, SDL_MM, SDR_MM)>;
 
 def : InstRW<[GenericWriteLoad], (instrs LWUPC, LDPC)>;
 
-def : InstRW<[GenericWriteLoad], (instrs LLD_R6, LL64_R6)>;
+def : InstRW<[GenericWriteLoad], (instrs LLD_R6, LLD_MMR6, LL64_R6)>;
 
-def : InstRW<[GenericWriteStoreSC], (instrs SC64_R6, SCD_R6)>;
+def : InstRW<[GenericWriteStoreSC], (instrs SC64_R6, SCD_R6, SCD_MMR6)>;
 
 // MIPSR6 CRC ASE - hasCRC
 // =======================

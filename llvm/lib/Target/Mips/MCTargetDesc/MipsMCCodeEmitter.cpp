@@ -216,6 +216,10 @@ void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
     lowerLargeShift(TmpInst, Mips::DSRA32);
     break;
   case Mips::DSRA_MM:
+    if (isMips32r6(STI) && TmpInst.getOperand(2).getImm() >= 32) {
+      Ctx.reportError(MI.getLoc(), "unverified microMIPS64R6 DSRA32 encoding");
+      return;
+    }
     lowerLargeShift(TmpInst, Mips::DSRA32_MM);
     break;
   case Mips::DROTR:
@@ -243,6 +247,8 @@ void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
       NewOpcode = Mips::MipsR62MicroMipsR6(Opcode, Mips::Arch_micromipsr6);
       if (NewOpcode == -1)
         NewOpcode = Mips::Std2MicroMipsR6(Opcode, Mips::Arch_micromipsr6);
+      if (NewOpcode == -1 && STI.hasFeature(Mips::FeatureGP64Bit))
+        NewOpcode = Mips::GP64ToMicroMipsR6(Opcode);
     } else {
       NewOpcode = Mips::Std2MicroMips(Opcode, Mips::Arch_micromips);
       if (NewOpcode == -1 && STI.hasFeature(Mips::FeatureGP64Bit))
@@ -260,8 +266,14 @@ void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
     }
   }
 
-  uint32_t Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
   const unsigned EncodedOpcode = TmpInst.getOpcode();
+  if (EncodedOpcode == Mips::DINSM_MM && isMips32r6(STI) &&
+      MipsII::isAmbiguousMicro64R6DinsmPosition(
+          TmpInst.getOperand(2).getImm())) {
+    Ctx.reportError(MI.getLoc(), "ambiguous microMIPS64R6 DINSM encoding");
+    return;
+  }
+  uint32_t Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
   if (!Binary && EncodedOpcode != Mips::NOP && EncodedOpcode != Mips::SLL &&
       EncodedOpcode != Mips::SLL_MM && EncodedOpcode != Mips::SLL_MMR6)
     llvm_unreachable("unimplemented opcode in encodeInstruction()");
@@ -308,71 +320,6 @@ getBranchTargetOpValue(const MCInst &MI, unsigned OpNo,
 
   assert(MO.isExpr() &&
          "getBranchTargetOpValue expects only expressions or immediates");
-
-  const MCExpr *FixupExpression = MCBinaryExpr::createAdd(
-      MO.getExpr(), MCConstantExpr::create(-4, Ctx), Ctx);
-  addFixup(Fixups, 0, FixupExpression, Mips::fixup_Mips_PC16);
-  return 0;
-}
-
-/// getBranchTargetOpValue1SImm16 - Return binary encoding of the branch
-/// target operand. If the machine operand requires relocation,
-/// record the relocation and return zero.
-unsigned MipsMCCodeEmitter::
-getBranchTargetOpValue1SImm16(const MCInst &MI, unsigned OpNo,
-                              SmallVectorImpl<MCFixup> &Fixups,
-                              const MCSubtargetInfo &STI) const {
-  const MCOperand &MO = MI.getOperand(OpNo);
-
-  // If the destination is an immediate, divide by 2.
-  if (MO.isImm()) return MO.getImm() >> 1;
-
-  assert(MO.isExpr() &&
-         "getBranchTargetOpValue expects only expressions or immediates");
-
-  const MCExpr *FixupExpression = MCBinaryExpr::createAdd(
-      MO.getExpr(), MCConstantExpr::create(-4, Ctx), Ctx);
-  addFixup(Fixups, 0, FixupExpression, Mips::fixup_Mips_PC16);
-  return 0;
-}
-
-/// getBranchTargetOpValueMMR6 - Return binary encoding of the branch
-/// target operand. If the machine operand requires relocation,
-/// record the relocation and return zero.
-unsigned MipsMCCodeEmitter::
-getBranchTargetOpValueMMR6(const MCInst &MI, unsigned OpNo,
-                           SmallVectorImpl<MCFixup> &Fixups,
-                           const MCSubtargetInfo &STI) const {
-  const MCOperand &MO = MI.getOperand(OpNo);
-
-  // If the destination is an immediate, divide by 2.
-  if (MO.isImm())
-    return MO.getImm() >> 1;
-
-  assert(MO.isExpr() &&
-         "getBranchTargetOpValueMMR6 expects only expressions or immediates");
-
-  const MCExpr *FixupExpression = MCBinaryExpr::createAdd(
-      MO.getExpr(), MCConstantExpr::create(-2, Ctx), Ctx);
-  addFixup(Fixups, 0, FixupExpression, Mips::fixup_Mips_PC16);
-  return 0;
-}
-
-/// getBranchTargetOpValueLsl2MMR6 - Return binary encoding of the branch
-/// target operand. If the machine operand requires relocation,
-/// record the relocation and return zero.
-unsigned MipsMCCodeEmitter::
-getBranchTargetOpValueLsl2MMR6(const MCInst &MI, unsigned OpNo,
-                               SmallVectorImpl<MCFixup> &Fixups,
-                               const MCSubtargetInfo &STI) const {
-  const MCOperand &MO = MI.getOperand(OpNo);
-
-  // If the destination is an immediate, divide by 4.
-  if (MO.isImm())
-    return MO.getImm() >> 2;
-
-  assert(MO.isExpr() &&
-         "getBranchTargetOpValueLsl2MMR6 expects only expressions or immediates");
 
   const MCExpr *FixupExpression = MCBinaryExpr::createAdd(
       MO.getExpr(), MCConstantExpr::create(-4, Ctx), Ctx);
@@ -470,8 +417,9 @@ getBranchTarget21OpValueMM(const MCInst &MI, unsigned OpNo,
                            const MCSubtargetInfo &STI) const {
   const MCOperand &MO = MI.getOperand(OpNo);
 
-  // If the destination is an immediate, divide by 4.
-  if (MO.isImm()) return MO.getImm() >> 2;
+  // If the destination is an immediate, divide by 2.
+  if (MO.isImm())
+    return MO.getImm() >> 1;
 
   assert(MO.isExpr() &&
     "getBranchTarget21OpValueMM expects only expressions or immediates");

@@ -431,10 +431,45 @@ public:
   void addSymbols(ThunkSection &isec) override;
 };
 
-// MIPS LA25 thunk
-class MipsThunk final : public Thunk {
+// LA25 thunks have the destination's ISA. An R6 caller in the opposite
+// mode needs an entry in its own ISA and may not reuse an LA25 thunk.
+class MipsLA25Thunk : public Thunk {
 public:
-  MipsThunk(Ctx &ctx, Symbol &dest) : Thunk(ctx, dest, 0) {}
+  MipsLA25Thunk(Ctx &ctx, Symbol &dest) : Thunk(ctx, dest, 0) {}
+  bool isCompatibleWith(const InputSection &,
+                        const Relocation &rel) const override {
+    return !needsMipsR6ModeThunk(ctx, rel.expr, rel.type, destination,
+                                 rel.addend);
+  }
+};
+
+class MipsR6ModeThunk final : public Thunk {
+public:
+  MipsR6ModeThunk(Ctx &ctx, const Relocation &rel)
+      : Thunk(ctx, *rel.sym, 0), micro(rel.type == R_MICROMIPS_PC26_S1),
+        viaPlt(rel.expr == R_PLT || rel.expr == R_PLT_PC) {
+    alignment = ctx.arg.wordsize;
+  }
+  uint32_t size() override { return 16 + ctx.arg.wordsize; }
+  void writeTo(uint8_t *buf) override;
+  void addSymbols(ThunkSection &isec) override;
+  bool isCompatibleWith(const InputSection &,
+                        const Relocation &rel) const override {
+    return needsMipsR6ModeThunk(ctx, rel.expr, rel.type, destination,
+                                rel.addend) &&
+           micro == (rel.type == R_MICROMIPS_PC26_S1) &&
+           viaPlt == (rel.expr == R_PLT || rel.expr == R_PLT_PC);
+  }
+
+private:
+  bool micro;
+  bool viaPlt;
+};
+
+// MIPS LA25 thunk
+class MipsThunk final : public MipsLA25Thunk {
+public:
+  using MipsLA25Thunk::MipsLA25Thunk;
 
   uint32_t size() override { return 16; }
   void writeTo(uint8_t *buf) override;
@@ -443,22 +478,22 @@ public:
 };
 
 // microMIPS R2-R5 LA25 thunk
-class MicroMipsThunk final : public Thunk {
+class MicroMipsThunk final : public MipsLA25Thunk {
 public:
-  MicroMipsThunk(Ctx &ctx, Symbol &dest) : Thunk(ctx, dest, 0) {}
+  using MipsLA25Thunk::MipsLA25Thunk;
 
-  uint32_t size() override { return 14; }
+  uint32_t size() override { return ctx.arg.is64 ? 26 : 14; }
   void writeTo(uint8_t *buf) override;
   void addSymbols(ThunkSection &isec) override;
   InputSection *getTargetInputSection() const override;
 };
 
 // microMIPS R6 LA25 thunk
-class MicroMipsR6Thunk final : public Thunk {
+class MicroMipsR6Thunk final : public MipsLA25Thunk {
 public:
-  MicroMipsR6Thunk(Ctx &ctx, Symbol &dest) : Thunk(ctx, dest, 0) {}
+  using MipsLA25Thunk::MipsLA25Thunk;
 
-  uint32_t size() override { return 12; }
+  uint32_t size() override { return ctx.arg.is64 ? 26 : 12; }
   void writeTo(uint8_t *buf) override;
   void addSymbols(ThunkSection &isec) override;
   InputSection *getTargetInputSection() const override;
@@ -1245,6 +1280,46 @@ void AVRThunk::addSymbols(ThunkSection &isec) {
             isec);
 }
 
+// The literal is a link-time difference, so the same instructions also
+// work in an ELF shared object. Preserve $ra and install the tagged callee
+// address in $25 for both tail calls and calls to PIC functions.
+void MipsR6ModeThunk::writeTo(uint8_t *buf) {
+  bool wide = ctx.arg.is64;
+  if (micro) {
+    write16(ctx, buf, 0x7b20); // lapc $25, 0
+    write16(ctx, buf + 2, 0);
+    write16(ctx, buf + 4, wide ? 0xdc39 : 0xfc39); // l[dw] $1, 16($25)
+    write16(ctx, buf + 6, 16);
+    write16(ctx, buf + 8, wide ? 0x5839 : 0x0039); // [d]addu $25, $25, $1
+    write16(ctx, buf + 10, 0xc950);
+    write16(ctx, buf + 12, 0x8019); // jic $25, 0
+    write16(ctx, buf + 14, 0);
+  } else {
+    write32(ctx, buf, 0xef200000); // lapc $25, 0
+    write32(ctx, buf + 4, wide ? 0xdf210010 : 0x8f210010);
+    write32(ctx, buf + 8, wide ? 0x0321c82d : 0x0321c821);
+    write32(ctx, buf + 12, 0xd8190000); // jic $25, 0
+  }
+  uint64_t dest = viaPlt ? destination.getPltVA(ctx) : destination.getVA(ctx);
+  uint64_t pc = getThunkTargetSym()->getVA(ctx) & ~uint64_t(1);
+  if (wide)
+    write64(ctx, buf + 16, dest - pc);
+  else
+    write32(ctx, buf + 16, dest - pc);
+}
+
+void MipsR6ModeThunk::addSymbols(ThunkSection &isec) {
+  Defined *s =
+      addSymbol(ctx.saver.save("__MipsR6ModeThunk_" + destination.getName()),
+                STT_FUNC, 0, isec);
+  s->size = 16;
+  addSymbol(ctx.saver.save("__MipsR6ModeLiteral_" + destination.getName()),
+            STT_OBJECT, 16, isec)
+      ->size = ctx.arg.wordsize;
+  if (micro)
+    s->stOther |= STO_MIPS_MICROMIPS;
+}
+
 // Write MIPS LA25 thunk code to call PIC function from the non-PIC one.
 void MipsThunk::writeTo(uint8_t *buf) {
   uint64_t s = destination.getVA(ctx);
@@ -1266,10 +1341,33 @@ InputSection *MipsThunk::getTargetInputSection() const {
   return dyn_cast<InputSection>(dr.section);
 }
 
+// Load the full tagged n64 function address into $25 before transferring
+// control. Both revisions provide a compact indirect jump without a delay slot.
+static void writeMicroMips64LA25(Ctx &ctx, uint8_t *buf, uint64_t address) {
+  bool r6 = isMipsR6(ctx);
+  write16(ctx, buf, r6 ? 0x1320 : 0x41b9); // lui $25, %highest(func)
+  write16(ctx, buf + 2, (address + 0x800080008000) >> 48);
+  write16(ctx, buf + 4, 0x5f39); // daddiu $25, $25, %higher(func)
+  write16(ctx, buf + 6, (address + 0x80008000) >> 32);
+  write16(ctx, buf + 8, 0x5b39); // dsll $25, $25, 16
+  write16(ctx, buf + 10, 0x8000);
+  write16(ctx, buf + 12, 0x5f39); // daddiu $25, $25, %hi(func)
+  write16(ctx, buf + 14, (address + 0x8000) >> 16);
+  write16(ctx, buf + 16, 0x5b39); // dsll $25, $25, 16
+  write16(ctx, buf + 18, 0x8000);
+  write16(ctx, buf + 20, 0x5f39); // daddiu $25, $25, %lo(func)
+  write16(ctx, buf + 22, address);
+  write16(ctx, buf + 24, r6 ? 0x4723 : 0x45b9); // jrc $25
+}
+
 // Write microMIPS R2-R5 LA25 thunk code
 // to call PIC function from the non-PIC one.
 void MicroMipsThunk::writeTo(uint8_t *buf) {
   uint64_t s = destination.getVA(ctx);
+  if (ctx.arg.is64) {
+    writeMicroMips64LA25(ctx, buf, s);
+    return;
+  }
   write16(ctx, buf, 0x41b9);      // lui   $25, %hi(func)
   write16(ctx, buf + 4, 0xd400);  // j     func
   write16(ctx, buf + 8, 0x3339);  // addiu $25, $25, %lo(func)
@@ -1295,7 +1393,13 @@ InputSection *MicroMipsThunk::getTargetInputSection() const {
 // to call PIC function from the non-PIC one.
 void MicroMipsR6Thunk::writeTo(uint8_t *buf) {
   uint64_t s = destination.getVA(ctx);
-  uint64_t p = getThunkTargetSym()->getVA(ctx);
+  if (ctx.arg.is64) {
+    writeMicroMips64LA25(ctx, buf, s);
+    return;
+  }
+  // The relocation place is a byte address. Only the destination carries
+  // the ISA tag consumed by the branch relocation.
+  uint64_t p = getThunkTargetSym()->getVA(ctx) & ~uint64_t(1);
   write16(ctx, buf, 0x1320);     // lui   $25, %hi(func)
   write16(ctx, buf + 4, 0x3339); // addiu $25, $25, %lo(func)
   write16(ctx, buf + 8, 0x9400); // bc    func
@@ -1759,7 +1863,10 @@ static std::unique_ptr<Thunk> addThunkHexagon(Ctx &ctx,
   }
 }
 
-static std::unique_ptr<Thunk> addThunkMips(Ctx &ctx, RelType type, Symbol &s) {
+static std::unique_ptr<Thunk> addThunkMips(Ctx &ctx, const Relocation &rel) {
+  Symbol &s = *rel.sym;
+  if (needsMipsR6ModeThunk(ctx, rel.expr, rel.type, s, rel.addend))
+    return std::make_unique<MipsR6ModeThunk>(ctx, rel);
   if ((s.stOther & STO_MIPS_MICROMIPS) && isMipsR6(ctx))
     return std::make_unique<MicroMipsR6Thunk>(ctx, s);
   if (s.stOther & STO_MIPS_MICROMIPS)
@@ -1823,7 +1930,7 @@ std::unique_ptr<Thunk> elf::addThunk(Ctx &ctx, const InputSection &isec,
   case EM_AVR:
     return addThunkAVR(ctx, rel.type, s, a);
   case EM_MIPS:
-    return addThunkMips(ctx, rel.type, s);
+    return addThunkMips(ctx, rel);
   case EM_PPC:
     return addThunkPPC32(ctx, isec, rel, s);
   case EM_PPC64:

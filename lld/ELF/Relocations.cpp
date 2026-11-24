@@ -1628,6 +1628,9 @@ static int64_t getPCBias(Ctx &ctx, const InputSection &isec,
       return 8;
     }
   }
+  if (ctx.arg.emachine == EM_MIPS &&
+      (rel.type == R_MIPS_PC26_S2 || rel.type == R_MICROMIPS_PC26_S1))
+    return 4;
   if (ctx.arg.emachine == EM_HEXAGON)
     return -getHexagonPacketOffset(isec, rel);
   return 0;
@@ -1856,7 +1859,8 @@ bool ThunkCreator::normalizeExistingThunk(Relocation &rel, uint64_t src) {
                                   rel.sym->getVA(ctx, rel.addend)))
       return true;
     rel.sym = &t->destination;
-    rel.addend = t->addend;
+    if (ctx.arg.emachine != EM_MIPS)
+      rel.addend = t->addend;
     if (rel.sym->isInPlt(ctx))
       rel.expr = toPlt(rel.expr);
   }
