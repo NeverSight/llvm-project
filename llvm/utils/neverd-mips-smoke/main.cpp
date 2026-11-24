@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
@@ -38,17 +39,18 @@ static std::string emit(StringRef IR, StringRef TripleName, StringRef CPU,
     return {};
   }
   std::string Error;
-  const auto *Target = TargetRegistry::lookupTarget(Triple(TripleName), Error);
+  const Triple TT(Triple::normalize(TripleName));
+  const auto *Target = TargetRegistry::lookupTarget(TT, Error);
   if (!Target) {
     errs() << Error << '\n';
     return {};
   }
   TargetOptions Options;
-  std::unique_ptr<TargetMachine> Machine(Target->createTargetMachine(
-      Triple(TripleName), CPU, "", Options, Reloc::Static));
+  std::unique_ptr<TargetMachine> Machine(
+      Target->createTargetMachine(TT, CPU, "", Options, Reloc::Static));
   if (!Machine)
     return {};
-  Module->setTargetTriple(Triple(TripleName));
+  Module->setTargetTriple(TT);
   Module->setDataLayout(Machine->createDataLayout());
   SmallString<4096> Output;
   raw_svector_ostream Stream(Output);
@@ -135,8 +137,8 @@ static bool objectModes(bool Little, bool N32) {
         SawCode |= !Data->empty();
       else
         SawCode |= Data->starts_with(
-            Little ? StringRef("\x00\xf0\x11\x6a\xe0\xe8", 6)
-                   : StringRef("\xf0\x00\x6a\x11\xe8\xe0", 6));
+            Little ? StringRef("\x00\xf0\x11\x6a\xa0\xe8", 6)
+                   : StringRef("\xf0\x00\x6a\x11\xe8\xa0", 6));
       continue;
     }
     if (Data->size() != 24 || (*Data)[2] != (N32 ? 64 : 32))
@@ -164,37 +166,41 @@ static bool objectModes(bool Little, bool N32) {
   return SawCode && SawABI && SawPlain && (N32 || (SawCompact && SawAlias));
 }
 
-static bool fixedAddressLeaf(StringRef TargetName, bool Wide, bool Little,
-                             bool N32) {
+static bool fixedAddressLeaf(const Triple &TT, StringRef CPU,
+                             StringRef Mode = {}) {
   LLVMContext Context;
   SMDiagnostic Diagnostic;
   auto Module = parseAssemblyString(R"(
-    @entry = global ptr @leaf
+    @entry = global [2 x ptr] [ptr @leaf, ptr getelementptr (i8, ptr @leaf, i32 1)]
     define i32 @leaf() uwtable { ret i32 37 }
   )",
                                     Diagnostic, Context);
   if (!Module)
     return false;
-  Triple TT(TargetName);
+  if (!Mode.empty())
+    Module->getFunction("leaf")->addFnAttr(Mode);
+  const bool Wide = TT.isMIPS64(), Little = TT.isLittleEndian(),
+             N32 = TT.isABIN32();
   std::string Err;
   const auto *Target = TargetRegistry::lookupTarget(TT, Err);
   if (!Target)
     return false;
-  std::unique_ptr<TargetMachine> TM(Target->createTargetMachine(
-      TT, Wide ? "mips64r2" : "mips32r2", "", TargetOptions(), Reloc::Static));
+  std::unique_ptr<TargetMachine> TM(
+      Target->createTargetMachine(TT, CPU, "", TargetOptions(), Reloc::Static));
   if (!TM)
     return false;
   Module->setTargetTriple(TT);
   Module->setDataLayout(TM->createDataLayout());
   legacy::PassManager PM;
   mc_rewrite::RewriteOptions Options;
-  Options.Model.TextVA = 0x10000;
-  Options.Model.getSectionVA = [](StringRef Name) -> uint64_t {
+  const uint64_t Base = Wide && !N32 ? 0x1200000000ULL : 0;
+  Options.Model.TextVA = Base + 0x10000;
+  Options.Model.getSectionVA = [Base](StringRef Name) -> uint64_t {
     if (Name == ".text")
-      return 0x10000;
+      return Base + 0x10000;
     if (Name == ".data")
-      return 0x20000;
-    return 0x30000;
+      return Base + 0x20000;
+    return Base + 0x30000;
   };
   mc_rewrite::RewriteResult Result;
   if (TM->addPassesToEmitBinaryRewrite(PM, Options, Result))
@@ -202,26 +208,59 @@ static bool fixedAddressLeaf(StringRef TargetName, bool Wide, bool Little,
   PM.run(*Module);
   if (!Result.ImageValid || !Result.FunctionRangesValid ||
       !Result.Unresolved.empty() || Result.FunctionRanges.size() != 1 ||
-      Result.SymbolAddrs["leaf"] != 0x10000 ||
-      Result.SymbolAddrs["entry"] != 0x20000)
+      Result.SymbolAddrs["leaf"] != Base + 0x10000 ||
+      Result.SymbolAddrs["entry"] != Base + 0x20000) {
+    errs() << TT.str() << " " << CPU << " " << Mode
+           << ": image=" << Result.ImageValid
+           << ", ranges=" << Result.FunctionRangesValid << "/"
+           << Result.FunctionRanges.size()
+           << ", unresolved=" << Result.Unresolved.size()
+           << ", leaf=" << utohexstr(Result.SymbolAddrs["leaf"])
+           << ", entry=" << utohexstr(Result.SymbolAddrs["entry"]) << '\n';
     return false;
+  }
+  const unsigned BodySize = Mode == "mips16" ? 6 : Mode == "micromips" ? 4 : 8;
   const auto &Range = Result.FunctionRanges.front();
-  if (Range.OwnerSymbol != "leaf" || Range.BeginVA != 0x10000 ||
-      Range.EndVA != 0x10008)
+  if (Range.OwnerSymbol != "leaf" || Range.BeginVA != Base + 0x10000 ||
+      Range.EndVA != Base + 0x10000 + BodySize) {
+    errs() << TT.str() << " " << CPU << " " << Mode << ": range "
+           << Range.OwnerSymbol << " [" << utohexstr(Range.BeginVA) << ","
+           << utohexstr(Range.EndVA) << ")\n";
     return false;
+  }
   const auto Order = Little ? endianness::little : endianness::big;
   bool SawText = false, SawPointer = false;
   for (const auto &Sec : Result.Sections) {
-    if (Sec.Name == ".text" && Sec.Bytes.size() >= 8)
-      SawText =
-          support::endian::read32(Sec.Bytes.data(), Order) == 0x03e00008 &&
-          support::endian::read32(Sec.Bytes.data() + 4, Order) == 0x24020025;
+    if (Sec.Name == ".text" && Sec.Bytes.size() >= BodySize) {
+      const uint8_t *Text = Sec.Bytes.data();
+      if (Mode == "mips16")
+        SawText = support::endian::read16(Text, Order) == 0xf020 &&
+                  support::endian::read16(Text + 2, Order) == 0x6a05 &&
+                  support::endian::read16(Text + 4, Order) == 0xe8a0;
+      else if (Mode == "micromips")
+        SawText = support::endian::read16(Text, Order) == 0xed25 &&
+                  support::endian::read16(Text + 2, Order) == 0x45bf;
+      else
+        SawText = support::endian::read32(Text, Order) == 0x03e00008 &&
+                  support::endian::read32(Text + 4, Order) == 0x24020025;
+    }
     const unsigned Width = Wide && !N32 ? 8 : 4;
-    if (Sec.Name == ".data" && Sec.Bytes.size() >= Width)
-      SawPointer =
-          (Width == 8
-               ? support::endian::read64(Sec.Bytes.data(), Order)
-               : support::endian::read32(Sec.Bytes.data(), Order)) == 0x10000;
+    if (Sec.Name == ".data" && Sec.Bytes.size() >= 2 * Width) {
+      const auto Read = [&](unsigned Offset) {
+        const uint8_t *Word = Sec.Bytes.data() + Offset;
+        return Width == 8 ? support::endian::read64(Word, Order)
+                          : support::endian::read32(Word, Order);
+      };
+      const uint64_t Entry = Base + 0x10000 + !Mode.empty();
+      SawPointer = Read(0) == Entry && Read(Width) == Entry + 1;
+    }
+  }
+  if (!SawText || !SawPointer) {
+    errs() << TT.str() << " " << CPU << " " << Mode << ": ";
+    for (const auto &Section : Result.Sections)
+      if (Section.Name == ".text" || Section.Name == ".data")
+        errs() << Section.Name << "=" << toHex(Section.Bytes) << " ";
+    errs() << '\n';
   }
   return SawText && SawPointer;
 }
@@ -237,8 +276,13 @@ int main() {
          {Little ? "mipsel-linux-gnu" : "mips-linux-gnu",
           Little ? "mips64el-linux-gnuabin32" : "mips64-linux-gnuabin32",
           Little ? "mips64el-linux-gnuabi64" : "mips64-linux-gnuabi64"}) {
-      if (!fixedAddressLeaf(TT, Triple(TT).isMIPS64(), Little,
-                            Triple(TT).isABIN32())) {
+      Triple Target(Triple::normalize(TT));
+      if (!fixedAddressLeaf(Target,
+                            Target.isMIPS64() ? "mips64r2" : "mips32r2") ||
+          (Target.isMIPS64() && !fixedAddressLeaf(Target, "mips5")) ||
+          (!Target.isMIPS64() &&
+           (!fixedAddressLeaf(Target, "mips32r2", "mips16") ||
+            !fixedAddressLeaf(Target, "mips32r2", "micromips")))) {
         errs() << "MIPS fixed-address code generation failure: " << TT << '\n';
         return 1;
       }

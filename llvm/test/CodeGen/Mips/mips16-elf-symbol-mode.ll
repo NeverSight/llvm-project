@@ -28,5 +28,5 @@ define i32 @plain() "nomips16" {
 ; CHECK-NEXT: Other [ (0xF2)
 ; CHECK: ASEs [ (0x400)
 ; Both byte orders fetch EXTEND first, then li $2,17 and jrc $ra.
-; BE: 0x00000000 f0006a11 e8e0
-; LE: 0x00000000 00f0116a e0e8
+; BE: 0x00000000 f0006a11 e8a0
+; LE: 0x00000000 00f0116a a0e8

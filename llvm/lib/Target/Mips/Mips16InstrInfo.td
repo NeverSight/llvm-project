@@ -118,14 +118,14 @@ class FEXT_CCRXI16_ins<string asmstr>:
 // JAL and JALX instruction format
 //
 class FJAL16_ins<bits<1> _X, string asmstr>:
-  FJAL16<_X, (outs), (ins uimm26:$imm26),
+  FJAL16<_X, (outs), (ins calltarget:$imm26),
          !strconcat(asmstr, "\t$imm26\n\tnop"),[]>  {
   let isCodeGenOnly=1;
   let Size=6;
 }
 
 class FJALB16_ins<bits<1> _X, string asmstr>:
-  FJAL16<_X, (outs), (ins uimm26:$imm26),
+  FJAL16<_X, (outs), (ins jmptarget:$imm26),
          !strconcat(asmstr, "\t$imm26\t# branch\n\tnop"),[]>  {
   let isCodeGenOnly=1;
   let Size=6;
@@ -740,7 +740,7 @@ def JrRa16: FRR16_JALRC_RA_only_ins<0, 0, "jr"> {
   let isReturn=1;
 }
 
-def JrcRa16: FRR16_JALRC_RA_only_ins<1, 1, "jrc"> {
+def JrcRa16: FRR16_JALRC_RA_only_ins<1, 0, "jrc"> {
   let isBranch = 1;
   let isIndirectBranch = 1;
   let isTerminator=1;
@@ -748,7 +748,7 @@ def JrcRa16: FRR16_JALRC_RA_only_ins<1, 1, "jrc"> {
   let isReturn=1;
 }
 
-def JrcRx16: FRR16_JALRC_ins<1, 1, 0, "jrc"> {
+def JrcRx16: FRR16_JALRC_ins<1, 0, 0, "jrc"> {
   let isBranch = 1;
   let isIndirectBranch = 1;
   let isTerminator=1;
@@ -759,7 +759,7 @@ def JrcRx16: FRR16_JALRC_ins<1, 1, 0, "jrc"> {
 // Purpose: Load Byte (Extended)
 // To load a byte from memory as a signed value.
 //
-def LbRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10011, "lb", mem16>, MayLoad{
+def LbRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10000, "lb", mem16>, MayLoad{
   let isCodeGenOnly = 1;
 }
 
@@ -778,7 +778,7 @@ def LbuRxRyOffMemX16:
 // Purpose: Load Halfword signed (Extended)
 // To load a halfword from memory as a signed value.
 //
-def LhRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10100, "lh", mem16>, MayLoad{
+def LhRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10001, "lh", mem16>, MayLoad{
   let isCodeGenOnly = 1;
 }
 
@@ -788,7 +788,7 @@ def LhRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10100, "lh", mem16>, MayLoad{
 // To load a halfword from memory as an unsigned value.
 //
 def LhuRxRyOffMemX16:
-  FEXT_RRI16_mem_ins<0b10100, "lhu", mem16>, MayLoad {
+  FEXT_RRI16_mem_ins<0b10101, "lhu", mem16>, MayLoad {
   let isCodeGenOnly = 1;
 }
 
@@ -824,7 +824,10 @@ def LwRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10011, "lw", mem16>, MayLoad{
 // To load an SP-relative word from memory as a signed value.
 //
 let DecoderMethod = "DecodeFIXMEInstruction" in
-def LwRxSpImmX16: FEXT_RRI16_mem_ins<0b10010, "lw", mem16sp>, MayLoad;
+def LwRxSpImmX16: FEXT_RRI16_mem_ins<0b10010, "lw", mem16sp>, MayLoad {
+  let Inst{10-8} = ry;
+  let Inst{7-5} = 0;
+}
 
 def LwRxPcTcp16: FRI16_TCP_ins<0b10110, "lw">, MayLoad;
 
@@ -938,7 +941,7 @@ def OrRxRxRy16: FRxRxRy16_ins<0b01101, "or">, ArithLogic16Defs<1>;
 //
 
 def Restore16:
-  FI8_SVRS16<0b1, (outs), (ins variable_ops),
+  FI8_SVRS16<0b0, (outs), (ins variable_ops),
              "", [] >, MayLoad {
   let isCodeGenOnly = 1;
   let Defs = [SP];
@@ -947,8 +950,9 @@ def Restore16:
 
 
 def RestoreX16:
-  FI8_SVRS16<0b1, (outs), (ins variable_ops),
+  FI8_SVRS16<0b0, (outs), (ins variable_ops),
              "", [] >, MayLoad {
+  let Size = 4;
   let isCodeGenOnly = 1;
   let Defs = [SP];
   let Uses = [SP];
@@ -972,6 +976,7 @@ def Save16:
 def SaveX16:
   FI8_SVRS16<0b1, (outs), (ins variable_ops),
              "", [] >, MayStore {
+  let Size = 4;
   let isCodeGenOnly = 1;
   let Uses = [SP];
   let Defs = [SP];
@@ -1266,7 +1271,10 @@ def SwRxRyOffMemX16: FEXT_RRI16_mem2_ins<0b11011, "sw", mem16>, MayStore;
 // To store an SP-relative word to memory.
 //
 let DecoderMethod = "DecodeFIXMEInstruction" in
-def SwRxSpImmX16: FEXT_RRI16_mem2_ins<0b11010, "sw", mem16sp>, MayStore;
+def SwRxSpImmX16: FEXT_RRI16_mem2_ins<0b11010, "sw", mem16sp>, MayStore {
+  let Inst{10-8} = ry;
+  let Inst{7-5} = 0;
+}
 
 //
 //
@@ -1358,7 +1366,7 @@ def: Mips16Pat<(brind CPU16Regs:$rs), (JrcRx16 CPU16Regs:$rs)> {
 // Jump and Link (Call)
 let isCall=1, hasDelaySlot=0 in
 def JumpLinkReg16:
-  FRR16_JALRC<0, 0, 0, (outs), (ins CPU16Regs:$rx),
+  FRR16_JALRC<1, 1, 0, (outs), (ins CPU16Regs:$rx),
               "jalrc\t$rx", [(MipsJmpLink CPU16Regs:$rx)]> {
   let Defs = [RA];
 }

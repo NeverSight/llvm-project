@@ -380,6 +380,7 @@ class FI8_SVRS16<bits<1> _s, dag outs, dag ins, string asmstr,
                  list<dag> pattern>:
   MipsInst16<outs, ins, asmstr, pattern>
 {
+  let PostEncoderMethod = "getMips16FrameEncoding";
   bits<1> s;
   bits<1> ra = 0;
   bits<1> s0 = 0;

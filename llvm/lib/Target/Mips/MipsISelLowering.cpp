@@ -100,8 +100,11 @@ static const MCPhysReg Mips64DPRegs[8] = {
 MVT MipsTargetLowering::getRegisterTypeForCallingConv(LLVMContext &Context,
                                                       CallingConv::ID CC,
                                                       EVT VT) const {
-  if (!VT.isVector())
-    return getRegisterType(Context, VT);
+  if (!VT.isVector()) {
+    MVT RegVT = getRegisterType(Context, VT);
+    // O32 keeps 32-bit argument and result slots on a 64-bit integer ISA.
+    return Subtarget.isABI_O32() && RegVT == MVT::i64 ? MVT::i32 : RegVT;
+  }
 
   if (VT.isPow2VectorType() && VT.getVectorElementType().isRound())
     return Subtarget.isABI_O32() || VT.getSizeInBits() == 32 ? MVT::i32
@@ -118,6 +121,8 @@ unsigned MipsTargetLowering::getNumRegistersForCallingConv(LLVMContext &Context,
     return VT.getVectorNumElements() *
            getNumRegisters(Context, VT.getVectorElementType());
   }
+  if (Subtarget.isABI_O32() && getRegisterType(Context, VT) == MVT::i64)
+    return divideCeil(VT.getSizeInBits(), 32);
   return MipsTargetLowering::getNumRegisters(Context, VT);
 }
 

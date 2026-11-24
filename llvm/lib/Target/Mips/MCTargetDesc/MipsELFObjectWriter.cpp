@@ -244,6 +244,18 @@ unsigned MipsELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_MIPS_GPREL16;
   case Mips::fixup_Mips_26:
     return ELF::R_MIPS_26;
+  case Mips::fixup_Mips16_26:
+    return ELF::R_MIPS16_26;
+  case Mips::fixup_Mips16_HI16:
+    return ELF::R_MIPS16_HI16;
+  case Mips::fixup_Mips16_LO16:
+    return ELF::R_MIPS16_LO16;
+  case Mips::fixup_Mips16_GOT16:
+    return ELF::R_MIPS16_GOT16;
+  case Mips::fixup_Mips16_CALL16:
+    return ELF::R_MIPS16_CALL16;
+  case Mips::fixup_Mips16_GPREL:
+    return ELF::R_MIPS16_GPREL;
   case Mips::fixup_Mips_CALL16:
     return ELF::R_MIPS_CALL16;
   case Mips::fixup_Mips_GOT:
@@ -502,6 +514,11 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCValue &V,
   case ELF::R_MIPS_SUB:
     return false;
 
+  case ELF::R_MIPS16_26:
+  case ELF::R_MIPS16_CALL16:
+  case ELF::R_MIPS16_GPREL:
+    return true;
+
   // FIXME: Many of these relocations should probably return false but this
   //        hasn't been confirmed to be safe yet.
   case ELF::R_MIPS_REL32:
@@ -583,9 +600,6 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCValue &V,
 
   // FIXME: Many of these should probably return false but MIPS16 isn't
   //        supported by the integrated assembler.
-  case ELF::R_MIPS16_26:
-  case ELF::R_MIPS16_GPREL:
-  case ELF::R_MIPS16_CALL16:
   case ELF::R_MIPS16_TLS_GD:
   case ELF::R_MIPS16_TLS_LDM:
   case ELF::R_MIPS16_TLS_DTPREL_HI16:

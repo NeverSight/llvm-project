@@ -110,11 +110,6 @@ MipsSubtarget::MipsSubtarget(const Triple &TT, StringRef CPU, StringRef FS,
     MIPS1WarningPrinted = true;
   }
 
-  // Don't even attempt to generate code for MIPS-V. It has not
-  // been tested and currently exists for the integrated assembler only.
-  if (MipsArchVersion == Mips5)
-    report_fatal_error("Code generation for MIPS-V is not implemented", false);
-
   // Check if Architecture and ABI are compatible.
   assert(((!isGP64bit() && isABI_O32()) || isGP64bit()) &&
          "Invalid  Arch & ABI pair.");
