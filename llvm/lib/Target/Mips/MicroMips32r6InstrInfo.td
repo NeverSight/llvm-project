@@ -1680,6 +1680,11 @@ def : MipsInstAlias<"b16 $offset", (BC16_MMR6 brtarget10_mm:$offset), 0>,
 //
 //===----------------------------------------------------------------------===//
 
+defm : MipsHiLoRelocs<LUI_MMR6, ADDIU_MMR6, ZERO, GPR32Opnd>, ISA_MICROMIPS32R6;
+defm : MicroMipsAddressHi<LUI_MMR6>, ISA_MICROMIPS32R6;
+defm : MaterializeImms<i32, ZERO, ADDIU_MMR6, LUI_MMR6, ORI_MMR6>,
+       ISA_MICROMIPS32R6;
+
 def : MipsPat<(store GPRMM16:$src, addrimm4lsl2:$addr),
               (SW16_MMR6 GPRMM16:$src, addrimm4lsl2:$addr)>, ISA_MICROMIPS32R6;
 def : MipsPat<(subc GPR32:$lhs, GPR32:$rhs),
@@ -1742,7 +1747,7 @@ def : MipsPat<(MipsJmpLink (iPTR tglobaladdr:$dst)),
 
 def TAILCALL_MMR6 : TailCall<BC_MMR6, brtarget26_mm>, ISA_MICROMIPS32R6;
 
-def TAILCALLREG_MMR6  : TailCallReg<JRC16_MM, GPR32Opnd>, ISA_MICROMIPS32R6;
+def TAILCALLREG_MMR6  : TailCallReg<JRC16_MMR6, GPR32Opnd>, ISA_MICROMIPS32R6;
 
 def PseudoIndirectBranch_MMR6 : PseudoIndirectBranchBase<JRC16_MMR6,
                                                          GPR32Opnd>,

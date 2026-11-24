@@ -1142,15 +1142,15 @@ let DecoderNamespace = "MicroMips" in {
 // MicroMips arbitrary patterns that map to one or more instructions
 //===----------------------------------------------------------------------===//
 
-defm : MipsHiLoRelocs<LUi_MM, ADDiu_MM, ZERO, GPR32Opnd>, ISA_MICROMIPS;
+multiclass MicroMipsAddressHi<Instruction Lui> {
+  def : MipsPat<(MipsGotHi tglobaladdr:$in), (Lui tglobaladdr:$in)>;
+  def : MipsPat<(MipsGotHi texternalsym:$in), (Lui texternalsym:$in)>;
+  def : MipsPat<(MipsTlsHi tglobaltlsaddr:$in), (Lui tglobaltlsaddr:$in)>;
+}
 
-def : MipsPat<(MipsGotHi tglobaladdr:$in), (LUi_MM tglobaladdr:$in)>,
-      ISA_MICROMIPS;
-def : MipsPat<(MipsGotHi texternalsym:$in), (LUi_MM texternalsym:$in)>,
-      ISA_MICROMIPS;
-
-def : MipsPat<(MipsTlsHi tglobaltlsaddr:$in), (LUi_MM tglobaltlsaddr:$in)>,
-      ISA_MICROMIPS;
+defm : MipsHiLoRelocs<LUi_MM, ADDiu_MM, ZERO, GPR32Opnd>,
+       ISA_MICROMIPS32_NOT_MIPS32R6;
+defm : MicroMipsAddressHi<LUi_MM>, ISA_MICROMIPS32_NOT_MIPS32R6;
 
 // gp_rel relocs
 def : MipsPat<(add GPR32:$gp, (MipsGPRel tglobaladdr:$in)),
@@ -1172,7 +1172,8 @@ def : MipsPat<(atomic_load_nonext_32 addr:$a), (LW_MM addr:$a)>, ISA_MICROMIPS;
 def : MipsPat<(i32 immLi16:$imm),
               (LI16_MM immLi16:$imm)>, ISA_MICROMIPS;
 
-defm : MaterializeImms<i32, ZERO, ADDiu_MM, LUi_MM, ORi_MM>, ISA_MICROMIPS;
+defm : MaterializeImms<i32, ZERO, ADDiu_MM, LUi_MM, ORi_MM>,
+       ISA_MICROMIPS32_NOT_MIPS32R6;
 
 def : MipsPat<(not GPRMM16:$in),
               (NOT16_MM GPRMM16:$in)>, ISA_MICROMIPS;

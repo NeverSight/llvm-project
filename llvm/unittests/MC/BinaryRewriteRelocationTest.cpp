@@ -157,6 +157,16 @@ TEST(BinaryRewriteRelocationTest, Mips64R6ClassicBranchesKeepTheirISAMode) {
       GTEST_SKIP();
     auto Endian =
         Triple(TT).isLittleEndian() ? endianness::little : endianness::big;
+    // A classic JAL must never become the removed JALX encoding on R6.
+    constexpr StringLiteral Jal = ".set noreorder\n.option pic0\n.text\n"
+                                  "jal target\nnop\n";
+    EXPECT_FALSE(assemble(TT, Jal, options(Base, Base + 0x2001), "mips64r6"));
+    auto SameMode = assemble(TT, Jal, options(Base, Base + 0x2000), "mips64r6");
+    ASSERT_TRUE(SameMode && SameMode->ImageValid &&
+                SameMode->Unresolved.empty());
+    EXPECT_EQ(
+        support::endian::read32(bytes(*SameMode, ".text").data(), Endian) >> 26,
+        3u);
     for (StringRef Branch :
          {"balc target", "beqzc $4, target", "beq $4,$5,target"}) {
       SCOPED_TRACE(TT.str());

@@ -1,11 +1,11 @@
 ; RUN: llc -mtriple=mips64-linux-gnuabin32 -mcpu=mips64r6 -target-abi=n32 -mattr=+micromips,+noabicalls -relocation-model=static -verify-machineinstrs -filetype=obj %s -o %t.mips64n32
-; RUN: llvm-objdump -d --no-symbolize-operands --no-print-imm-hex --mcpu=mips64r6 --mattr=+micromips %t.mips64n32 | FileCheck %s --check-prefixes=CHECK,N32
+; RUN: llvm-objdump -d --no-symbolize-operands --no-print-imm-hex --mcpu=mips64r6 %t.mips64n32 | FileCheck %s --check-prefixes=CHECK,N32
 ; RUN: llc -mtriple=mips64el-linux-gnuabin32 -mcpu=mips64r6 -target-abi=n32 -mattr=+micromips,+noabicalls -relocation-model=static -verify-machineinstrs -filetype=obj %s -o %t.mips64eln32
-; RUN: llvm-objdump -d --no-symbolize-operands --no-print-imm-hex --mcpu=mips64r6 --mattr=+micromips %t.mips64eln32 | FileCheck %s --check-prefixes=CHECK,N32
+; RUN: llvm-objdump -d --no-symbolize-operands --no-print-imm-hex --mcpu=mips64r6 %t.mips64eln32 | FileCheck %s --check-prefixes=CHECK,N32
 ; RUN: llc -mtriple=mips64-linux-gnuabi64 -mcpu=mips64r6 -target-abi=n64 -mattr=+micromips,+noabicalls -relocation-model=static -verify-machineinstrs -filetype=obj %s -o %t.mips64n64
-; RUN: llvm-objdump -d --no-symbolize-operands --no-print-imm-hex --mcpu=mips64r6 --mattr=+micromips %t.mips64n64 | FileCheck %s --check-prefixes=CHECK,N64
+; RUN: llvm-objdump -d --no-symbolize-operands --no-print-imm-hex --mcpu=mips64r6 %t.mips64n64 | FileCheck %s --check-prefixes=CHECK,N64
 ; RUN: llc -mtriple=mips64el-linux-gnuabi64 -mcpu=mips64r6 -target-abi=n64 -mattr=+micromips,+noabicalls -relocation-model=static -verify-machineinstrs -filetype=obj %s -o %t.mips64eln64
-; RUN: llvm-objdump -d --no-symbolize-operands --no-print-imm-hex --mcpu=mips64r6 --mattr=+micromips %t.mips64eln64 | FileCheck %s --check-prefixes=CHECK,N64
+; RUN: llvm-objdump -d --no-symbolize-operands --no-print-imm-hex --mcpu=mips64r6 %t.mips64eln64 | FileCheck %s --check-prefixes=CHECK,N64
 
 ; CHECK-LABEL: <signed_div>:
 ; CHECK: ddiv $2, $4, $5
@@ -94,4 +94,31 @@ define double @signed_to_double(i64 %a) nounwind {
 define float @signed_to_float(i64 %a) nounwind {
   %result = sitofp i64 %a to float
   ret float %result
+}
+
+; A direct R6 branch keeps its ISA. Call a known opposite-mode definition
+; through its callable address, even with a short-call attribute or an alias.
+; CHECK-LABEL: <classic_helper>:
+; CHECK: jr $ra
+define internal i64 @classic_helper(i64 %x) noinline nounwind "nomicromips" "short-call" {
+  %v = add i64 %x, 5
+  ret i64 %v
+}
+
+@classic_alias = internal alias i64 (i64), ptr @classic_helper
+
+; CHECK-LABEL: <micro_caller>:
+; N32: lui $1,
+; N32: jalr $25
+; N64: jialc $25, 0
+define i64 @micro_caller(i64 %x) nounwind "micromips" {
+  %v = notail call i64 @classic_alias(i64 %x)
+  ret i64 %v
+}
+
+; CHECK-LABEL: <classic_caller>:
+; CHECK: {{jalr(c)?}} $25
+define i64 @classic_caller(i64 %x) nounwind "nomicromips" {
+  %v = notail call i64 @micro_caller(i64 %x)
+  ret i64 %v
 }

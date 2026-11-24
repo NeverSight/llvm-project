@@ -240,6 +240,7 @@ uint64_t getMipsPageAddr(uint64_t addr);
 bool isMipsN32Abi(Ctx &, const InputFile &f);
 bool isMicroMips(Ctx &);
 bool isMipsR6(Ctx &);
+bool needsMipsR6ModeThunk(Ctx &, RelExpr, RelType, const Symbol &, int64_t);
 
 void writePPC32GlinkSection(Ctx &, uint8_t *buf, size_t numEntries);
 

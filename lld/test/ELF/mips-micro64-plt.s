@@ -24,8 +24,24 @@
 # RUN: llvm-mc -filetype=obj -triple=mips64el -mcpu=mips64r6 %t/classic.s -o %t/classic.o
 # RUN: llvm-mc -filetype=obj -triple=mips64el -mcpu=mips64r6 -mattr=+micromips %t/cross-r6.s -o %t/cross.o
 # RUN: not ld.lld -e caller %t/cross.o %t/classic.o -o %t/bad 2>&1 | FileCheck %s --check-prefix=MODE
-# MODE: unsupported jump/branch instruction between ISA modes referenced by R_MICROMIPS_PC26_S1
+# MODE-NOT: unsupported jump/branch instruction between ISA modes referenced by R_MICROMIPS_PC26_S1
 # MODE: unsupported jump/branch instruction between ISA modes referenced by R_MICROMIPS_PC21_S1
+
+## R6 removed JALX. Calls and tail transfers to an external function
+## in the other mode enter a stub in the caller's ISA and preserve $ra.
+# RUN: llvm-mc -filetype=obj -triple=mips64el -mcpu=mips64r6 %t/classic-call.s -o %t/classic-call.o
+# RUN: ld.lld -e caller %t/classic-call.o %t/libel.o -o %t/jal
+# RUN: llvm-objdump -d --no-show-raw-insn %t/jal | FileCheck %s --check-prefixes=STUB,JAL
+# RUN: ld.lld -e caller %t/r6.o %t/classic.o -o %t/balc
+# RUN: llvm-objdump -d --no-show-raw-insn %t/balc | FileCheck %s --check-prefixes=STUB,BALC
+# STUB-DAG: <__MipsR6ModeThunk_callee>:
+# STUB-DAG: lapc $25, 0x0
+# STUB-DAG: ld $1, 0x10($25)
+# STUB-DAG: daddu $25, $25, $1
+# JAL-DAG: jrc $25
+# BALC-DAG: jic $25, 0x0
+# JAL-DAG: jal {{.*}}<__MipsR6ModeThunk_callee>
+# BALC-DAG: balc {{.*}}<__MipsR6ModeThunk_callee>
 
 ## The caller reaches the entry, which loads a full-width GOT slot. On lazy
 ## binding the header passes the GOT base, the original return PC and the slot
@@ -125,6 +141,16 @@ caller:
 .option pic0
 .text
 .space 12
+.globl caller
+.ent caller
+caller:
+  jal callee
+  nop
+.end caller
+
+#--- classic-call.s
+.option pic0
+.set noreorder
 .globl caller
 .ent caller
 caller:

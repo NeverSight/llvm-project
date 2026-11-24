@@ -3553,26 +3553,41 @@ MipsTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // The long-calls feature is ignored in case of PIC.
   // While we do not support -mshared / -mno-shared properly,
   // ignore long-calls in case of -mabicalls too.
-  if (!Subtarget.isABICalls() && !IsPIC) {
+  if (!IsPIC) {
     // If the function should be called using "long call",
     // get its address into a register to prevent using
     // of the `jal` instruction for the direct call.
     if (auto *N = dyn_cast<ExternalSymbolSDNode>(Callee)) {
-      if (Subtarget.useLongCalls())
+      if (!Subtarget.isABICalls() && Subtarget.useLongCalls())
         Callee = Subtarget.hasSym32()
                      ? getAddrNonPIC(N, SDLoc(N), Ty, DAG)
                      : getAddrNonPICSym64(N, SDLoc(N), Ty, DAG);
     } else if (auto *N = dyn_cast<GlobalAddressSDNode>(Callee)) {
+      const GlobalValue *GV = N->getGlobal();
+      const Function *F = dyn_cast<Function>(GV);
+      if (!F && Subtarget.hasMips32r6())
+        F = dyn_cast_or_null<Function>(GV->getAliaseeObject());
       bool UseLongCalls = Subtarget.useLongCalls();
-      // If the function has long-call/far/near attribute
-      // it overrides command line switch pased to the backend.
-      if (auto *F = dyn_cast<Function>(N->getGlobal())) {
+      if (F) {
         if (F->hasFnAttribute("long-call"))
           UseLongCalls = true;
         else if (F->hasFnAttribute("short-call"))
           UseLongCalls = false;
       }
-      if (UseLongCalls)
+      // R6 removed JALX. A direct branch cannot exchange ISA modes, even
+      // when its target is in the same section and needs no ELF relocation.
+      // Keep unknown modes as relocations for the linker.
+      bool NeedsRegister = !Subtarget.isABICalls() && UseLongCalls;
+      if (!NeedsRegister && Subtarget.hasMips32r6() && F &&
+          (!F->isDeclarationForLinker() || F->hasFnAttribute("micromips") ||
+           F->hasFnAttribute("nomicromips"))) {
+        const TargetMachine &TM = MF.getTarget();
+        NeedsRegister = TM.getSubtarget<MipsSubtarget>(*F).inMicroMipsMode() !=
+                        Subtarget.inMicroMipsMode();
+        // Creating the callee's subtarget can reset function-specific options.
+        TM.resetTargetOptions(MF.getFunction());
+      }
+      if (NeedsRegister)
         Callee = Subtarget.hasSym32()
                      ? getAddrNonPIC(N, SDLoc(N), Ty, DAG)
                      : getAddrNonPICSym64(N, SDLoc(N), Ty, DAG);

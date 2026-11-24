@@ -378,7 +378,8 @@ static uint32_t mips16JumpField(uint32_t Word) {
 // JALX exchanges ISA mode and, for microMIPS, also changes the target scale.
 static void applyFinalJump(MCContext &Ctx, endianness Endian,
                            const MCFixup &Fixup, const MCValue &Target,
-                           uint8_t *Data, uint64_t Value, uint64_t NextPC) {
+                           uint8_t *Data, uint64_t Value, uint64_t NextPC,
+                           const MCSubtargetInfo *STI) {
   const bool Micro = Fixup.getKind() == Mips::fixup_MICROMIPS_26_S1;
   const bool Mips16 = Fixup.getKind() == Mips::fixup_Mips16_26;
   unsigned Mode = 0;
@@ -396,6 +397,11 @@ static void applyFinalJump(MCContext &Ctx, endianness Endian,
     return;
   }
   bool Exchange = bool(Mode) != (Micro || Mips16);
+  if (Exchange && STI && STI->hasFeature(Mips::FeatureMips32r6)) {
+    Ctx.reportError(Fixup.getLoc(),
+                    "MIPS Release 6 direct jump cannot change ISA mode");
+    return;
+  }
   unsigned Scale = Micro && !Exchange ? 1 : 2;
   if ((Value & ((1u << Scale) - 1)) || ((Value ^ NextPC) >> (26 + Scale))) {
     Ctx.reportError(Fixup.getLoc(),
@@ -451,18 +457,19 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
       uint64_t NextPC = *PC + 4;
       if (TheTriple.isArch32Bit())
         NextPC = static_cast<uint32_t>(NextPC);
-      applyFinalJump(getContext(), Endian, Fixup, Target, Data, Value, NextPC);
+      applyFinalJump(getContext(), Endian, Fixup, Target, Data, Value, NextPC,
+                     getSubtargetInfo(F));
       return;
     }
   }
   if (unsigned Align = branchTargetAlignment(Kind);
       Align && TheTriple.isOSBinFormatELF() && IsResolved &&
-      !Target.getSubSym() && Asm->getWriter().getFinalFixupVA(F, Fixup)) {
+      !Target.getSubSym()) {
     const unsigned Mode = Align == 2 ? ELF::STO_MIPS_MICROMIPS : 0;
     if (const auto *Sym =
             static_cast<const MCSymbolELF *>(Target.getAddSym())) {
       unsigned TargetMode = Mode;
-      if (Sym->isUndefined()) {
+      if (Sym->isUndefined() && Asm->getWriter().getFinalFixupVA(F, Fixup)) {
         // External resolutions return callable pointers. Drop the ISA tag
         // before scaling the signed PC-relative displacement.
         bool Tagged = (Value - Target.getConstant()) & 1;

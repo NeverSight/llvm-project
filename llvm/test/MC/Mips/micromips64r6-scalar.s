@@ -11,6 +11,10 @@
 # RUN: llvm-objdump -d --mcpu=mips64r6 --mattr=+micromips %t.directives | FileCheck %s --check-prefix=MODE
 # RUN: not llvm-mc -triple=mips64 -mcpu=mips64r6 -mattr=+micromips -filetype=obj %t/removed.s -o %t.bad 2>&1 | FileCheck %s --check-prefix=REMOVED
 # RUN: not llvm-mc -triple=mips -mcpu=mips32r6 -mattr=+micromips -filetype=obj %t/wide.s -o %t.bad32 2>&1 | FileCheck %s --check-prefix=NARROW
+# RUN: llvm-mc -triple=mips64 -mcpu=mips64r6 -filetype=obj %t/mixed.s -o %t.mixed
+# RUN: llvm-objdump -d --symbolize-operands --no-print-imm-hex %t.mixed | FileCheck %s --check-prefix=MIXED
+# RUN: llvm-objdump -d --disassemble-symbols=within_classic --no-print-imm-hex %t.mixed | FileCheck %s --check-prefix=WITHIN
+# RUN: not llvm-mc -triple=mips64 -mcpu=mips64r6 -filetype=obj %t/cross.s -o %t.badbranch 2>&1 | FileCheck %s --check-prefix=CROSS
 
 #--- scalar.s
 .set noreorder
@@ -131,3 +135,40 @@ wide:
 #--- wide.s
   dmuh $2, $4, $5
 # NARROW: error:
+
+#--- mixed.s
+.set noreorder
+.set nomicromips
+.ent classic
+classic:
+  daddiu $2, $4, 5
+within_classic:
+  daddiu $2, $2, 1
+.end classic
+.set micromips
+.ent micro
+micro:
+  daddiu $2, $4, 7
+.end micro
+# MIXED-LABEL: <classic>:
+# MIXED: daddiu $2, $4, 5
+# MIXED-LABEL: <within_classic>:
+# MIXED: daddiu $2, $2, 1
+# MIXED-LABEL: <micro>:
+# MIXED: daddiu $2, $4, 7
+# WITHIN-LABEL: <within_classic>:
+# WITHIN: daddiu $2, $2, 1
+
+#--- cross.s
+.set noreorder
+.set nomicromips
+.ent classic
+classic:
+  balc micro
+.end classic
+.set micromips
+.ent micro
+micro:
+  balc classic
+.end micro
+# CROSS-COUNT-2: error: MIPS branch cannot change ISA mode

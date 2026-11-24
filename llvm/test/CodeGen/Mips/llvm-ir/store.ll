@@ -61,7 +61,7 @@ define void @f1(i8 %a) {
 ;
 ; MMR6-LABEL: f1:
 ; MMR6:       # %bb.0:
-; MMR6-NEXT:    lui $1, %hi(a) # <MCInst #[[#MCINST4:]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(a) # <MCInst #[[#MCINST4:]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(a)>>
 ; MMR6-NEXT:    sb $4, %lo(a)($1) # <MCInst #[[#MCINST6:]] SB_MM
@@ -195,7 +195,7 @@ define void @f2(i16 %a) {
 ;
 ; MMR6-LABEL: f2:
 ; MMR6:       # %bb.0:
-; MMR6-NEXT:    lui $1, %hi(b) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(b) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(b)>>
 ; MMR6-NEXT:    sh $4, %lo(b)($1) # <MCInst #[[#MCINST15:]] SH_MM
@@ -329,7 +329,7 @@ define void @f3(i32 %a) {
 ;
 ; MMR6-LABEL: f3:
 ; MMR6:       # %bb.0:
-; MMR6-NEXT:    lui $1, %hi(c) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(c) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(c)>>
 ; MMR6-NEXT:    sw $4, %lo(c)($1) # <MCInst #[[#MCINST18:]] SW_MM
@@ -487,14 +487,14 @@ define void @f4(i64 %a) {
 ;
 ; MMR6-LABEL: f4:
 ; MMR6:       # %bb.0:
-; MMR6-NEXT:    lui $1, %hi(d) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(d) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(d)>>
 ; MMR6-NEXT:    sw $4, %lo(d)($1) # <MCInst #[[#MCINST18]] SW_MM
 ; MMR6-NEXT:    # <MCOperand Reg:A0>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(d)>>
-; MMR6-NEXT:    addiu $2, $1, %lo(d) # <MCInst #[[#MCINST21:]] ADDiu_MM
+; MMR6-NEXT:    addiu $2, $1, %lo(d) # <MCInst #[[#MCINST21:]] ADDIU_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(d)>>
@@ -645,7 +645,7 @@ define void @f5(float %e) {
 ;
 ; MMR6-LABEL: f5:
 ; MMR6:       # %bb.0:
-; MMR6-NEXT:    lui $1, %hi(e) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(e) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(e)>>
 ; MMR6-NEXT:    swc1 $f12, %lo(e)($1) # <MCInst #[[#MCINST25:]] SWC1_MM
@@ -779,7 +779,7 @@ define void @f6(double %f) {
 ;
 ; MMR6-LABEL: f6:
 ; MMR6:       # %bb.0:
-; MMR6-NEXT:    lui $1, %hi(f) # <MCInst #[[#MCINST4]] LUi_MM
+; MMR6-NEXT:    lui $1, %hi(f) # <MCInst #[[#MCINST4]] LUI_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%hi(f)>>
 ; MMR6-NEXT:    sdc1 $f12, %lo(f)($1) # <MCInst #[[#MCINST29:]] SDC1_D64_MMR6

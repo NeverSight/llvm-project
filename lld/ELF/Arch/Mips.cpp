@@ -39,6 +39,7 @@ public:
   bool needsThunk(RelExpr expr, RelType type, const InputFile *file,
                   uint64_t branchAddr, const Symbol &s,
                   int64_t a) const override;
+  bool inBranchRange(RelType type, uint64_t src, uint64_t dst) const override;
   void relocateAlloc(InputSection &sec, uint8_t *buf) const override;
   void relocate(uint8_t *loc, const Relocation &rel,
                 uint64_t val) const override;
@@ -506,9 +507,44 @@ void MIPS<ELFT>::writePlt(uint8_t *buf, const Symbol &sym,
 }
 
 template <class ELFT>
+bool MIPS<ELFT>::inBranchRange(RelType type, uint64_t src, uint64_t dst) const {
+  if (!isMipsR6(ctx))
+    return true;
+  using Addr = typename ELFT::uint;
+  if (type == R_MIPS_26)
+    return ((Addr(src + 4) ^ Addr(dst)) >> 28) == 0;
+  // For compact branches dst already includes the ELF addend (-4).
+  int64_t delta =
+      SignExtend64<sizeof(Addr) * 8>(Addr((dst & ~uint64_t(1)) - src));
+  if (type == R_MICROMIPS_PC26_S1)
+    return isInt<27>(delta);
+  if (type == R_MIPS_PC26_S2)
+    return isInt<28>(delta);
+  return true;
+}
+
+// Only a transfer to a function entry may use $25 as the ABI call register.
+bool elf::needsMipsR6ModeThunk(Ctx &ctx, RelExpr expr, RelType type,
+                               const Symbol &sym, int64_t addend) {
+  if (!isMipsR6(ctx) || !sym.isFunc())
+    return false;
+  bool micro = type == R_MICROMIPS_PC26_S1;
+  if (!(micro || type == R_MIPS_PC26_S2 || type == R_MIPS_26) ||
+      addend != (type == R_MIPS_26 ? 0 : -4))
+    return false;
+  bool viaPlt = expr == R_PLT || expr == R_PLT_PC;
+  if (!viaPlt && !isa<Defined>(sym))
+    return false;
+  return micro !=
+         (viaPlt ? isMicroMips(ctx) : bool(sym.stOther & STO_MIPS_MICROMIPS));
+}
+
+template <class ELFT>
 bool MIPS<ELFT>::needsThunk(RelExpr expr, RelType type, const InputFile *file,
                             uint64_t branchAddr, const Symbol &s,
-                            int64_t /*a*/) const {
+                            int64_t a) const {
+  if (needsMipsR6ModeThunk(ctx, expr, type, s, a))
+    return true;
   // Any MIPS PIC code function is invoked with its address in register $t9.
   // So if we have a branch instruction from non-PIC code to the PIC one
   // we cannot make the jump directly and need to create a small stubs
@@ -689,7 +725,7 @@ static uint64_t fixupCrossModeJump(Ctx &ctx, uint8_t *loc, RelType type,
   switch (type) {
   case R_MIPS_26: {
     uint32_t inst = read32(ctx, loc) >> 26;
-    if (inst == 0x3 || inst == 0x1d) { // JAL or JALX
+    if (!isMipsR6(ctx) && (inst == 0x3 || inst == 0x1d)) { // JAL or JALX
       writeValue(ctx, loc, 0x1d << 26, 32, 0);
       return val;
     }
@@ -697,7 +733,7 @@ static uint64_t fixupCrossModeJump(Ctx &ctx, uint8_t *loc, RelType type,
   }
   case R_MICROMIPS_26_S1: {
     uint32_t inst = readShuffle<e>(ctx, loc) >> 26;
-    if (inst == 0x3d || inst == 0x3c) { // JAL32 or JALX32
+    if (!isMipsR6(ctx) && (inst == 0x3d || inst == 0x3c)) { // JAL32 or JALX32
       val >>= 1;
       writeShuffle<e>(ctx, loc, 0x3c << 26, 32, 0);
       return val;
@@ -852,6 +888,14 @@ void MIPS<ELFT>::relocateAlloc(InputSection &sec, uint8_t *buf) const {
     uint64_t place = secAddr + rel.offset;
     uint64_t val =
         SignExtend64(sec.getRelocTargetVA(ctx, rel, place), sizeof(Addr) * 8);
+    if (rel.type == R_MIPS_26 && isMipsR6(ctx)) {
+      if (!inBranchRange(rel.type, place, val)) {
+        Err(ctx) << getErrorLoc(ctx, loc) << rel.type
+                 << " target outside the jump region of PC+4: " << rel.sym;
+        continue;
+      }
+      checkAlignment(ctx, loc, val & ~uint64_t(1), 4, rel);
+    }
     if (rel.type == R_MICROMIPS_26_S1) {
       // J/JAL inherit the high bits from PC+4. A switch to classic MIPS
       // selects JALX, whose target field counts words instead of halfwords.
@@ -997,7 +1041,8 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
     val -= 4;
     // Replace jalr/jr instructions by bal/b if the target
     // offset fits into the 18-bit range.
-    if (isInt<18>(val)) {
+    // A register call may exchange modes. BAL and B cannot.
+    if (!(val & 3) && isInt<18>(val)) {
       switch (read32(ctx, loc)) {
       case 0x0320f809:  // jalr $25 => bal sym
         write32(ctx, loc, 0x04110000 | ((val >> 2) & 0xffff));
