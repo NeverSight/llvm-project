@@ -41,7 +41,8 @@ define signext i1 @not_i1(i1 signext %a) {
 ; MM-LABEL: not_i1:
 ; MM:       # %bb.0: # %entry
 ; MM-NEXT:    not16 $2, $4
-; MM-NEXT:    jrc $ra
+; MM32r3-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %r = xor i1 %a, -1
   ret i1 %r
@@ -61,7 +62,8 @@ define signext i8 @not_i8(i8 signext %a) {
 ; MM-LABEL: not_i8:
 ; MM:       # %bb.0: # %entry
 ; MM-NEXT:    not16 $2, $4
-; MM-NEXT:    jrc $ra
+; MM32r3-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %r = xor i8 %a, -1
   ret i8 %r
@@ -81,7 +83,8 @@ define signext i16 @not_i16(i16 signext %a) {
 ; MM-LABEL: not_i16:
 ; MM:       # %bb.0: # %entry
 ; MM-NEXT:    not16 $2, $4
-; MM-NEXT:    jrc $ra
+; MM32r3-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %r = xor i16 %a, -1
   ret i16 %r
@@ -102,7 +105,8 @@ define signext i32 @not_i32(i32 signext %a) {
 ; MM-LABEL: not_i32:
 ; MM:       # %bb.0: # %entry
 ; MM-NEXT:    not16 $2, $4
-; MM-NEXT:    jrc $ra
+; MM32r3-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %r = xor i32 %a, -1
   ret i32 %r
@@ -125,7 +129,8 @@ define signext i64 @not_i64(i64 signext %a) {
 ; MM:       # %bb.0: # %entry
 ; MM-NEXT:    not16 $2, $4
 ; MM-NEXT:    not16 $3, $5
-; MM-NEXT:    jrc $ra
+; MM32r3-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %r = xor i64 %a, -1
   ret i64 %r
@@ -153,7 +158,8 @@ define signext i128 @not_i128(i128 signext %a) {
 ; MM-NEXT:    not16 $3, $5
 ; MM-NEXT:    not16 $4, $6
 ; MM-NEXT:    not16 $5, $7
-; MM-NEXT:    jrc $ra
+; MM32r3-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %r = xor i128 %a, -1
   ret i128 %r
@@ -180,7 +186,7 @@ define signext i1 @nor_i1(i1 signext %a, i1 signext %b) {
 ; MM32r6-LABEL: nor_i1:
 ; MM32r6:       # %bb.0: # %entry
 ; MM32r6-NEXT:    nor $2, $5, $4
-; MM32r6-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %or = or i1 %b, %a
   %r = xor i1 %or, -1
@@ -208,7 +214,7 @@ define signext i8 @nor_i8(i8 signext %a, i8 signext %b) {
 ; MM32r6-LABEL: nor_i8:
 ; MM32r6:       # %bb.0: # %entry
 ; MM32r6-NEXT:    nor $2, $5, $4
-; MM32r6-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %or = or i8 %b, %a
   %r = xor i8 %or, -1
@@ -236,7 +242,7 @@ define signext i16 @nor_i16(i16 signext %a, i16 signext %b) {
 ; MM32r6-LABEL: nor_i16:
 ; MM32r6:       # %bb.0: # %entry
 ; MM32r6-NEXT:    nor $2, $5, $4
-; MM32r6-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %or = or i16 %b, %a
   %r = xor i16 %or, -1
@@ -262,7 +268,7 @@ define signext i32 @nor_i32(i32 signext %a, i32 signext %b) {
 ; MM32r6-LABEL: nor_i32:
 ; MM32r6:       # %bb.0: # %entry
 ; MM32r6-NEXT:    nor $2, $5, $4
-; MM32r6-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %or = or i32 %b, %a
   %r = xor i32 %or, -1
@@ -291,7 +297,7 @@ define signext i64 @nor_i64(i64 signext %a, i64 signext %b) {
 ; MM32r6:       # %bb.0: # %entry
 ; MM32r6-NEXT:    nor $2, $6, $4
 ; MM32r6-NEXT:    nor $3, $7, $5
-; MM32r6-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %or = or i64 %b, %a
   %r = xor i64 %or, -1
@@ -339,7 +345,7 @@ define signext i128 @nor_i128(i128 signext %a, i128 signext %b) {
 ; MM32r6-NEXT:    nor $4, $1, $6
 ; MM32r6-NEXT:    lw $1, 28($sp)
 ; MM32r6-NEXT:    nor $5, $1, $7
-; MM32r6-NEXT:    jrc $ra
+; MM32r6-NEXT:    jrc16 $ra
 entry:
   %or = or i128 %b, %a
   %r = xor i128 %or, -1

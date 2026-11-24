@@ -192,7 +192,7 @@ define i32 @test1(float %t) {
 ; MMR6-NEXT:    mfc1 $2, $f0 # <MCInst #[[#MCINST13:]] MFC1_MM
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:F0>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST19:]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST19:]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MMR6-SF-LABEL: test1:
@@ -219,7 +219,7 @@ define i32 @test1(float %t) {
 ; MMR6-SF-NEXT:    # <MCOperand Reg:SP>
 ; MMR6-SF-NEXT:    # <MCOperand Reg:SP>
 ; MMR6-SF-NEXT:    # <MCOperand Imm:24>>
-; MMR6-SF-NEXT:    jrc $ra # <MCInst #[[#MCINST19:]] JRC16_MM
+; MMR6-SF-NEXT:    jrc16 $ra # <MCInst #[[#MCINST19:]] JRC16_MMR6
 ; MMR6-SF-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %conv = fptosi float %t to i32
@@ -383,7 +383,7 @@ define i32 @test2(double %t) {
 ; MMR6-NEXT:    mfc1 $2, $f0 # <MCInst #[[#MCINST13]] MFC1_MM
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:F0>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST19]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST19]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MMR6-SF-LABEL: test2:
@@ -410,7 +410,7 @@ define i32 @test2(double %t) {
 ; MMR6-SF-NEXT:    # <MCOperand Reg:SP>
 ; MMR6-SF-NEXT:    # <MCOperand Reg:SP>
 ; MMR6-SF-NEXT:    # <MCOperand Imm:24>>
-; MMR6-SF-NEXT:    jrc $ra # <MCInst #[[#MCINST19]] JRC16_MM
+; MMR6-SF-NEXT:    jrc16 $ra # <MCInst #[[#MCINST19]] JRC16_MMR6
 ; MMR6-SF-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %conv = fptosi double %t to i32

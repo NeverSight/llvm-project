@@ -70,7 +70,7 @@ define i8 @f1() {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(a)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8:]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8:]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS3-LABEL: f1:
@@ -249,7 +249,7 @@ define i32 @f2() {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(a)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS3-LABEL: f2:
@@ -429,7 +429,7 @@ define i16 @f3() {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(b)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS3-LABEL: f3:
@@ -608,7 +608,7 @@ define i32 @f4() {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(b)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS3-LABEL: f4:
@@ -788,7 +788,7 @@ define i32 @f5() {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(c)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS3-LABEL: f5:
@@ -981,7 +981,7 @@ define i64 @f6() {
 ; MMR6-NEXT:    li16 $2, 0 # <MCInst #[[#MCINST23:]] LI16_MM
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Imm:0>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS3-LABEL: f6:
@@ -1184,7 +1184,7 @@ define i64 @f7() {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:V1>
 ; MMR6-NEXT:    # <MCOperand Imm:31>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS3-LABEL: f7:
@@ -1372,7 +1372,7 @@ define float @f8() {
 ; MMR6-NEXT:    # <MCOperand Reg:F0>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(e)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS3-LABEL: f8:
@@ -1547,7 +1547,7 @@ define double @f9() {
 ; MMR6-NEXT:    # <MCOperand Reg:D0_64>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(f)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS3-LABEL: f9:

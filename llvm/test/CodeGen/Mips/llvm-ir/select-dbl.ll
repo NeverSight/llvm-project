@@ -131,7 +131,7 @@ define double @tst_select_i1_double(i1 signext %s, double %x, double %y) {
 ; MM32R6-NEXT:    ldc1 $f2, 16($sp)
 ; MM32R6-NEXT:    mtc1 $4, $f0
 ; MM32R6-NEXT:    sel.d $f0, $f2, $f1
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 ;
 ; MIPS1-PSX-LABEL: tst_select_i1_double:
 ; MIPS1-PSX:       # %bb.0: # %entry
@@ -237,7 +237,7 @@ define double @tst_select_i1_double_reordered(double %x, double %y,
 ; MM32R6-NEXT:    lw $1, 16($sp)
 ; MM32R6-NEXT:    mtc1 $1, $f0
 ; MM32R6-NEXT:    sel.d $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 ;
 ; MIPS1-PSX-LABEL: tst_select_i1_double_reordered:
 ; MIPS1-PSX:       # %bb.0: # %entry
@@ -336,7 +336,7 @@ define double @tst_select_fcmp_olt_double(double %x, double %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.lt.d $f0, $f12, $f14
 ; MM32R6-NEXT:    sel.d $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 ;
 ; MIPS1-PSX-LABEL: tst_select_fcmp_olt_double:
 ; MIPS1-PSX:       # %bb.0: # %entry
@@ -434,7 +434,7 @@ define double @tst_select_fcmp_ole_double(double %x, double %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.le.d $f0, $f12, $f14
 ; MM32R6-NEXT:    sel.d $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 ;
 ; MIPS1-PSX-LABEL: tst_select_fcmp_ole_double:
 ; MIPS1-PSX:       # %bb.0: # %entry
@@ -532,7 +532,7 @@ define double @tst_select_fcmp_ogt_double(double %x, double %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.lt.d $f0, $f14, $f12
 ; MM32R6-NEXT:    sel.d $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 ;
 ; MIPS1-PSX-LABEL: tst_select_fcmp_ogt_double:
 ; MIPS1-PSX:       # %bb.0: # %entry
@@ -630,7 +630,7 @@ define double @tst_select_fcmp_oge_double(double %x, double %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.le.d $f0, $f14, $f12
 ; MM32R6-NEXT:    sel.d $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 ;
 ; MIPS1-PSX-LABEL: tst_select_fcmp_oge_double:
 ; MIPS1-PSX:       # %bb.0: # %entry
@@ -728,7 +728,7 @@ define double @tst_select_fcmp_oeq_double(double %x, double %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.eq.d $f0, $f12, $f14
 ; MM32R6-NEXT:    sel.d $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 ;
 ; MIPS1-PSX-LABEL: tst_select_fcmp_oeq_double:
 ; MIPS1-PSX:       # %bb.0: # %entry
@@ -826,7 +826,7 @@ define double @tst_select_fcmp_one_double(double %x, double %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.ueq.d $f0, $f12, $f14
 ; MM32R6-NEXT:    sel.d $f0, $f12, $f14
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 ;
 ; MIPS1-PSX-LABEL: tst_select_fcmp_one_double:
 ; MIPS1-PSX:       # %bb.0: # %entry

@@ -244,7 +244,7 @@ define void @test1(i32 signext %s) {
 ; MICROMIPSR6STATIC-NEXT:    li16 $2, 1
 ; MICROMIPSR6STATIC-NEXT:    sw $2, %lo(x)($1)
 ; MICROMIPSR6STATIC-NEXT:  $BB0_3: # %end
-; MICROMIPSR6STATIC-NEXT:    jrc $ra
+; MICROMIPSR6STATIC-NEXT:    jrc16 $ra
 ;
 ; MICROMIPSR6PIC-LABEL: test1:
 ; MICROMIPSR6PIC:       # %bb.0: # %entry
@@ -268,7 +268,7 @@ define void @test1(i32 signext %s) {
 ; MICROMIPSR6PIC-NEXT:    li16 $3, 1
 ; MICROMIPSR6PIC-NEXT:    sw16 $3, 0($2)
 ; MICROMIPSR6PIC-NEXT:  $BB0_4: # %end
-; MICROMIPSR6PIC-NEXT:    jrc $ra
+; MICROMIPSR6PIC-NEXT:    jrc16 $ra
 
 entry:
   %cmp = icmp eq i32 %s, 0

@@ -73,7 +73,7 @@ define signext i1 @and_i1(i1 signext %a, i1 signext %b) {
 ; MM32R6-LABEL: and_i1:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    and $2, $4, $5
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i1 %a, %b
   ret i1 %r
@@ -122,7 +122,7 @@ define signext i8 @and_i8(i8 signext %a, i8 signext %b) {
 ; MM32R6-LABEL: and_i8:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    and $2, $4, $5
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i8 %a, %b
   ret i8 %r
@@ -171,7 +171,7 @@ define signext i16 @and_i16(i16 signext %a, i16 signext %b) {
 ; MM32R6-LABEL: and_i16:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    and $2, $4, $5
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i16 %a, %b
   ret i16 %r
@@ -217,7 +217,7 @@ define signext i32 @and_i32(i32 signext %a, i32 signext %b) {
 ; MM32R6-LABEL: and_i32:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    and $2, $4, $5
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i32 %a, %b
   ret i32 %r
@@ -269,7 +269,7 @@ define signext i64 @and_i64(i64 signext %a, i64 signext %b) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    and $2, $4, $6
 ; MM32R6-NEXT:    and $3, $5, $7
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i64 %a, %b
   ret i64 %r
@@ -351,7 +351,7 @@ define signext i128 @and_i128(i128 signext %a, i128 signext %b) {
 ; MM32R6-NEXT:    and $4, $6, $1
 ; MM32R6-NEXT:    lw $1, 28($sp)
 ; MM32R6-NEXT:    and $5, $7, $1
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i128 %a, %b
   ret i128 %r
@@ -396,7 +396,7 @@ define signext i1 @and_i1_4(i1 signext %b) {
 ; MM32R6-LABEL: and_i1_4:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i1 4, %b
   ret i1 %r
@@ -441,7 +441,7 @@ define signext i8 @and_i8_4(i8 signext %b) {
 ; MM32R6-LABEL: and_i8_4:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $2, $4, 4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i8 4, %b
   ret i8 %r
@@ -486,7 +486,7 @@ define signext i16 @and_i16_4(i16 signext %b) {
 ; MM32R6-LABEL: and_i16_4:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $2, $4, 4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i16 4, %b
   ret i16 %r
@@ -531,7 +531,7 @@ define signext i32 @and_i32_4(i32 signext %b) {
 ; MM32R6-LABEL: and_i32_4:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $2, $4, 4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i32 4, %b
   ret i32 %r
@@ -581,7 +581,7 @@ define signext i64 @and_i64_4(i64 signext %b) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $3, $5, 4
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i64 4, %b
   ret i64 %r
@@ -644,7 +644,7 @@ define signext i128 @and_i128_4(i128 signext %b) {
 ; MM32R6-NEXT:    li16 $2, 0
 ; MM32R6-NEXT:    li16 $3, 0
 ; MM32R6-NEXT:    li16 $4, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i128 4, %b
   ret i128 %r
@@ -689,7 +689,7 @@ define signext i1 @and_i1_31(i1 signext %b) {
 ; MM32R6-LABEL: and_i1_31:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    move $2, $4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i1 31, %b
   ret i1 %r
@@ -734,7 +734,7 @@ define signext i8 @and_i8_31(i8 signext %b) {
 ; MM32R6-LABEL: and_i8_31:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $2, $4, 31
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i8 31, %b
   ret i8 %r
@@ -779,7 +779,7 @@ define signext i16 @and_i16_31(i16 signext %b) {
 ; MM32R6-LABEL: and_i16_31:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $2, $4, 31
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i16 31, %b
   ret i16 %r
@@ -824,7 +824,7 @@ define signext i32 @and_i32_31(i32 signext %b) {
 ; MM32R6-LABEL: and_i32_31:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $2, $4, 31
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i32 31, %b
   ret i32 %r
@@ -874,7 +874,7 @@ define signext i64 @and_i64_31(i64 signext %b) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $3, $5, 31
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i64 31, %b
   ret i64 %r
@@ -937,7 +937,7 @@ define signext i128 @and_i128_31(i128 signext %b) {
 ; MM32R6-NEXT:    li16 $2, 0
 ; MM32R6-NEXT:    li16 $3, 0
 ; MM32R6-NEXT:    li16 $4, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i128 31, %b
   ret i128 %r
@@ -982,7 +982,7 @@ define signext i1 @and_i1_255(i1 signext %b) {
 ; MM32R6-LABEL: and_i1_255:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    move $2, $4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i1 255, %b
   ret i1 %r
@@ -1027,7 +1027,7 @@ define signext i8 @and_i8_255(i8 signext %b) {
 ; MM32R6-LABEL: and_i8_255:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    move $2, $4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i8 255, %b
   ret i8 %r
@@ -1072,7 +1072,7 @@ define signext i16 @and_i16_255(i16 signext %b) {
 ; MM32R6-LABEL: and_i16_255:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $2, $4, 255
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i16 255, %b
   ret i16 %r
@@ -1117,7 +1117,7 @@ define signext i32 @and_i32_255(i32 signext %b) {
 ; MM32R6-LABEL: and_i32_255:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $2, $4, 255
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i32 255, %b
   ret i32 %r
@@ -1167,7 +1167,7 @@ define signext i64 @and_i64_255(i64 signext %b) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $3, $5, 255
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i64 255, %b
   ret i64 %r
@@ -1230,7 +1230,7 @@ define signext i128 @and_i128_255(i128 signext %b) {
 ; MM32R6-NEXT:    li16 $2, 0
 ; MM32R6-NEXT:    li16 $3, 0
 ; MM32R6-NEXT:    li16 $4, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i128 255, %b
   ret i128 %r
@@ -1275,7 +1275,7 @@ define signext i1 @and_i1_32768(i1 signext %b) {
 ; MM32R6-LABEL: and_i1_32768:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i1 32768, %b
   ret i1 %r
@@ -1320,7 +1320,7 @@ define signext i8 @and_i8_32768(i8 signext %b) {
 ; MM32R6-LABEL: and_i8_32768:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i8 32768, %b
   ret i8 %r
@@ -1373,7 +1373,7 @@ define signext i16 @and_i16_32768(i16 signext %b) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    addiu $1, $zero, -32768
 ; MM32R6-NEXT:    and $2, $4, $1
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
 
   %r = and i16 32768, %b
@@ -1419,7 +1419,7 @@ define signext i32 @and_i32_32768(i32 signext %b) {
 ; MM32R6-LABEL: and_i32_32768:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $2, $4, 32768
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i32 32768, %b
   ret i32 %r
@@ -1469,7 +1469,7 @@ define signext i64 @and_i64_32768(i64 signext %b) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi16 $3, $5, 32768
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i64 32768, %b
   ret i64 %r
@@ -1532,7 +1532,7 @@ define signext i128 @and_i128_32768(i128 signext %b) {
 ; MM32R6-NEXT:    li16 $2, 0
 ; MM32R6-NEXT:    li16 $3, 0
 ; MM32R6-NEXT:    li16 $4, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i128 32768, %b
   ret i128 %r
@@ -1577,7 +1577,7 @@ define signext i1 @and_i1_65(i1 signext %b) {
 ; MM32R6-LABEL: and_i1_65:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    move $2, $4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i1 65, %b
   ret i1 %r
@@ -1622,7 +1622,7 @@ define signext i8 @and_i8_65(i8 signext %b) {
 ; MM32R6-LABEL: and_i8_65:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi $2, $4, 65
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i8 65, %b
   ret i8 %r
@@ -1667,7 +1667,7 @@ define signext i16 @and_i16_65(i16 signext %b) {
 ; MM32R6-LABEL: and_i16_65:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi $2, $4, 65
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i16 65, %b
   ret i16 %r
@@ -1712,7 +1712,7 @@ define signext i32 @and_i32_65(i32 signext %b) {
 ; MM32R6-LABEL: and_i32_65:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi $2, $4, 65
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i32 65, %b
   ret i32 %r
@@ -1762,7 +1762,7 @@ define signext i64 @and_i64_65(i64 signext %b) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi $3, $5, 65
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i64 65, %b
   ret i64 %r
@@ -1825,7 +1825,7 @@ define signext i128 @and_i128_65(i128 signext %b) {
 ; MM32R6-NEXT:    li16 $2, 0
 ; MM32R6-NEXT:    li16 $3, 0
 ; MM32R6-NEXT:    li16 $4, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i128 65, %b
   ret i128 %r
@@ -1870,7 +1870,7 @@ define signext i1 @and_i1_256(i1 signext %b) {
 ; MM32R6-LABEL: and_i1_256:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i1 256, %b
   ret i1 %r
@@ -1915,7 +1915,7 @@ define signext i8 @and_i8_256(i8 signext %b) {
 ; MM32R6-LABEL: and_i8_256:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i8 256, %b
   ret i8 %r
@@ -1960,7 +1960,7 @@ define signext i16 @and_i16_256(i16 signext %b) {
 ; MM32R6-LABEL: and_i16_256:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi $2, $4, 256
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i16 256, %b
   ret i16 %r
@@ -2005,7 +2005,7 @@ define signext i32 @and_i32_256(i32 signext %b) {
 ; MM32R6-LABEL: and_i32_256:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi $2, $4, 256
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i32 256, %b
   ret i32 %r
@@ -2055,7 +2055,7 @@ define signext i64 @and_i64_256(i64 signext %b) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    andi $3, $5, 256
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i64 256, %b
   ret i64 %r
@@ -2118,7 +2118,7 @@ define signext i128 @and_i128_256(i128 signext %b) {
 ; MM32R6-NEXT:    li16 $2, 0
 ; MM32R6-NEXT:    li16 $3, 0
 ; MM32R6-NEXT:    li16 $4, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = and i128 256, %b
   ret i128 %r

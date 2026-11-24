@@ -105,7 +105,7 @@ define float @tst_select_i1_float(i1 signext %s, float %x, float %y) {
 ; MM32R6-NEXT:    mtc1 $6, $f2
 ; MM32R6-NEXT:    mtc1 $4, $f0
 ; MM32R6-NEXT:    sel.s $f0, $f2, $f1
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = select i1 %s, float %x, float %y
   ret float %r
@@ -178,7 +178,7 @@ define float @tst_select_i1_float_reordered(float %x, float %y,
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    mtc1 $6, $f0
 ; MM32R6-NEXT:    sel.s $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
                                             i1 signext %s) {
 entry:
   %r = select i1 %s, float %x, float %y
@@ -254,7 +254,7 @@ define float @tst_select_fcmp_olt_float(float %x, float %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.lt.s $f0, $f12, $f14
 ; MM32R6-NEXT:    sel.s $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %s = fcmp olt float %x, %y
   %r = select i1 %s, float %x, float %y
@@ -330,7 +330,7 @@ define float @tst_select_fcmp_ole_float(float %x, float %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.le.s $f0, $f12, $f14
 ; MM32R6-NEXT:    sel.s $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %s = fcmp ole float %x, %y
   %r = select i1 %s, float %x, float %y
@@ -406,7 +406,7 @@ define float @tst_select_fcmp_ogt_float(float %x, float %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.lt.s $f0, $f14, $f12
 ; MM32R6-NEXT:    sel.s $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %s = fcmp ogt float %x, %y
   %r = select i1 %s, float %x, float %y
@@ -482,7 +482,7 @@ define float @tst_select_fcmp_oge_float(float %x, float %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.le.s $f0, $f14, $f12
 ; MM32R6-NEXT:    sel.s $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %s = fcmp oge float %x, %y
   %r = select i1 %s, float %x, float %y
@@ -558,7 +558,7 @@ define float @tst_select_fcmp_oeq_float(float %x, float %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.eq.s $f0, $f12, $f14
 ; MM32R6-NEXT:    sel.s $f0, $f14, $f12
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %s = fcmp oeq float %x, %y
   %r = select i1 %s, float %x, float %y
@@ -634,7 +634,7 @@ define float @tst_select_fcmp_one_float(float %x, float %y) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    cmp.ueq.s $f0, $f12, $f14
 ; MM32R6-NEXT:    sel.s $f0, $f12, $f14
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %s = fcmp one float %x, %y
   %r = select i1 %s, float %x, float %y

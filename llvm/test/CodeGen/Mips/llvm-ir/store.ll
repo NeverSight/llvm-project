@@ -68,7 +68,7 @@ define void @f1(i8 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:A0>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(a)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8:]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8:]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS4-LABEL: f1:
@@ -202,7 +202,7 @@ define void @f2(i16 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:A0>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(b)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS4-LABEL: f2:
@@ -336,7 +336,7 @@ define void @f3(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:A0>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(c)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS4-LABEL: f3:
@@ -502,7 +502,7 @@ define void @f4(i64 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:A1>
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Imm:4>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS4-LABEL: f4:
@@ -652,7 +652,7 @@ define void @f5(float %e) {
 ; MMR6-NEXT:    # <MCOperand Reg:F12>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(e)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS4-LABEL: f5:
@@ -786,7 +786,7 @@ define void @f6(double %f) {
 ; MMR6-NEXT:    # <MCOperand Reg:D12_64>
 ; MMR6-NEXT:    # <MCOperand Reg:AT>
 ; MMR6-NEXT:    # <MCOperand Expr:%lo(f)>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST8]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST8]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 ;
 ; MIPS4-LABEL: f6:

@@ -475,8 +475,7 @@ unsigned MipsInstrInfo::getEquivalentCompactForm(
       if (I->getOperand(1).getReg() == Subtarget.getABI().GetZeroReg())
         canUseShortMicroMipsCTI = true;
       break;
-    // For microMIPS the PseudoReturn and PseudoIndirectBranch are always
-    // expanded to JR_MM, so they can be replaced with JRC16_MM.
+    // microMIPS has a compact register jump in both ISA revisions.
     case Mips::JR:
     case Mips::PseudoReturn:
     case Mips::PseudoIndirectBranch:
@@ -562,7 +561,7 @@ unsigned MipsInstrInfo::getEquivalentCompactForm(
     case Mips::PseudoReturn:
     case Mips::TAILCALLR6REG:
       if (canUseShortMicroMipsCTI)
-        return Mips::JRC16_MM;
+        return Subtarget.hasMips32r6() ? Mips::JRC16_MMR6 : Mips::JRC16_MM;
       return Mips::JIC;
     case Mips::JALRPseudo:
       return Mips::JIALC;

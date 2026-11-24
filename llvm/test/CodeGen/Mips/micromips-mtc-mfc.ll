@@ -29,7 +29,7 @@ define double @foo(double %a, double %b) {
 ; MM6-NEXT:    cmp.ule.d $f1, $f12, $f1 # encoding: [0x54,0x2c,0x09,0xd5]
 ; MM6-NEXT:    mfc1 $2, $f1 # encoding: [0x44,0x02,0x08,0x00]
 ; MM6-NEXT:    andi16 $2, $2, 1 # encoding: [0x2d,0x21]
-; MM6-NEXT:    jrc $ra # encoding: [0x45,0xbf]
+; MM6-NEXT:    jrc16 $ra # encoding: [0x47,0xe3]
 entry:
   %cmp = fcmp ogt double %a, 0.000000e+00
   br i1 %cmp, label %if.end, label %if.else
@@ -57,7 +57,7 @@ define double @bar(double %x, double %y) {
 ; MM6:       # %bb.0: # %entry
 ; MM6-NEXT:    cmp.lt.d $f0, $f12, $f14 # encoding: [0x55,0xcc,0x01,0x15]
 ; MM6-NEXT:    sel.d $f0, $f14, $f12 # encoding: [0x55,0x8e,0x02,0xb8]
-; MM6-NEXT:    jrc $ra # encoding: [0x45,0xbf]
+; MM6-NEXT:    jrc16 $ra # encoding: [0x47,0xe3]
 entry:
   %z = fcmp olt double %x, %y
   %r = select i1 %z, double %x, double %y

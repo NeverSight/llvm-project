@@ -84,7 +84,7 @@ define signext i1 @shl_i1(i1 signext %a, i1 signext %b) {
 ; MMR6-LABEL: shl_i1:
 ; MMR6:       # %bb.0: # %entry
 ; MMR6-NEXT:    move $2, $4
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
   %r = shl i1 %a, %b
@@ -163,7 +163,7 @@ define signext i8 @shl_i8(i8 signext %a, i8 signext %b) {
 ; MMR6-NEXT:    andi16 $2, $5, 255
 ; MMR6-NEXT:    sllv $1, $4, $2
 ; MMR6-NEXT:    seb $2, $1
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
   %r = shl i8 %a, %b
@@ -242,7 +242,7 @@ define signext i16 @shl_i16(i16 signext %a, i16 signext %b) {
 ; MMR6-NEXT:    andi16 $2, $5, 65535
 ; MMR6-NEXT:    sllv $1, $4, $2
 ; MMR6-NEXT:    seh $2, $1
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
   %r = shl i16 %a, %b
@@ -303,7 +303,7 @@ define signext i32 @shl_i32(i32 signext %a, i32 signext %b) {
 ; MMR6-LABEL: shl_i32:
 ; MMR6:       # %bb.0: # %entry
 ; MMR6-NEXT:    sllv $2, $4, $5
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
   %r = shl i32 %a, %b
@@ -428,7 +428,7 @@ define signext i64 @shl_i64(i64 signext %a, i64 signext %b) {
 ; MMR6-NEXT:    selnez $2, $4, $3
 ; MMR6-NEXT:    or $2, $2, $1
 ; MMR6-NEXT:    seleqz $3, $4, $3
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
   %r = shl i64 %a, %b
@@ -756,7 +756,7 @@ define signext i128 @shl_i128(i128 signext %a, i128 signext %b) {
 ; MMR6-NEXT:    or $4, $1, $4
 ; MMR6-NEXT:    sllv $5, $5, $6
 ; MMR6-NEXT:    addiu $sp, $sp, 32
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
 ; o32 shouldn't use TImode helpers.

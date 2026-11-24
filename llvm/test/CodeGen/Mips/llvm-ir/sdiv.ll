@@ -73,7 +73,7 @@ define signext i1 @sdiv_i1(i1 signext %a, i1 signext %b) {
 ; MMR6-LABEL: sdiv_i1:
 ; MMR6:       # %bb.0: # %entry
 ; MMR6-NEXT:    move $2, $4
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
   %r = sdiv i1 %a, %b
   ret i1 %r
@@ -159,7 +159,7 @@ define signext i8 @sdiv_i8(i8 signext %a, i8 signext %b) {
 ; MMR6-NEXT:    div $1, $4, $5
 ; MMR6-NEXT:    teq $5, $zero, 7
 ; MMR6-NEXT:    seb $2, $1
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
   %r = sdiv i8 %a, %b
   ret i8 %r
@@ -245,7 +245,7 @@ define signext i16 @sdiv_i16(i16 signext %a, i16 signext %b) {
 ; MMR6-NEXT:    div $1, $4, $5
 ; MMR6-NEXT:    teq $5, $zero, 7
 ; MMR6-NEXT:    seh $2, $1
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
   %r = sdiv i16 %a, %b
   ret i16 %r
@@ -305,7 +305,7 @@ define signext i32 @sdiv_i32(i32 signext %a, i32 signext %b) {
 ; MMR6:       # %bb.0: # %entry
 ; MMR6-NEXT:    div $2, $4, $5
 ; MMR6-NEXT:    teq $5, $zero, 7
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
   %r = sdiv i32 %a, %b
   ret i32 %r
@@ -409,7 +409,7 @@ define signext i64 @sdiv_i64(i64 signext %a, i64 signext %b) {
 ; MMR6-NEXT:    jalr $25
 ; MMR6-NEXT:    lw $ra, 20($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    addiu $sp, $sp, 24
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
   %r = sdiv i64 %a, %b
   ret i64 %r
@@ -600,7 +600,7 @@ define signext i128 @sdiv_i128(i128 signext %a, i128 signext %b) {
 ; MMR6-NEXT:    lw $17, 32($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    lw $ra, 36($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    addiu $sp, $sp, 40
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
   %r = sdiv i128 %a, %b
   ret i128 %r

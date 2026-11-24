@@ -79,10 +79,10 @@ body:             |
   ; MM: bb.2.if.then:
   ; MM:   INLINEASM &".space 810680", sideeffect attdialect, clobber, implicit-def dead early-clobber $at
   ; MM:   $v0 = LI16_MM 0
-  ; MM:   JRC16_MM undef $ra, implicit $v0
+  ; MM:   JRC16_MMR6 undef $ra, implicit $v0
   ; MM: bb.3.return:
   ; MM:   $v0 = LI16_MM 1
-  ; MM:   JRC16_MM undef $ra, implicit $v0
+  ; MM:   JRC16_MMR6 undef $ra, implicit $v0
   ; PIC-LABEL: name: a
   ; PIC: bb.0.entry:
   ; PIC:   successors: %bb.3(0x50000000), %bb.1(0x30000000)
@@ -104,10 +104,10 @@ body:             |
   ; PIC: bb.3.if.then:
   ; PIC:   INLINEASM &".space 810680", sideeffect attdialect, clobber, implicit-def dead early-clobber $at
   ; PIC:   $v0 = LI16_MM 0
-  ; PIC:   JRC16_MM undef $ra, implicit $v0
+  ; PIC:   JRC16_MMR6 undef $ra, implicit $v0
   ; PIC: bb.4.return:
   ; PIC:   $v0 = LI16_MM 1
-  ; PIC:   JRC16_MM undef $ra, implicit $v0
+  ; PIC:   JRC16_MMR6 undef $ra, implicit $v0
   bb.0.entry:
     successors: %bb.1(0x50000000), %bb.2(0x30000000)
     liveins: $d12_64, $d14_64
@@ -171,10 +171,10 @@ body:             |
   ; MM: bb.2.if.then:
   ; MM:   INLINEASM &".space 810680", sideeffect attdialect, clobber, implicit-def dead early-clobber $at
   ; MM:   $v0 = LI16_MM 0
-  ; MM:   JRC16_MM undef $ra, implicit $v0
+  ; MM:   JRC16_MMR6 undef $ra, implicit $v0
   ; MM: bb.3.return:
   ; MM:   $v0 = LI16_MM 1
-  ; MM:   JRC16_MM undef $ra, implicit $v0
+  ; MM:   JRC16_MMR6 undef $ra, implicit $v0
   ; PIC-LABEL: name: b
   ; PIC: bb.0.entry:
   ; PIC:   successors: %bb.3(0x30000000), %bb.1(0x50000000)
@@ -196,10 +196,10 @@ body:             |
   ; PIC: bb.3.if.then:
   ; PIC:   INLINEASM &".space 810680", sideeffect attdialect, clobber, implicit-def dead early-clobber $at
   ; PIC:   $v0 = LI16_MM 0
-  ; PIC:   JRC16_MM undef $ra, implicit $v0
+  ; PIC:   JRC16_MMR6 undef $ra, implicit $v0
   ; PIC: bb.4.return:
   ; PIC:   $v0 = LI16_MM 1
-  ; PIC:   JRC16_MM undef $ra, implicit $v0
+  ; PIC:   JRC16_MMR6 undef $ra, implicit $v0
   bb.0.entry:
     successors: %bb.1(0x30000000), %bb.2(0x50000000)
     liveins: $d12_64, $d14_64

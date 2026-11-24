@@ -70,7 +70,7 @@ define signext i1 @xor_i1(i1 signext %a, i1 signext %b) {
 ; MM32R6-LABEL: xor_i1:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    xor $2, $4, $5
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i1 %a, %b
   ret i1 %r
@@ -119,7 +119,7 @@ define signext i8 @xor_i8(i8 signext %a, i8 signext %b) {
 ; MM32R6-LABEL: xor_i8:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    xor $2, $4, $5
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i8 %a, %b
   ret i8 %r
@@ -168,7 +168,7 @@ define signext i16 @xor_i16(i16 signext %a, i16 signext %b) {
 ; MM32R6-LABEL: xor_i16:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    xor $2, $4, $5
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i16 %a, %b
   ret i16 %r
@@ -214,7 +214,7 @@ define signext i32 @xor_i32(i32 signext %a, i32 signext %b) {
 ; MM32R6-LABEL: xor_i32:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    xor $2, $4, $5
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i32 %a, %b
   ret i32 %r
@@ -266,7 +266,7 @@ define signext i64 @xor_i64(i64 signext %a, i64 signext %b) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    xor $2, $4, $6
 ; MM32R6-NEXT:    xor $3, $5, $7
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i64 %a, %b
   ret i64 %r
@@ -348,7 +348,7 @@ define signext i128 @xor_i128(i128 signext %a, i128 signext %b) {
 ; MM32R6-NEXT:    xor $4, $6, $1
 ; MM32R6-NEXT:    lw $1, 28($sp)
 ; MM32R6-NEXT:    xor $5, $7, $1
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i128 %a, %b
   ret i128 %r
@@ -393,7 +393,7 @@ define signext i1 @xor_i1_4(i1 signext %b) {
 ; MM32R6-LABEL: xor_i1_4:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    move $2, $4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i1 4, %b
   ret i1 %r
@@ -438,7 +438,7 @@ define signext i8 @xor_i8_4(i8 signext %b) {
 ; MM32R6-LABEL: xor_i8_4:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    xori $2, $4, 4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i8 4, %b
   ret i8 %r
@@ -483,7 +483,7 @@ define signext i16 @xor_i16_4(i16 signext %b) {
 ; MM32R6-LABEL: xor_i16_4:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    xori $2, $4, 4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i16 4, %b
   ret i16 %r
@@ -528,7 +528,7 @@ define signext i32 @xor_i32_4(i32 signext %b) {
 ; MM32R6-LABEL: xor_i32_4:
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    xori $2, $4, 4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i32 4, %b
   ret i32 %r
@@ -578,7 +578,7 @@ define signext i64 @xor_i64_4(i64 signext %b) {
 ; MM32R6:       # %bb.0: # %entry
 ; MM32R6-NEXT:    xori $3, $5, 4
 ; MM32R6-NEXT:    move $2, $4
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i64 4, %b
   ret i64 %r
@@ -646,7 +646,7 @@ define signext i128 @xor_i128_4(i128 signext %b) {
 ; MM32R6-NEXT:    move $3, $5
 ; MM32R6-NEXT:    move $4, $6
 ; MM32R6-NEXT:    move $5, $1
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
 entry:
   %r = xor i128 4, %b
   ret i128 %r
