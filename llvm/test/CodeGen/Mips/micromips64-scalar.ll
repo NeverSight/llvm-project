@@ -7,6 +7,14 @@
 ; RUN: llc -mtriple=mips64el-unknown-linux-gnuabi64 -target-abi=n64 -mcpu=mips64r2 -mattr=+micromips,+noabicalls -relocation-model=static -verify-machineinstrs -filetype=obj %s -o %t.n64el
 ; RUN: llvm-objdump -d --no-show-raw-insn --no-print-imm-hex --no-symbolize-operands --triple=mips64el-unknown-linux-gnuabi64 --mcpu=mips64r2 --mattr=+micromips %t.n64el | FileCheck %s
 
+; CHECK-LABEL: <extendword>:
+; CHECK: sll $2, $4, 0
+define i64 @extendword(i64 %a) nounwind {
+  %w = trunc i64 %a to i32
+  %r = sext i32 %w to i64
+  ret i64 %r
+}
+
 define i64 @add_pair(i64 %a, i64 %b) {
 ; CHECK-LABEL: <add_pair>:
 ; CHECK:       jr $ra

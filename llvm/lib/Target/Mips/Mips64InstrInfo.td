@@ -882,7 +882,7 @@ let AdditionalPredicates = [NotInMicroMips] in {
 
 // Sign extend in register
 def : MipsPat<(i64 (sext_inreg GPR64:$src, i32)),
-              (SLL64_64 GPR64:$src)>, ISA_MIPS3, GPR_64;
+              (SLL64_64 GPR64:$src)>, MIPS3_GPR64;
 
 // bswap MipsPattern
 def : MipsPat<(bswap GPR64:$rt), (DSHD (DSBH GPR64:$rt))>, ISA_MIPS64R2;
