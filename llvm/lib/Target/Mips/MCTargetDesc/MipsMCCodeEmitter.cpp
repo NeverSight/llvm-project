@@ -563,10 +563,12 @@ getJumpTargetOpValue(const MCInst &MI, unsigned OpNo,
          "getJumpTargetOpValue expects only expressions or an immediate");
 
   const MCExpr *Expr = MO.getExpr();
-  addFixup(Fixups, 0, Expr,
-           (MCII.get(MI.getOpcode()).TSFlags & MipsII::IsMips16)
-               ? Mips::fixup_Mips16_26
-               : Mips::fixup_Mips_26);
+  auto Kind = Mips::fixup_Mips_26;
+  if (MCII.get(MI.getOpcode()).TSFlags & MipsII::IsMips16)
+    Kind = Mips::fixup_Mips16_26;
+  else if (MI.getOpcode() == Mips::JALX_MM)
+    Kind = Mips::fixup_MICROMIPS_26_S1;
+  addFixup(Fixups, 0, Expr, Kind);
   return 0;
 }
 

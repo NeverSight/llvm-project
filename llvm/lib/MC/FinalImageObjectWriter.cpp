@@ -761,6 +761,13 @@ uint64_t llvm::mc_rewrite::sectionImageVA(MCAssembler &Asm,
   return Base;
 }
 
+std::optional<uint64_t>
+FinalImageObjectWriter::getFinalFixupVA(const MCFragment &F,
+                                        const MCFixup &Fixup) const {
+  return mc_rewrite::sectionImageVA(*Asm, Opts, *F.getParent()) +
+         Asm->getFragmentOffset(F) + Fixup.getOffset();
+}
+
 void FinalImageObjectWriter::recordRelocation(const MCFragment &F,
                                               const MCFixup &Fixup,
                                               MCValue Target,

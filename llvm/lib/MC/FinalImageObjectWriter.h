@@ -49,6 +49,8 @@ public:
   // Assemble each section's resulting bytes at its final VA into Out.Sections,
   // populate Out.SymbolAddrs, then run Opts.onImage.
   uint64_t writeObject() override;
+  std::optional<uint64_t> getFinalFixupVA(const MCFragment &F,
+                                          const MCFixup &Fixup) const override;
 };
 
 } // namespace llvm

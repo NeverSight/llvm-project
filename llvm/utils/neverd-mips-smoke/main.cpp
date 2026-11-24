@@ -9,6 +9,8 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/AsmParser/Parser.h"
+#include "llvm/IR/DiagnosticInfo.h"
+#include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
@@ -265,6 +267,92 @@ static bool fixedAddressLeaf(const Triple &TT, StringRef CPU,
   return SawText && SawPointer;
 }
 
+static bool fixedAddressCall(bool Little, StringRef Mode, uint64_t TextVA,
+                             uint64_t TargetVA,
+                             std::optional<uint32_t> Expected,
+                             bool PIC = false) {
+  LLVMContext Context;
+  std::string Errors;
+  Context.setDiagnosticHandlerCallBack(
+      [](const DiagnosticInfo *Info, void *State) {
+        if (Info->getSeverity() == DS_Error) {
+          raw_string_ostream Stream(*static_cast<std::string *>(State));
+          DiagnosticPrinterRawOStream Printer(Stream);
+          Info->print(Printer);
+        }
+      },
+      &Errors);
+  SMDiagnostic Diag;
+  auto M = parseAssemblyString(R"(
+    declare i32 @callee(i32)
+    define i32 @caller(i32 %x) {
+      %r = notail call i32 @callee(i32 %x)
+      %s = add i32 %r, 1
+      ret i32 %s
+    }
+  )",
+                               Diag, Context);
+  if (!M)
+    return false;
+  if (!Mode.empty())
+    M->getFunction("caller")->addFnAttr(Mode);
+  Triple TT(Little ? "mipsel-unknown-linux-gnu" : "mips-unknown-linux-gnu");
+  std::string Err;
+  auto *Target = TargetRegistry::lookupTarget(TT, Err);
+  if (!Target)
+    return false;
+  std::unique_ptr<TargetMachine> TM(Target->createTargetMachine(
+      TT, "mips32r2", PIC ? "+soft-float" : "+soft-float,+noabicalls",
+      TargetOptions(), PIC ? Reloc::PIC_ : Reloc::Static));
+  if (!TM)
+    return false;
+  M->setTargetTriple(TT);
+  M->setDataLayout(TM->createDataLayout());
+  mc_rewrite::RewriteOptions Options;
+  Options.Model.TextVA = TextVA;
+  Options.Model.getSectionVA = [TextVA](StringRef Name) -> uint64_t {
+    return Name == ".text" ? TextVA : 0x20000;
+  };
+  std::optional<uint64_t> CallOffset;
+  Options.Model.resolveWithContext =
+      [&](const mc_rewrite::RewriteSymbolResolveRequest &Request)
+      -> std::optional<uint64_t> {
+    if (Request.Symbol != "callee")
+      return std::nullopt;
+    CallOffset = Request.SectionOffset;
+    return TargetVA;
+  };
+  legacy::PassManager PM;
+  mc_rewrite::RewriteResult R;
+  if (TM->addPassesToEmitBinaryRewrite(PM, Options, R))
+    return false;
+  PM.run(*M);
+  if (CallOffset && !Expected && !R.ImageValid &&
+      StringRef(Errors).contains(PIC ? "requires an ELF linker"
+                                     : "outside the PC region"))
+    return true;
+  if (CallOffset && Expected && R.ImageValid && R.Unresolved.empty() &&
+      Errors.empty()) {
+    auto Order = Little ? endianness::little : endianness::big;
+    for (const auto &Sec : R.Sections) {
+      if (Sec.Name != ".text" || *CallOffset + 4 > Sec.Bytes.size())
+        continue;
+      const uint8_t *At = Sec.Bytes.data() + *CallOffset;
+      uint32_t Word =
+          Mode.empty() ? support::endian::read32(At, Order)
+                       : (uint32_t(support::endian::read16(At, Order)) << 16) |
+                             support::endian::read16(At + 2, Order);
+      if (Word == *Expected)
+        return true;
+      errs() << "encoded " << utohexstr(Word) << " expected "
+             << utohexstr(*Expected) << "; ";
+    }
+  }
+  errs() << TT.str() << " " << Mode << " fixed call at 0x" << utohexstr(TextVA)
+         << " to 0x" << utohexstr(TargetVA) << ": " << Errors << '\n';
+  return false;
+}
+
 int main() {
   LLVMInitializeMipsTargetInfo();
   LLVMInitializeMipsTarget();
@@ -272,6 +360,21 @@ int main() {
   LLVMInitializeMipsAsmParser();
   LLVMInitializeMipsAsmPrinter();
   for (bool Little : {false, true}) {
+    if (!fixedAddressCall(Little, "", 0x10000, 0x180000, std::nullopt, true) ||
+        !fixedAddressCall(Little, "", 0x10000, 0x180000, 0x0c060000) ||
+        !fixedAddressCall(Little, "", 0x10000, 0x180001, 0x74060000) ||
+        !fixedAddressCall(Little, "", 0x10000, 0x10018000, std::nullopt) ||
+        !fixedAddressCall(Little, "", 0x10000, 0x180002, std::nullopt) ||
+        !fixedAddressCall(Little, "", 0x0ffffff4, 0x10018000, 0x0c006000) ||
+        !fixedAddressCall(Little, "mips16", 0x10000, 0x180001, 0x18c00000) ||
+        !fixedAddressCall(Little, "mips16", 0x10000, 0x180000, 0x1cc00000) ||
+        !fixedAddressCall(Little, "mips16", 0x10000, 0x10018001,
+                          std::nullopt) ||
+        !fixedAddressCall(Little, "micromips", 0x10000, 0x180003, 0xf40c0001) ||
+        !fixedAddressCall(Little, "micromips", 0x10000, 0x180000, 0xf0060000) ||
+        !fixedAddressCall(Little, "micromips", 0x10000, 0x08018001,
+                          std::nullopt))
+      return 1;
     for (StringRef TT :
          {Little ? "mipsel-linux-gnu" : "mips-linux-gnu",
           Little ? "mips64el-linux-gnuabin32" : "mips64-linux-gnuabin32",
@@ -316,7 +419,7 @@ int main() {
       }
     }
   }
-  outs() << "MIPS32/64 BE/LE, n32 ELF, MIPS16 ELF mode and FR=0/1 code "
-            "generation passed\n";
+  outs() << "MIPS ELF object and final-address checks passed for both byte "
+            "orders\n";
   return 0;
 }

@@ -13,6 +13,7 @@
 #include "llvm/Support/Compiler.h"
 #include "llvm/TargetParser/Triple.h"
 #include <cstdint>
+#include <optional>
 
 namespace llvm {
 
@@ -127,6 +128,13 @@ public:
   /// complete, fixups have been evaluated and applied, and relocations
   /// generated.
   virtual uint64_t writeObject() = 0;
+
+  /// Final instruction address for target fixups whose reachable region
+  /// depends on the PC. Relocatable writers leave this to the linker.
+  virtual std::optional<uint64_t> getFinalFixupVA(const MCFragment &,
+                                                  const MCFixup &) const {
+    return std::nullopt;
+  }
 
   /// @}
 };
