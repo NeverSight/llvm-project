@@ -484,6 +484,9 @@ def TargetBPF : TargetArch<["bpfel", "bpfeb"]>;
 def TargetLoongArch : TargetArch<["loongarch32", "loongarch64"]>;
 def TargetMips32 : TargetArch<["mips", "mipsel"]>;
 def TargetAnyMips : TargetArch<["mips", "mipsel", "mips64", "mips64el"]>;
+def TargetMicroMips : TargetArch<TargetAnyMips.Arches> {
+  let CustomCode = [{ Target.supportsMicroMips() }];
+}
 def TargetMSP430 : TargetArch<["msp430"]>;
 def TargetM68k : TargetArch<["m68k"]>;
 def TargetRISCV : TargetArch<["riscv32", "riscv64", "riscv32be", "riscv64be"]>;
@@ -2238,7 +2241,7 @@ def MipsInterrupt : InheritableAttr, TargetSpecificAttr<TargetMips32> {
 }
 def : MutualExclusions<[Mips16, MipsInterrupt]>;
 
-def MicroMips : InheritableAttr, TargetSpecificAttr<TargetMips32> {
+def MicroMips : InheritableAttr, TargetSpecificAttr<TargetMicroMips> {
   let Spellings = [GCC<"micromips">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [MicroMipsDocs];
@@ -2418,14 +2421,14 @@ def NoOutline : DeclOrStmtAttr {
   let SimpleHandler = true;
 }
 
-def NoMips16 : InheritableAttr, TargetSpecificAttr<TargetMips32> {
+def NoMips16 : InheritableAttr, TargetSpecificAttr<TargetAnyMips> {
   let Spellings = [GCC<"nomips16">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [Undocumented];
   let SimpleHandler = 1;
 }
 
-def NoMicroMips : InheritableAttr, TargetSpecificAttr<TargetMips32> {
+def NoMicroMips : InheritableAttr, TargetSpecificAttr<TargetAnyMips> {
   let Spellings = [GCC<"nomicromips">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [MicroMipsDocs];

@@ -61,6 +61,12 @@ public:
     else if (FD->hasAttr<MipsShortCallAttr>())
       Fn->addFnAttr("short-call");
 
+    // A declaration's ISA mode determines how an R6 caller reaches it.
+    if (FD->hasAttr<MicroMipsAttr>())
+      Fn->addFnAttr("micromips");
+    else if (FD->hasAttr<NoMicroMipsAttr>())
+      Fn->addFnAttr("nomicromips");
+
     // Other attributes do not have a meaning for declarations.
     if (GV->isDeclaration())
       return;
@@ -71,11 +77,6 @@ public:
     else if (FD->hasAttr<NoMips16Attr>()) {
       Fn->addFnAttr("nomips16");
     }
-
-    if (FD->hasAttr<MicroMipsAttr>())
-      Fn->addFnAttr("micromips");
-    else if (FD->hasAttr<NoMicroMipsAttr>())
-      Fn->addFnAttr("nomicromips");
 
     const MipsInterruptAttr *Attr = FD->getAttr<MipsInterruptAttr>();
     if (!Attr)

@@ -1429,6 +1429,9 @@ public:
 
   virtual ParsedTargetAttr parseTargetAttr(StringRef Str) const;
 
+  /// Whether this CPU and ABI can emit functions using microMIPS encoding.
+  virtual bool supportsMicroMips() const { return false; }
+
   /// Determine whether this TargetInfo supports tune in target attribute.
   virtual bool supportsTargetAttributeTune() const {
     return false;

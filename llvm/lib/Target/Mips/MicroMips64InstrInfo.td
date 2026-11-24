@@ -46,6 +46,8 @@ let DecoderNamespace = "MicroMips64" in {
   def DADDiu_MM : Micro64R6Rel<"micro">, MMRel, ArithLogicI<"daddiu", simm16_64, GPR64Opnd,
                                      immSExt16, add>,
                   ADDI_FM_MM<0x17>, ISA_MICROMIPS64R2, IsAsCheapAsAMove;
+  def LEA_ADDiu64_MM : EffectiveAddress<"daddiu", GPR64Opnd>,
+                       LW_FM_MM<0x17>, ISA_MICROMIPS64R2, GPR_64;
 
   // DADDI has a signed ten-bit immediate in POOL32S.
   def DADDi_MM : InstSE<(outs GPR64Opnd:$rt),

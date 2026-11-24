@@ -122,3 +122,12 @@ define i64 @classic_caller(i64 %x) nounwind "nomicromips" {
   %v = notail call i64 @micro_caller(i64 %x)
   ret i64 %v
 }
+
+; CHECK-LABEL: <stack_address>:
+; N64: daddiu {{\$[0-9]+}}, $sp,
+define ptr @stack_address() nounwind "micromips" {
+  %slots = alloca [8 x i64], align 16
+  %p = getelementptr [8 x i64], ptr %slots, i32 0, i32 5
+  %result = call ptr asm sideeffect "", "=r,0,~{memory}"(ptr %p)
+  ret ptr %result
+}

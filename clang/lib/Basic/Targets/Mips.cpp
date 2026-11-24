@@ -247,8 +247,7 @@ unsigned MipsTargetInfo::getUnwindWordWidth() const {
 }
 
 bool MipsTargetInfo::validateTarget(DiagnosticsEngine &Diags) const {
-  // microMIPS64R6 backend was removed.
-  if (getTriple().isMIPS64() && IsMicromips && (ABI == "n32" || ABI == "n64")) {
+  if (IsMicromips && !supportsMicroMips()) {
     Diags.Report(diag::err_target_unsupported_cpu_for_micromips) << CPU;
     return false;
   }
