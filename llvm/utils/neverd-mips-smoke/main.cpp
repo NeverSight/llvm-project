@@ -11,6 +11,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
+#include "llvm/MC/BinaryRewrite.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Support/Endian.h"
@@ -163,6 +164,68 @@ static bool objectModes(bool Little, bool N32) {
   return SawCode && SawABI && SawPlain && (N32 || (SawCompact && SawAlias));
 }
 
+static bool fixedAddressLeaf(StringRef TargetName, bool Wide, bool Little,
+                             bool N32) {
+  LLVMContext Context;
+  SMDiagnostic Diagnostic;
+  auto Module = parseAssemblyString(R"(
+    @entry = global ptr @leaf
+    define i32 @leaf() uwtable { ret i32 37 }
+  )",
+                                    Diagnostic, Context);
+  if (!Module)
+    return false;
+  Triple TT(TargetName);
+  std::string Err;
+  const auto *Target = TargetRegistry::lookupTarget(TT, Err);
+  if (!Target)
+    return false;
+  std::unique_ptr<TargetMachine> TM(Target->createTargetMachine(
+      TT, Wide ? "mips64r2" : "mips32r2", "", TargetOptions(), Reloc::Static));
+  if (!TM)
+    return false;
+  Module->setTargetTriple(TT);
+  Module->setDataLayout(TM->createDataLayout());
+  legacy::PassManager PM;
+  mc_rewrite::RewriteOptions Options;
+  Options.Model.TextVA = 0x10000;
+  Options.Model.getSectionVA = [](StringRef Name) -> uint64_t {
+    if (Name == ".text")
+      return 0x10000;
+    if (Name == ".data")
+      return 0x20000;
+    return 0x30000;
+  };
+  mc_rewrite::RewriteResult Result;
+  if (TM->addPassesToEmitBinaryRewrite(PM, Options, Result))
+    return false;
+  PM.run(*Module);
+  if (!Result.ImageValid || !Result.FunctionRangesValid ||
+      !Result.Unresolved.empty() || Result.FunctionRanges.size() != 1 ||
+      Result.SymbolAddrs["leaf"] != 0x10000 ||
+      Result.SymbolAddrs["entry"] != 0x20000)
+    return false;
+  const auto &Range = Result.FunctionRanges.front();
+  if (Range.OwnerSymbol != "leaf" || Range.BeginVA != 0x10000 ||
+      Range.EndVA != 0x10008)
+    return false;
+  const auto Order = Little ? endianness::little : endianness::big;
+  bool SawText = false, SawPointer = false;
+  for (const auto &Sec : Result.Sections) {
+    if (Sec.Name == ".text" && Sec.Bytes.size() >= 8)
+      SawText =
+          support::endian::read32(Sec.Bytes.data(), Order) == 0x03e00008 &&
+          support::endian::read32(Sec.Bytes.data() + 4, Order) == 0x24020025;
+    const unsigned Width = Wide && !N32 ? 8 : 4;
+    if (Sec.Name == ".data" && Sec.Bytes.size() >= Width)
+      SawPointer =
+          (Width == 8
+               ? support::endian::read64(Sec.Bytes.data(), Order)
+               : support::endian::read32(Sec.Bytes.data(), Order)) == 0x10000;
+  }
+  return SawText && SawPointer;
+}
+
 int main() {
   LLVMInitializeMipsTargetInfo();
   LLVMInitializeMipsTarget();
@@ -170,6 +233,16 @@ int main() {
   LLVMInitializeMipsAsmParser();
   LLVMInitializeMipsAsmPrinter();
   for (bool Little : {false, true}) {
+    for (StringRef TT :
+         {Little ? "mipsel-linux-gnu" : "mips-linux-gnu",
+          Little ? "mips64el-linux-gnuabin32" : "mips64-linux-gnuabin32",
+          Little ? "mips64el-linux-gnuabi64" : "mips64-linux-gnuabi64"}) {
+      if (!fixedAddressLeaf(TT, Triple(TT).isMIPS64(), Little,
+                            Triple(TT).isABIN32())) {
+        errs() << "MIPS fixed-address code generation failure: " << TT << '\n';
+        return 1;
+      }
+    }
     for (bool N32 : {false, true})
       if (!objectModes(Little, N32)) {
         errs() << "MIPS ELF object identity failure: little=" << Little

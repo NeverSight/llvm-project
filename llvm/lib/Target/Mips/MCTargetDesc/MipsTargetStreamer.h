@@ -328,6 +328,7 @@ public:
 // This part is for ELF object output
 class MipsTargetELFStreamer : public MipsTargetStreamer {
   uint8_t SymbolMode;
+  unsigned EFlags = 0;
   const MCSubtargetInfo &STI;
   bool Pic;
 

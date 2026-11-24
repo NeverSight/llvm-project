@@ -468,6 +468,9 @@ void MCStreamer::emitCFIEndProc() {
   if (!CurFrame)
     return;
   emitCFIEndProcImpl(*CurFrame);
+  if (Context.requiresRewriteFunctionProvenance())
+    getAssemblerPtr()->completeRewriteFunctionRange(CurFrame->Begin,
+                                                   CurFrame->End);
   FrameInfoStack.pop_back();
 }
 
