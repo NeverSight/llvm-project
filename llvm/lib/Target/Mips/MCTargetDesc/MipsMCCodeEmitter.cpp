@@ -78,36 +78,12 @@ static void addFixup(SmallVectorImpl<MCFixup> &Fixups, uint32_t Offset,
   Fixups.push_back(MCFixup::create(Offset, Value, Kind, PCRel));
 }
 
-// If the D<shift> instruction has a shift amount that is greater
-// than 31 (checked in calling routine), lower it to a D<shift>32 instruction
-static void LowerLargeShift(MCInst& Inst) {
-  assert(Inst.getNumOperands() == 3 && "Invalid no. of operands for shift!");
-  assert(Inst.getOperand(2).isImm());
-
-  int64_t Shift = Inst.getOperand(2).getImm();
-  if (Shift <= 31)
-    return; // Do nothing
-  Shift -= 32;
-
-  // saminus32
-  Inst.getOperand(2).setImm(Shift);
-
-  switch (Inst.getOpcode()) {
-  default:
-    // Calling function is not synchronized
-    llvm_unreachable("Unexpected shift instruction");
-  case Mips::DSLL:
-    Inst.setOpcode(Mips::DSLL32);
-    return;
-  case Mips::DSRL:
-    Inst.setOpcode(Mips::DSRL32);
-    return;
-  case Mips::DSRA:
-    Inst.setOpcode(Mips::DSRA32);
-    return;
-  case Mips::DROTR:
-    Inst.setOpcode(Mips::DROTR32);
-    return;
+// A six-bit shift uses the *32 encoding for counts in [32, 63].
+static void lowerLargeShift(MCInst &Inst, unsigned LargeOpcode) {
+  MCOperand &Amount = Inst.getOperand(2);
+  if (Amount.getImm() >= 32) {
+    Amount.setImm(Amount.getImm() - 32);
+    Inst.setOpcode(LargeOpcode);
   }
 }
 
@@ -216,11 +192,37 @@ void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
                             ? Mips::LwRxRyOffMemX16
                             : Mips::SwRxRyOffMemX16);
     break;
+  case Mips::DSLL64_32:
+  case Mips::SLL64_32:
+  case Mips::SLL64_64:
+    // These register-class views have an implicit zero shift field.
+    TmpInst.setOpcode(MI.getOpcode() == Mips::DSLL64_32 ? Mips::DSLL32
+                                                        : Mips::SLL);
+    TmpInst.addOperand(MCOperand::createImm(0));
+    break;
   case Mips::DSLL:
+    lowerLargeShift(TmpInst, Mips::DSLL32);
+    break;
+  case Mips::DSLL_MM:
+    lowerLargeShift(TmpInst, Mips::DSLL32_MM);
+    break;
   case Mips::DSRL:
+    lowerLargeShift(TmpInst, Mips::DSRL32);
+    break;
+  case Mips::DSRL_MM:
+    lowerLargeShift(TmpInst, Mips::DSRL32_MM);
+    break;
   case Mips::DSRA:
+    lowerLargeShift(TmpInst, Mips::DSRA32);
+    break;
+  case Mips::DSRA_MM:
+    lowerLargeShift(TmpInst, Mips::DSRA32_MM);
+    break;
   case Mips::DROTR:
-    LowerLargeShift(TmpInst);
+    lowerLargeShift(TmpInst, Mips::DROTR32);
+    break;
+  case Mips::DROTR_MM:
+    lowerLargeShift(TmpInst, Mips::DROTR32_MM);
     break;
   // Compact branches, enforce encoding restrictions.
   case Mips::BEQC:
@@ -234,47 +236,42 @@ void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
     LowerCompactBranch(TmpInst);
   }
 
-  size_t N = Fixups.size();
-  uint32_t Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
-
-  // Check for unimplemented opcodes.
-  // Unfortunately in MIPS both NOP and SLL will come in with Binary == 0
-  // so we have to special check for them.
   const unsigned Opcode = TmpInst.getOpcode();
-  if ((Opcode != Mips::NOP) && (Opcode != Mips::SLL) &&
-      (Opcode != Mips::SLL_MM) && (Opcode != Mips::SLL_MMR6) && !Binary)
-    llvm_unreachable("unimplemented opcode in encodeInstruction()");
-
-  int NewOpcode = -1;
   if (isMicroMips(STI)) {
+    int NewOpcode;
     if (isMips32r6(STI)) {
       NewOpcode = Mips::MipsR62MicroMipsR6(Opcode, Mips::Arch_micromipsr6);
       if (NewOpcode == -1)
         NewOpcode = Mips::Std2MicroMipsR6(Opcode, Mips::Arch_micromipsr6);
-    }
-    else
+    } else {
       NewOpcode = Mips::Std2MicroMips(Opcode, Mips::Arch_micromips);
-
-    // Check whether it is Dsp instruction.
+      if (NewOpcode == -1 && STI.hasFeature(Mips::FeatureGP64Bit))
+        NewOpcode = Mips::GP64ToMicroMips(Opcode);
+    }
     if (NewOpcode == -1)
       NewOpcode = Mips::Dsp2MicroMips(Opcode, Mips::Arch_mmdsp);
-
-    if (NewOpcode != -1) {
-      if (Fixups.size() > N)
-        Fixups.pop_back();
-
-      TmpInst.setOpcode (NewOpcode);
-      Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
-    }
-
-    if (((MI.getOpcode() == Mips::MOVEP_MM) ||
-         (MI.getOpcode() == Mips::MOVEP_MMR6))) {
-      unsigned RegPair = getMovePRegPairOpValue(MI, 0, Fixups, STI);
-      Binary = (Binary & 0xFFFFFC7F) | (RegPair << 7);
+    if (NewOpcode != -1)
+      TmpInst.setOpcode(NewOpcode);
+    else if (STI.hasFeature(Mips::FeatureGP64Bit) && Opcode != Mips::NOP &&
+             !(MCII.get(Opcode).TSFlags & MipsII::IsMicroMips)) {
+      Ctx.reportError(MI.getLoc(), Twine("no microMIPS64 encoding for ") +
+                                       MCII.getName(Opcode));
+      return;
     }
   }
 
-  const MCInstrDesc &Desc = MCII.get(TmpInst.getOpcode());
+  uint32_t Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
+  const unsigned EncodedOpcode = TmpInst.getOpcode();
+  if (!Binary && EncodedOpcode != Mips::NOP && EncodedOpcode != Mips::SLL &&
+      EncodedOpcode != Mips::SLL_MM && EncodedOpcode != Mips::SLL_MMR6)
+    llvm_unreachable("unimplemented opcode in encodeInstruction()");
+
+  if (EncodedOpcode == Mips::MOVEP_MM || EncodedOpcode == Mips::MOVEP_MMR6) {
+    unsigned RegPair = getMovePRegPairOpValue(MI, 0, Fixups, STI);
+    Binary = (Binary & 0xFFFFFC7F) | (RegPair << 7);
+  }
+
+  const MCInstrDesc &Desc = MCII.get(EncodedOpcode);
 
   // Get byte count of instruction
   unsigned Size = Desc.getSize();

@@ -133,7 +133,8 @@ enum {
   HasFCCRegOperand = 1 << 6,
   // Instruction encoded as MIPS16 halfwords, independently of the function
   // mode (a MIPS16 hard-float stub contains classic instructions).
-  IsMips16 = 1 << 7
+  IsMips16 = 1 << 7,
+  IsMicroMips = 1 << 8
 
 };
 

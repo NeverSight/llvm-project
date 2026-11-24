@@ -49,6 +49,16 @@ def Std2MicroMips : InstrMapping {
   let ValueCols = [["se"], ["micromips"]];
 }
 
+// A GPR64 codegen-only view can share the wire encoding of its GPR32
+// counterpart. Both use the same microMIPS instruction record.
+def GP64ToMicroMips : InstrMapping {
+  let FilterClass = "MMRel";
+  let RowFields = ["BaseOpcode"];
+  let ColFields = ["Arch"];
+  let KeyCol = ["se64"];
+  let ValueCols = [["micromips"]];
+}
+
 class StdMMR6Rel;
 
 def Std2MicroMipsR6 : InstrMapping {
@@ -107,6 +117,7 @@ class MipsInst<dag outs, dag ins, string asmstr, list<dag> pattern,
   let TSFlags{6}     = hasFCCRegOperand;
 
   let DecoderNamespace = "Mips";
+  let TSFlags{8} = !eq(!find(DecoderNamespace, "MicroMips"), 0);
 }
 
 // Mips32/64 Instruction Format
@@ -385,7 +396,7 @@ class LUI_FM : StdArch {
   let Inst{15-0}  = imm16;
 }
 
-class JALR_FM {
+class JALR_FM : StdArch {
   bits<5> rd;
   bits<5> rs;
 

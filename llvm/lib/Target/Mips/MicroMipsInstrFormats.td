@@ -23,6 +23,7 @@ class MicroMipsInstBase<dag outs, dag ins, string asmstr, list<dag> pattern,
                         PredicateControl {
   let Namespace = "Mips";
   let DecoderNamespace = "MicroMips";
+  let TSFlags{8} = 1; // MipsII::IsMicroMips
 
   let OutOperandList = outs;
   let InOperandList  = ins;
@@ -343,27 +344,27 @@ class LUI_FM_MM : MMArch {
   let Inst{15-0}  = imm16;
 }
 
-class MULT_FM_MM<bits<10> funct> : MMArch {
+class MULT_FM_MM<bits<10> funct, bits<6> op = 0> : MMArch {
   bits<5>  rs;
   bits<5>  rt;
 
   bits<32> Inst;
 
-  let Inst{31-26} = 0x00;
+  let Inst{31-26} = op;
   let Inst{25-21} = rt;
   let Inst{20-16} = rs;
   let Inst{15-6}  = funct;
   let Inst{5-0}   = 0x3c;
 }
 
-class SRA_FM_MM<bits<10> funct, bit rotate> : MMArch {
+class SRA_FM_MM<bits<10> funct, bit rotate, bits<6> op = 0> : MMArch {
   bits<5> rd;
   bits<5> rt;
   bits<5> shamt;
 
   bits<32> Inst;
 
-  let Inst{31-26} = 0;
+  let Inst{31-26} = op;
   let Inst{25-21} = rd;
   let Inst{20-16} = rt;
   let Inst{15-11} = shamt;
@@ -371,14 +372,14 @@ class SRA_FM_MM<bits<10> funct, bit rotate> : MMArch {
   let Inst{9-0}   = funct;
 }
 
-class SRLV_FM_MM<bits<10> funct, bit rotate> : MMArch {
+class SRLV_FM_MM<bits<10> funct, bit rotate, bits<6> op = 0> : MMArch {
   bits<5> rd;
   bits<5> rt;
   bits<5> rs;
 
   bits<32> Inst;
 
-  let Inst{31-26} = 0;
+  let Inst{31-26} = op;
   let Inst{25-21} = rt;
   let Inst{20-16} = rs;
   let Inst{15-11} = rd;
@@ -484,33 +485,33 @@ class MFLO_FM_MM<bits<10> funct> : MMArch {
   let Inst{5-0}   = 0x3c;
 }
 
-class CLO_FM_MM<bits<10> funct> : MMArch {
+class CLO_FM_MM<bits<10> funct, bits<6> op = 0> : MMArch {
   bits<5> rd;
   bits<5> rs;
 
   bits<32> Inst;
 
-  let Inst{31-26} = 0x00;
+  let Inst{31-26} = op;
   let Inst{25-21} = rd;
   let Inst{20-16} = rs;
   let Inst{15-6}  = funct;
   let Inst{5-0}   = 0x3c;
 }
 
-class SEB_FM_MM<bits<10> funct> : MMArch {
+class SEB_FM_MM<bits<10> funct, bits<6> op = 0> : MMArch {
   bits<5> rd;
   bits<5> rt;
 
   bits<32> Inst;
 
-  let Inst{31-26} = 0x00;
+  let Inst{31-26} = op;
   let Inst{25-21} = rd;
   let Inst{20-16} = rt;
   let Inst{15-6}  = funct;
   let Inst{5-0}   = 0x3c;
 }
 
-class EXT_FM_MM<bits<6> funct> : MMArch {
+class EXT_FM_MM<bits<6> funct, bits<6> op = 0> : MMArch {
   bits<5> rt;
   bits<5> rs;
   bits<5> pos;
@@ -518,7 +519,7 @@ class EXT_FM_MM<bits<6> funct> : MMArch {
 
   bits<32> Inst;
 
-  let Inst{31-26} = 0x00;
+  let Inst{31-26} = op;
   let Inst{25-21} = rt;
   let Inst{20-16} = rs;
   let Inst{15-11} = size;
@@ -547,7 +548,7 @@ class JR_FM_MM<bits<8> funct> : MMArch {
   let Inst{5-0}   = 0x3c;
 }
 
-class JALR_FM_MM<bits<10> funct> {
+class JALR_FM_MM<bits<10> funct> : MMArch {
   bits<5> rs;
   bits<5> rd;
 

@@ -128,6 +128,14 @@ def : InstRW<[GenericWriteALU], (instrs DADD, DADDi, DADDiu, DADDu, DCLO,
                                  DSRL32, DSRLV, DSUB, DSUBu, LEA_ADDiu64,
                                  LUi64, NOR64, OR64)>;
 
+def : InstRW<[GenericWriteALU], (instrs DADD_MM, DADDi_MM, DADDiu_MM, DADDu_MM,
+                                 DSUB_MM, DSUBu_MM, DSLL_MM, DSLL32_MM, DSLLV_MM,
+                                 DSRL_MM, DSRL32_MM, DSRLV_MM, DSRA_MM, DSRA32_MM,
+                                 DSRAV_MM, DROTR_MM, DROTR32_MM, DROTRV_MM,
+                                 DCLZ_MM, DCLO_MM, DSBH_MM, DSHD_MM,
+                                 DEXT_MM, DEXTM_MM, DEXTU_MM, DINS_MM,
+                                 DINSM_MM, DINSU_MM)>;
+
 // MIPS64R6
 // ========
 
@@ -242,12 +250,13 @@ def : InstRW<[GenericWriteMove], (instrs RDHWR_MMR6)>;
 // MIPS64
 // ======
 
-def : InstRW<[GenericWriteHILO], (instrs DMULU, DMULT, DMULTu, PseudoDMULT,
+def : InstRW<[GenericWriteHILO], (instrs DMULU, DMULT, DMULTu, DMULT_MM,
+                                  DMULTu_MM, PseudoDMULT,
                                   PseudoDMULTu)>;
 
-def : InstRW<[GenericWriteDIV], (instrs DSDIV, PseudoDSDIV)>;
+def : InstRW<[GenericWriteDIV], (instrs DSDIV, DSDIV_MM, PseudoDSDIV)>;
 
-def : InstRW<[GenericWriteDIVU], (instrs DUDIV, PseudoDUDIV)>;
+def : InstRW<[GenericWriteDIVU], (instrs DUDIV, DUDIV_MM, PseudoDUDIV)>;
 
 def : InstRW<[GenericWriteALULong], (instrs MFHI64, MFLO64, PseudoMFHI64,
                                      PseudoMFLO64, PseudoMTLOHI64)>;
@@ -256,7 +265,9 @@ def : InstRW<[GenericWriteMove], (instrs MTHI64, MTLO64, RDHWR64)>;
 
 // mov[zn]
 def : InstRW<[GenericWriteALU], (instrs MOVN_I_I64, MOVN_I64_I, MOVN_I64_I64,
-                                 MOVZ_I_I64, MOVZ_I64_I, MOVZ_I64_I64)>;
+                                 MOVZ_I_I64, MOVZ_I64_I, MOVZ_I64_I64,
+                                 MOVN_I_I64_MM, MOVN_I64_I_MM, MOVN_I64_I64_MM,
+                                 MOVZ_I_I64_MM, MOVZ_I64_I_MM, MOVZ_I64_I64_MM)>;
 
 
 // MIPS64R6
@@ -681,16 +692,16 @@ def : InstRW<[GenericWriteCache], (instrs CACHE_MMR6)>;
 // MIPS64
 // ======
 
-def : InstRW<[GenericWriteLoad], (instrs LD, LL64, LLD, LWu, LB64, LBu64,
+def : InstRW<[GenericWriteLoad], (instrs LD, LD_MM, LWU64_MM, LL64, LLD, LLD_MM, LWu, LB64, LBu64,
                                   LH64, LHu64, LW64)>;
 
 // l[dw][lr]
-def : InstRW<[GenericWriteLoad], (instrs LWL64, LWR64, LDL, LDR)>;
+def : InstRW<[GenericWriteLoad], (instrs LWL64, LWR64, LDL, LDR, LDL_MM, LDR_MM)>;
 
-def : InstRW<[GenericWriteStore], (instrs SD, SC64, SCD, SB64, SH64, SW64,
+def : InstRW<[GenericWriteStore], (instrs SD, SD_MM, SC64, SCD, SCD_MM, SB64, SH64, SW64,
                                    SWL64, SWR64)>;
 
-def : InstRW<[GenericWriteStore], (instrs SDL, SDR)>;
+def : InstRW<[GenericWriteStore], (instrs SDL, SDR, SDL_MM, SDR_MM)>;
 
 // MIPS64R6
 // ========

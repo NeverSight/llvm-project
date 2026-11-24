@@ -254,8 +254,8 @@ class LoadPairMM<string opstr>
   let AsmMatchConverter = "ConvertXWPOperands";
 }
 
-class LLBaseMM<string opstr, RegisterOperand RO> :
-  InstSE<(outs RO:$rt), (ins mem_mm_12:$addr),
+class LLBaseMM<string opstr, RegisterOperand RO, Operand MemOpnd = mem_mm_12> :
+  InstSE<(outs RO:$rt), (ins MemOpnd:$addr),
          !strconcat(opstr, "\t$rt, $addr"), [], FrmI> {
   let DecoderMethod = "DecodeMemMMImm12";
   let mayLoad = 1;
@@ -269,8 +269,8 @@ class LLEBaseMM<string opstr, RegisterOperand RO> :
   let mayLoad = 1;
 }
 
-class SCBaseMM<string opstr, RegisterOperand RO> :
-  InstSE<(outs RO:$dst), (ins RO:$rt, mem_mm_12:$addr),
+class SCBaseMM<string opstr, RegisterOperand RO, Operand MemOpnd = mem_mm_12> :
+  InstSE<(outs RO:$dst), (ins RO:$rt, MemOpnd:$addr),
          !strconcat(opstr, "\t$rt, $addr"), [], FrmI> {
   let DecoderMethod = "DecodeMemMMImm12";
   let mayStore = 1;
@@ -295,6 +295,9 @@ class LoadMM<string opstr, DAGOperand RO, SDPatternOperator OpNode = null_frag,
   let canFoldAsLoad = 1;
   let mayLoad = 1;
 }
+
+class LoadWordUnsignedMM<DAGOperand RO> :
+    LoadMM<"lwu", RO, zextloadi32, mem_simm12>, LL_FM_MM<0xe>;
 
 class ArithRMM16<string opstr, RegisterOperand RO, bit isComm = 0,
                  SDPatternOperator OpNode = null_frag> :
@@ -935,7 +938,7 @@ let DecoderNamespace = "MicroMips" in {
 
   def JR_MM : MMRel, IndirectBranch<"jr", GPR32Opnd>, JR_FM_MM<0x3c>,
               ISA_MICROMIPS32_NOT_MIPS32R6;
-  def JALR_MM : JumpLinkReg<"jalr", GPR32Opnd>, JALR_FM_MM<0x03c>,
+  def JALR_MM : MMRel, JumpLinkReg<"jalr", GPR32Opnd>, JALR_FM_MM<0x03c>,
                 ISA_MICROMIPS32_NOT_MIPS32R6;
 
   /// Jump Instructions - Short Delay Slot
@@ -1100,8 +1103,8 @@ def PseudoIndirectBranch_MM : PseudoIndirectBranchBase<JR_MM, GPR32Opnd>,
 let DecoderNamespace = "MicroMips" in {
   def RDHWR_MM : MMRel, R6MMR6Rel, ReadHardware<GPR32Opnd, HWRegsOpnd>,
                  RDHWR_FM_MM, ISA_MICROMIPS32_NOT_MIPS32R6;
-  def LWU_MM : MMRel, LoadMM<"lwu", GPR32Opnd, zextloadi32, mem_simm12>,
-               LL_FM_MM<0xe>, ISA_MICROMIPS32_NOT_MIPS32R6;
+  def LWU_MM : MMRel, LoadWordUnsignedMM<GPR32Opnd>,
+               ISA_MICROMIPS32_NOT_MIPS32R6;
 
   def MFGC0_MM    : MMRel, MfCop0MM<"mfgc0", GPR32Opnd, COP0Opnd>,
                     POOL32A_MFTC0_FM_MM<0b10011, 0b111100>,
