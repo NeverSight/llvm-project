@@ -110,6 +110,26 @@ wide:
 # LE: e3 47
 # REG-SAME: jrc16 $ra
   jrc16 $ra
+# BE: 58 44 b9 cc
+# LE: 44 58 cc b9
+# REG-SAME: dins $2, $4, 7, 17
+  dins $2, $4, 7, 17
+# BE: 58 44 71 c4
+# LE: 44 58 c4 71
+# REG-SAME: dins $2, $4, 7, 40
+  dins $2, $4, 7, 40
+# BE: 58 44 b9 f4
+# LE: 44 58 f4 b9
+# REG-SAME: dins $2, $4, 39, 17
+  dins $2, $4, 39, 17
+# BE: 58 44 40 84
+# LE: 44 58 84 40
+# REG-SAME: <unknown>
+  .2byte 0x5844, 0x4084
+# BE: 58 44 39 04
+# LE: 44 58 04 39
+# REG-SAME: <unknown>
+  .2byte 0x5844, 0x3904
 .end wide
 
 #--- directives.s
@@ -131,6 +151,10 @@ wide:
 # REMOVED: error:
   dlsa $2, $4, $5, 1
 # REMOVED: error:
+  dinsm $2, $4, 2, 39
+# REMOVED: ambiguous microMIPS64R6 DINSM encoding
+  dins $2, $4, 4, 36
+# REMOVED: ambiguous microMIPS64R6 DINSM encoding
 
 #--- wide.s
   dmuh $2, $4, $5

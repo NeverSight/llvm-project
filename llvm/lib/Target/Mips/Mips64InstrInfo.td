@@ -419,10 +419,12 @@ let AdditionalPredicates = [NotInMicroMips] in {
   // We override the generated decoder to enforce that dins always comes out
   // for dinsm and dinsu like binutils.
   let DecoderMethod = "DecodeDINS" in {
-    def DINS : MMRel, DINSDesc, EXT_FM<7>,
+    def DINS : Micro64R6Rel<"standard">, MMRel, DINSDesc, EXT_FM<7>,
                 ISA_MIPS64R2;
-    def DINSU : MMRel, DINSUDesc, EXT_FM<6>, ISA_MIPS64R2;
-    def DINSM : MMRel, DINSMDesc, EXT_FM<5>, ISA_MIPS64R2;
+    def DINSU : Micro64R6Rel<"standard">, MMRel, DINSUDesc, EXT_FM<6>,
+                ISA_MIPS64R2;
+    def DINSM : Micro64R6Rel<"standard">, MMRel, DINSMDesc, EXT_FM<5>,
+                ISA_MIPS64R2;
   }
 }
 

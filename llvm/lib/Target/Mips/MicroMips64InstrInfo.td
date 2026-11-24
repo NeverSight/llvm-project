@@ -98,12 +98,12 @@ let DecoderNamespace = "MicroMips64" in {
                   ISA_MICROMIPS64R2;
   }
   let DecoderMethod = "DecodeDINS<true>" in {
-    def DINS_MM : MMRel, DINSDesc, EXT_FM_MM<0x0c, 0x16>,
-                  ISA_MICROMIPS64_PRE_R6;
-    def DINSM_MM : MMRel, DINSMDesc, EXT_FM_MM<0x04, 0x16>,
-                  ISA_MICROMIPS64_PRE_R6;
-    def DINSU_MM : MMRel, DINSUDesc, EXT_FM_MM<0x34, 0x16>,
-                  ISA_MICROMIPS64_PRE_R6;
+    def DINS_MM : Micro64R6Rel<"micro">, MMRel, DINSDesc, EXT_FM_MM<0x0c, 0x16>,
+                  ISA_MICROMIPS64R2;
+    def DINSM_MM : Micro64R6Rel<"micro">, MMRel, DINSMDesc, EXT_FM_MM<0x04, 0x16>,
+                   ISA_MICROMIPS64R2;
+    def DINSU_MM : Micro64R6Rel<"micro">, MMRel, DINSUDesc, EXT_FM_MM<0x34, 0x16>,
+                   ISA_MICROMIPS64R2;
   }
 
   let AdditionalPredicates = [IsNotSingleFloat] in {
@@ -188,10 +188,10 @@ let InsnPredicates = [HasMips64r2, NotMips32r6],
 
 def : MipsInstAlias<"dins $rt, $rs, $pos, $size",
                     (DINSM_MM GPR64Opnd:$rt, GPR64Opnd:$rs, uimm5:$pos,
-                              uimm_range_2_64:$size)>, ISA_MICROMIPS64_PRE_R6;
+                              uimm_range_2_64:$size)>, ISA_MICROMIPS64R2;
 def : MipsInstAlias<"dins $rt, $rs, $pos, $size",
                     (DINSU_MM GPR64Opnd:$rt, GPR64Opnd:$rs, uimm5_plus32:$pos,
-                              uimm5_plus1:$size)>, ISA_MICROMIPS64_PRE_R6;
+                              uimm5_plus1:$size)>, ISA_MICROMIPS64R2;
 def : MipsInstAlias<"dext $rt, $rs, $pos, $size",
                     (DEXTM_MM GPR64Opnd:$rt, GPR64Opnd:$rs, uimm5:$pos,
                               uimm5_plus33:$size)>, ISA_MICROMIPS64R2;

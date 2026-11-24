@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "MCTargetDesc/MipsBaseInfo.h"
 #include "MCTargetDesc/MipsMCTargetDesc.h"
 #include "TargetInfo/MipsTargetInfo.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -830,6 +831,10 @@ static DecodeStatus DecodeDINS(MCInst &MI, InsnType Insn, uint64_t Address,
       break;
     case Mips::DINSM:
     case Mips::DINSM_MM:
+      if (Micro &&
+          Decoder->getSubtargetInfo().hasFeature(Mips::FeatureMips64r6) &&
+          MipsII::isAmbiguousMicro64R6DinsmPosition(Lsb))
+        return MCDisassembler::Fail;
       Pos = Lsb;
       Size = Msbd + 33 - Pos;
       break;

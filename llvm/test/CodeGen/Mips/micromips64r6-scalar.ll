@@ -131,3 +131,24 @@ define ptr @stack_address() nounwind "micromips" {
   %result = call ptr asm sideeffect "", "=r,0,~{memory}"(ptr %p)
   ret ptr %result
 }
+
+; The R6 instruction diagram for DSRA32 aliases DINSM at position 2.
+; CHECK-LABEL: <insert_above_bit_one>:
+; CHECK-DAG: dins {{.*}}, 2, 30
+; CHECK-DAG: dsrl {{.*}}, 30
+; CHECK: dins {{.*}}, 32, 32
+define i64 @insert_above_bit_one(i64 %dst, i64 %src) nounwind {
+  %lo = and i64 %dst, 3
+  %hi = shl i64 %src, 2
+  %result = or i64 %hi, %lo
+  ret i64 %result
+}
+
+; CHECK-LABEL: <insert_top_bit>:
+; CHECK: dins {{.*}}, 63, 1
+define i64 @insert_top_bit(i64 %dst, i64 %src) nounwind {
+  %lo = and i64 %dst, 9223372036854775807
+  %hi = shl i64 %src, 63
+  %result = or i64 %hi, %lo
+  ret i64 %result
+}

@@ -266,8 +266,14 @@ void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
     }
   }
 
-  uint32_t Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
   const unsigned EncodedOpcode = TmpInst.getOpcode();
+  if (EncodedOpcode == Mips::DINSM_MM && isMips32r6(STI) &&
+      MipsII::isAmbiguousMicro64R6DinsmPosition(
+          TmpInst.getOperand(2).getImm())) {
+    Ctx.reportError(MI.getLoc(), "ambiguous microMIPS64R6 DINSM encoding");
+    return;
+  }
+  uint32_t Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
   if (!Binary && EncodedOpcode != Mips::NOP && EncodedOpcode != Mips::SLL &&
       EncodedOpcode != Mips::SLL_MM && EncodedOpcode != Mips::SLL_MMR6)
     llvm_unreachable("unimplemented opcode in encodeInstruction()");
