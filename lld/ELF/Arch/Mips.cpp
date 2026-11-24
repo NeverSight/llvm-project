@@ -39,6 +39,7 @@ public:
   bool needsThunk(RelExpr expr, RelType type, const InputFile *file,
                   uint64_t branchAddr, const Symbol &s,
                   int64_t a) const override;
+  void relocateAlloc(InputSection &sec, uint8_t *buf) const override;
   void relocate(uint8_t *loc, const Relocation &rel,
                 uint64_t val) const override;
   bool usesOnlyLowPageBits(RelType type) const override;
@@ -126,6 +127,11 @@ template <class ELFT> uint32_t MIPS<ELFT>::calcEFlags() const {
 }
 
 template <class ELFT> void MIPS<ELFT>::initTargetSpecificSections() {
+  if (ELFT::Is64Bits && isMicroMips(ctx)) {
+    // Each n64 stub can carry an aligned 64-bit GOT-relative displacement.
+    pltHeaderSize = isMipsR6(ctx) ? 48 : 56;
+    pltEntrySize = isMipsR6(ctx) ? 32 : 40;
+  }
   if (!ctx.arg.shared && ctx.hasDynsym) {
     ctx.in.mipsRldMap = std::make_unique<RldMapSection>(ctx);
     ctx.inputSections.push_back(ctx.in.mipsRldMap.get());
@@ -180,6 +186,8 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MIPS_LO16:
   case R_MIPS_HIGHER:
   case R_MIPS_HIGHEST:
+  case R_MICROMIPS_HIGHER:
+  case R_MICROMIPS_HIGHEST:
   case R_MICROMIPS_HI16:
   case R_MICROMIPS_LO16:
     // R_MIPS_HI16/R_MIPS_LO16 relocations against _gp_disp calculate
@@ -194,6 +202,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MIPS_32:
   case R_MIPS_64:
   case R_MIPS_GOT_OFST:
+  case R_MICROMIPS_GOT_OFST:
   case R_MIPS_SUB:
     return R_ABS;
   case R_MIPS_TLS_DTPREL_HI16:
@@ -232,6 +241,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
     [[fallthrough]];
   case R_MIPS_CALL16:
   case R_MIPS_GOT_DISP:
+  case R_MICROMIPS_GOT_DISP:
   case R_MIPS_TLS_GOTTPREL:
   case R_MICROMIPS_CALL16:
   case R_MICROMIPS_TLS_GOTTPREL:
@@ -246,6 +256,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MICROMIPS_GOT_LO16:
     return RE_MIPS_GOT_OFF32;
   case R_MIPS_GOT_PAGE:
+  case R_MICROMIPS_GOT_PAGE:
     return RE_MIPS_GOT_LOCAL_PAGE;
   case R_MIPS_TLS_GD:
   case R_MICROMIPS_TLS_GD:
@@ -273,7 +284,10 @@ void MIPS<ELFT>::writeGotPlt(uint8_t *buf, const Symbol &) const {
   uint64_t va = ctx.in.plt->getVA();
   if (isMicroMips(ctx))
     va |= 1;
-  write32(ctx, buf, va);
+  if constexpr (ELFT::Is64Bits)
+    write64(ctx, buf, va);
+  else
+    write32(ctx, buf, va);
 }
 
 template <endianness E>
@@ -321,6 +335,41 @@ static void writeMicroRelocation16(Ctx &ctx, uint8_t *loc, uint64_t v,
   write16(ctx, loc, data);
 }
 
+// Put the address of the GOTPLT slot in $2. A small R6 displacement fits
+// ADDIUPC. Legacy ADDIUPC only defines a 32-bit result, so capture the full
+// tagged return PC with BAL. The wide forms use a load-bias-independent
+// 64-bit displacement in the final doubleword of this PLT stub.
+static unsigned writeMicroMips64GotPltAddress(Ctx &ctx, uint8_t *buf,
+                                              uint64_t pc, uint64_t slot,
+                                              unsigned size) {
+  unsigned literal = size - 8;
+  if (isMipsR6(ctx)) {
+    if (isInt<21>(slot - pc)) {
+      write16(ctx, buf, 0x7840); // addiupc $2, slot - .
+      ctx.target->relocateNoSym(buf, R_MICROMIPS_PC19_S2, slot - pc);
+      return 4;
+    }
+    write16(ctx, buf, 0x7860);     // addiupc $3, 0
+    write16(ctx, buf + 4, 0xdc43); // ld     $2, literal($3)
+    write16(ctx, buf + 6, literal);
+    write16(ctx, buf + 8, 0x5862); // daddu  $2, $2, $3
+    write16(ctx, buf + 10, 0x1150);
+    write64(ctx, buf + literal, slot - pc);
+    return 12;
+  }
+
+  write16(ctx, buf, 0x0dff);     // move   $15, $ra
+  write16(ctx, buf + 2, 0x4060); // bal    .+8
+  write16(ctx, buf + 4, 2);      // followed by a 32-bit nop
+  // The return PC points at byte 10, with bit zero set for microMIPS.
+  write16(ctx, buf + 10, 0xdc5f); // ld     $2, literal-11($ra)
+  write16(ctx, buf + 12, literal - 11);
+  write16(ctx, buf + 14, 0x585f); // daddu  $2, $ra, $2
+  write16(ctx, buf + 16, 0x1150);
+  write64(ctx, buf + literal, slot - (pc + 11));
+  return 18;
+}
+
 template <class ELFT> void MIPS<ELFT>::writePltHeader(uint8_t *buf) const {
   if (isMicroMips(ctx)) {
     uint64_t gotPlt = ctx.in.gotPlt->getVA();
@@ -328,6 +377,26 @@ template <class ELFT> void MIPS<ELFT>::writePltHeader(uint8_t *buf) const {
     // Overwrite trap instructions written by Writer::writeTrapInstr.
     memset(buf, 0, pltHeaderSize);
 
+    if constexpr (ELFT::Is64Bits) {
+      unsigned off =
+          writeMicroMips64GotPltAddress(ctx, buf, plt, gotPlt, pltHeaderSize);
+      uint8_t *p = buf + off;
+      write16(ctx, p, 0xdf22);     // ld     $25, 0($2)
+      write16(ctx, p + 4, 0x5858); // dsubu  $24, $24, $2
+      write16(ctx, p + 6, 0xc1d0);
+      write16(ctx, p + 8, 0x5b18); // dsrl   $24, $24, 3
+      write16(ctx, p + 10, 0x1840);
+      write16(ctx, p + 12, 0x5f18); // daddiu $24, $24, -2
+      write16(ctx, p + 14, 0xfffe);
+      if (isMipsR6(ctx)) {
+        write16(ctx, p + 16, 0x0dff); // move $15, $ra (saved by BAL on R2)
+        p += 2;
+      }
+      write16(ctx, p + 16, 0x0dc2); // move   $14, $2 (n64 GOT base)
+      write16(ctx, p + 18, 0x03f9); // jalr   $ra, $25 (jalrc on R6)
+      write16(ctx, p + 20, 0x0f3c);
+      return;
+    }
     write16(ctx, buf,
             isMipsR6(ctx) ? 0x7860 : 0x7980); // addiupc v1, (GOTPLT) - .
     write16(ctx, buf + 4, 0xff23);            // lw      $25, 0($3)
@@ -391,15 +460,29 @@ void MIPS<ELFT>::writePlt(uint8_t *buf, const Symbol &sym,
     // Overwrite trap instructions written by Writer::writeTrapInstr.
     memset(buf, 0, pltEntrySize);
 
+    if constexpr (ELFT::Is64Bits) {
+      unsigned off = writeMicroMips64GotPltAddress(
+          ctx, buf, pltEntryAddr, gotPltEntryAddr, pltEntrySize);
+      uint8_t *p = buf + off;
+      write16(ctx, p, 0xdf22); // ld     $25, 0($2)
+      if (isMipsR6(ctx)) {
+        write16(ctx, p + 4, 0x0f02); // move   $24, $2
+        write16(ctx, p + 6, 0x4723); // jrc16  $25
+      } else {
+        write16(ctx, p + 4, 0x0fef); // move   $ra, $15
+        write16(ctx, p + 6, 0x4599); // jr16   $25
+        write16(ctx, p + 8, 0x0f02); // move   $24, $2 (delay slot)
+      }
+      return;
+    }
+    write16(ctx, buf + 4, 0xff22); // lw $25, 0($2)
     if (isMipsR6(ctx)) {
       write16(ctx, buf, 0x7840);      // addiupc $2, (GOTPLT) - .
-      write16(ctx, buf + 4, 0xff22);  // lw $25, 0($2)
       write16(ctx, buf + 8, 0x0f02);  // move $24, $2
       write16(ctx, buf + 10, 0x4723); // jrc $25 / jr16 $25
       relocateNoSym(buf, R_MICROMIPS_PC19_S2, gotPltEntryAddr - pltEntryAddr);
     } else {
       write16(ctx, buf, 0x7900);      // addiupc $2, (GOTPLT) - .
-      write16(ctx, buf + 4, 0xff22);  // lw $25, 0($2)
       write16(ctx, buf + 8, 0x4599);  // jrc $25 / jr16 $25
       write16(ctx, buf + 10, 0x0f02); // move $24, $2
       relocateNoSym(buf, R_MICROMIPS_PC23_S2, gotPltEntryAddr - pltEntryAddr);
@@ -486,6 +569,9 @@ int64_t MIPS<ELFT>::getImplicitAddend(const uint8_t *buf, RelType type) const {
   case R_MICROMIPS_HI16:
     return SignExtend64<16>(readShuffle<e>(ctx, buf)) << 16;
   case R_MICROMIPS_CALL16:
+  case R_MICROMIPS_GOT_DISP:
+  case R_MICROMIPS_GOT_PAGE:
+  case R_MICROMIPS_GOT_OFST:
   case R_MICROMIPS_GPREL16:
   case R_MICROMIPS_LO16:
   case R_MICROMIPS_TLS_DTPREL_HI16:
@@ -553,6 +639,7 @@ calculateMipsRelChain(Ctx &ctx, uint8_t *loc, uint32_t type, uint64_t val) {
   // we support two of them. That is allow to pass at least all LLVM
   // test suite cases.
   // <any relocation> / R_MIPS_SUB / R_MIPS_HI16 | R_MIPS_LO16
+  // and the corresponding microMIPS SUB / HI16 | LO16 sequence.
   // <any relocation> / R_MIPS_64 / R_MIPS_NONE
   // The first relocation is a 'real' relocation which is calculated
   // using the corresponding symbol's value. The second and the third
@@ -565,7 +652,9 @@ calculateMipsRelChain(Ctx &ctx, uint8_t *loc, uint32_t type, uint64_t val) {
     return std::make_pair(type, val);
   if (type2 == R_MIPS_64 && type3 == R_MIPS_NONE)
     return std::make_pair(type2, val);
-  if (type2 == R_MIPS_SUB && (type3 == R_MIPS_HI16 || type3 == R_MIPS_LO16))
+  if ((type2 == R_MIPS_SUB && (type3 == R_MIPS_HI16 || type3 == R_MIPS_LO16)) ||
+      (type2 == R_MICROMIPS_SUB &&
+       (type3 == R_MICROMIPS_HI16 || type3 == R_MICROMIPS_LO16)))
     return std::make_pair(type3, -val);
   Err(ctx) << getErrorLoc(ctx, loc) << "unsupported relocations combination "
            << type;
@@ -578,7 +667,8 @@ static bool isBranchReloc(RelType type) {
 }
 
 static bool isMicroBranchReloc(RelType type) {
-  return type == R_MICROMIPS_26_S1 || type == R_MICROMIPS_PC16_S1 ||
+  return type == R_MICROMIPS_26_S1 || type == R_MICROMIPS_PC26_S1 ||
+         type == R_MICROMIPS_PC21_S1 || type == R_MICROMIPS_PC16_S1 ||
          type == R_MICROMIPS_PC10_S1 || type == R_MICROMIPS_PC7_S1;
 }
 
@@ -617,6 +707,8 @@ static uint64_t fixupCrossModeJump(Ctx &ctx, uint8_t *loc, RelType type,
   case R_MIPS_PC26_S2:
   case R_MIPS_PC21_S2:
   case R_MIPS_PC16:
+  case R_MICROMIPS_PC26_S1:
+  case R_MICROMIPS_PC21_S1:
   case R_MICROMIPS_PC16_S1:
   case R_MICROMIPS_PC10_S1:
   case R_MICROMIPS_PC7_S1:
@@ -750,6 +842,35 @@ template <class ELFT> void MIPS<ELFT>::scanSection(InputSectionBase &sec) {
 }
 
 template <class ELFT>
+void MIPS<ELFT>::relocateAlloc(InputSection &sec, uint8_t *buf) const {
+  using Addr = typename ELFT::uint;
+  const uint64_t secAddr = sec.getVA();
+  for (const Relocation &rel : sec.relocs()) {
+    if (rel.expr == R_RELAX_HINT)
+      continue;
+    uint8_t *loc = buf + rel.offset;
+    uint64_t place = secAddr + rel.offset;
+    uint64_t val =
+        SignExtend64(sec.getRelocTargetVA(ctx, rel, place), sizeof(Addr) * 8);
+    if (rel.type == R_MICROMIPS_26_S1) {
+      // J/JAL inherit the high bits from PC+4. A switch to classic MIPS
+      // selects JALX, whose target field counts words instead of halfwords.
+      unsigned bits = (val & 1) ? 27 : 28;
+      Addr target = val, next = place + 4;
+      if ((target ^ next) >> bits) {
+        Err(ctx) << getErrorLoc(ctx, loc) << rel.type
+                 << " target outside the jump region of PC+4: " << rel.sym;
+        continue;
+      }
+      if (!(val & 1))
+        checkAlignment(ctx, loc, val, 4, rel);
+      val &= maskTrailingOnes<uint64_t>(bits);
+    }
+    relocate(loc, rel, val);
+  }
+}
+
+template <class ELFT>
 void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
                           uint64_t val) const {
   const endianness e = ELFT::Endianness;
@@ -824,6 +945,8 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
   case R_MIPS_TLS_TPREL_LO16:
     writeValue(ctx, loc, val, 16, 0);
     break;
+  case R_MICROMIPS_GOT_DISP:
+  case R_MICROMIPS_GOT_PAGE:
   case R_MICROMIPS_GPREL16:
   case R_MICROMIPS_TLS_GD:
   case R_MICROMIPS_TLS_LDM:
@@ -832,6 +955,7 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
     break;
   case R_MICROMIPS_CALL16:
   case R_MICROMIPS_CALL_LO16:
+  case R_MICROMIPS_GOT_OFST:
   case R_MICROMIPS_LO16:
   case R_MICROMIPS_TLS_DTPREL_LO16:
   case R_MICROMIPS_TLS_GOTTPREL:
@@ -862,6 +986,12 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
     break;
   case R_MIPS_HIGHEST:
     writeValue(ctx, loc, val + 0x800080008000, 16, 48);
+    break;
+  case R_MICROMIPS_HIGHER:
+    writeShuffle<e>(ctx, loc, val + 0x80008000, 16, 32);
+    break;
+  case R_MICROMIPS_HIGHEST:
+    writeShuffle<e>(ctx, loc, val + 0x800080008000, 16, 48);
     break;
   case R_MIPS_JALR:
     val -= 4;
@@ -904,9 +1034,10 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
   case R_MIPS_PC32:
     writeValue(ctx, loc, val, 32, 0);
     break;
-  case R_MICROMIPS_26_S1:
   case R_MICROMIPS_PC26_S1:
     checkInt(ctx, loc, val, 27, rel);
+    [[fallthrough]];
+  case R_MICROMIPS_26_S1:
     writeShuffle<e>(ctx, loc, val, 26, 1);
     break;
   case R_MICROMIPS_PC7_S1:
@@ -944,7 +1075,7 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
 
 template <class ELFT> bool MIPS<ELFT>::usesOnlyLowPageBits(RelType type) const {
   return type == R_MIPS_LO16 || type == R_MIPS_GOT_OFST ||
-         type == R_MICROMIPS_LO16;
+         type == R_MICROMIPS_LO16 || type == R_MICROMIPS_GOT_OFST;
 }
 
 // Return true if the symbol is a PIC function.

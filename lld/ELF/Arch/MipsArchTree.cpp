@@ -69,8 +69,10 @@ static void checkFlags(Ctx &ctx, ArrayRef<FileFlags> files) {
   bool fp = files[0].flags & EF_MIPS_FP64;
 
   for (const FileFlags &f : files) {
-    if (ctx.arg.is64 && f.flags & EF_MIPS_MICROMIPS)
-      Err(ctx) << f.file << ": microMIPS 64-bit is not supported";
+    uint32_t arch = f.flags & EF_MIPS_ARCH;
+    if (ctx.arg.is64 && (f.flags & EF_MIPS_MICROMIPS) &&
+        arch != EF_MIPS_ARCH_64R2 && arch != EF_MIPS_ARCH_64R6)
+      Err(ctx) << f.file << ": microMIPS ELF64 requires MIPS64r2 or MIPS64r6";
 
     uint32_t abi2 = f.flags & (EF_MIPS_ABI | EF_MIPS_ABI2);
     if (abi != abi2)

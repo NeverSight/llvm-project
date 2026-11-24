@@ -447,7 +447,7 @@ class MicroMipsThunk final : public Thunk {
 public:
   MicroMipsThunk(Ctx &ctx, Symbol &dest) : Thunk(ctx, dest, 0) {}
 
-  uint32_t size() override { return 14; }
+  uint32_t size() override { return ctx.arg.is64 ? 26 : 14; }
   void writeTo(uint8_t *buf) override;
   void addSymbols(ThunkSection &isec) override;
   InputSection *getTargetInputSection() const override;
@@ -458,7 +458,7 @@ class MicroMipsR6Thunk final : public Thunk {
 public:
   MicroMipsR6Thunk(Ctx &ctx, Symbol &dest) : Thunk(ctx, dest, 0) {}
 
-  uint32_t size() override { return 12; }
+  uint32_t size() override { return ctx.arg.is64 ? 26 : 12; }
   void writeTo(uint8_t *buf) override;
   void addSymbols(ThunkSection &isec) override;
   InputSection *getTargetInputSection() const override;
@@ -1266,10 +1266,33 @@ InputSection *MipsThunk::getTargetInputSection() const {
   return dyn_cast<InputSection>(dr.section);
 }
 
+// Load the full tagged n64 function address into $25 before transferring
+// control. Both revisions provide a compact indirect jump without a delay slot.
+static void writeMicroMips64LA25(Ctx &ctx, uint8_t *buf, uint64_t address) {
+  bool r6 = isMipsR6(ctx);
+  write16(ctx, buf, r6 ? 0x1320 : 0x41b9); // lui $25, %highest(func)
+  write16(ctx, buf + 2, (address + 0x800080008000) >> 48);
+  write16(ctx, buf + 4, 0x5f39); // daddiu $25, $25, %higher(func)
+  write16(ctx, buf + 6, (address + 0x80008000) >> 32);
+  write16(ctx, buf + 8, 0x5b39); // dsll $25, $25, 16
+  write16(ctx, buf + 10, 0x8000);
+  write16(ctx, buf + 12, 0x5f39); // daddiu $25, $25, %hi(func)
+  write16(ctx, buf + 14, (address + 0x8000) >> 16);
+  write16(ctx, buf + 16, 0x5b39); // dsll $25, $25, 16
+  write16(ctx, buf + 18, 0x8000);
+  write16(ctx, buf + 20, 0x5f39); // daddiu $25, $25, %lo(func)
+  write16(ctx, buf + 22, address);
+  write16(ctx, buf + 24, r6 ? 0x4723 : 0x45b9); // jrc $25
+}
+
 // Write microMIPS R2-R5 LA25 thunk code
 // to call PIC function from the non-PIC one.
 void MicroMipsThunk::writeTo(uint8_t *buf) {
   uint64_t s = destination.getVA(ctx);
+  if (ctx.arg.is64) {
+    writeMicroMips64LA25(ctx, buf, s);
+    return;
+  }
   write16(ctx, buf, 0x41b9);      // lui   $25, %hi(func)
   write16(ctx, buf + 4, 0xd400);  // j     func
   write16(ctx, buf + 8, 0x3339);  // addiu $25, $25, %lo(func)
@@ -1295,7 +1318,13 @@ InputSection *MicroMipsThunk::getTargetInputSection() const {
 // to call PIC function from the non-PIC one.
 void MicroMipsR6Thunk::writeTo(uint8_t *buf) {
   uint64_t s = destination.getVA(ctx);
-  uint64_t p = getThunkTargetSym()->getVA(ctx);
+  if (ctx.arg.is64) {
+    writeMicroMips64LA25(ctx, buf, s);
+    return;
+  }
+  // The relocation place is a byte address. Only the destination carries
+  // the ISA tag consumed by the branch relocation.
+  uint64_t p = getThunkTargetSym()->getVA(ctx) & ~uint64_t(1);
   write16(ctx, buf, 0x1320);     // lui   $25, %hi(func)
   write16(ctx, buf + 4, 0x3339); // addiu $25, $25, %lo(func)
   write16(ctx, buf + 8, 0x9400); // bc    func
