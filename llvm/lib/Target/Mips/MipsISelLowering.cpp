@@ -1445,6 +1445,11 @@ MipsTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case Mips::MOD_MMR6:
   case Mips::MODU_MMR6:
     return insertDivByZeroTrap(MI, *BB, *Subtarget.getInstrInfo(), false, true);
+  case Mips::DDIV_MMR6:
+  case Mips::DDIVU_MMR6:
+  case Mips::DMOD_MMR6:
+  case Mips::DMODU_MMR6:
+    return insertDivByZeroTrap(MI, *BB, *Subtarget.getInstrInfo(), true, true);
   case Mips::PseudoDSDIV:
   case Mips::PseudoDUDIV:
   case Mips::DDIV:

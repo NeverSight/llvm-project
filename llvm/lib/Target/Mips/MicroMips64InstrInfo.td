@@ -7,13 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 multiclass WideShift<string mnemonic, bits<10> funct, SDPatternOperator op,
-                     SDPatternOperator varop> {
-  def _MM : MMRel, shift_rotate_imm<mnemonic, uimm6, GPR64Opnd, op, immZExt6>,
-            SRA_FM_MM<funct, 0, 0x16>, ISA_MICROMIPS64_PRE_R6;
-  def "32_MM" : MMRel, shift_rotate_imm<mnemonic # "32", uimm5, GPR64Opnd>,
-              SRA_FM_MM<!or(funct, 0x08), 0, 0x16>, ISA_MICROMIPS64_PRE_R6;
-  def V_MM : MMRel, shift_rotate_reg<mnemonic # "v", GPR64Opnd, varop>,
-             SRLV_FM_MM<!or(funct, 0x10), 0, 0x16>, ISA_MICROMIPS64_PRE_R6;
+                     SDPatternOperator varop, bit upperInR6 = 1> {
+  def _MM : Micro64R6Rel<"micro">, MMRel, shift_rotate_imm<mnemonic, uimm6, GPR64Opnd, op, immZExt6>,
+            SRA_FM_MM<funct, 0, 0x16>, ISA_MICROMIPS64R2;
+  def "32_MM" : Micro64R6Rel<!if(upperInR6, "micro", "legacy")>, MMRel, shift_rotate_imm<mnemonic # "32", uimm5, GPR64Opnd>,
+              SRA_FM_MM<!or(funct, 0x08), 0, 0x16>, ISA_MICROMIPS64R2 {
+    let InsnPredicates = !if(upperInR6, [HasMips64r2],
+                            [HasMips64r2, NotMips32r6]);
+  }
+  def V_MM : Micro64R6Rel<"micro">, MMRel, shift_rotate_reg<mnemonic # "v", GPR64Opnd, varop>,
+             SRLV_FM_MM<!or(funct, 0x10), 0, 0x16>, ISA_MICROMIPS64R2;
 }
 
 // The register widths affect instruction selection, but all three views use
@@ -32,17 +35,17 @@ defm MOVN : WideCondMove<"movn", 0x18>;
 defm MOVZ : WideCondMove<"movz", 0x58>;
 
 let DecoderNamespace = "MicroMips64" in {
-  def DADD_MM : MMRel, ArithLogicR<"dadd", GPR64Opnd, 1>,
-                ADD_FM_MM<0x16, 0x110>, ISA_MICROMIPS64_PRE_R6;
-  def DADDu_MM : MMRel, ArithLogicR<"daddu", GPR64Opnd, 1, add>,
-                 ADD_FM_MM<0x16, 0x150>, ISA_MICROMIPS64_PRE_R6;
-  def DSUB_MM : MMRel, ArithLogicR<"dsub", GPR64Opnd>,
-                ADD_FM_MM<0x16, 0x190>, ISA_MICROMIPS64_PRE_R6;
-  def DSUBu_MM : MMRel, ArithLogicR<"dsubu", GPR64Opnd, 0, sub>,
-                 ADD_FM_MM<0x16, 0x1d0>, ISA_MICROMIPS64_PRE_R6;
-  def DADDiu_MM : MMRel, ArithLogicI<"daddiu", simm16_64, GPR64Opnd,
+  def DADD_MM : Micro64R6Rel<"micro">, MMRel, ArithLogicR<"dadd", GPR64Opnd, 1>,
+                ADD_FM_MM<0x16, 0x110>, ISA_MICROMIPS64R2;
+  def DADDu_MM : Micro64R6Rel<"micro">, MMRel, ArithLogicR<"daddu", GPR64Opnd, 1, add>,
+                 ADD_FM_MM<0x16, 0x150>, ISA_MICROMIPS64R2;
+  def DSUB_MM : Micro64R6Rel<"micro">, MMRel, ArithLogicR<"dsub", GPR64Opnd>,
+                ADD_FM_MM<0x16, 0x190>, ISA_MICROMIPS64R2;
+  def DSUBu_MM : Micro64R6Rel<"micro">, MMRel, ArithLogicR<"dsubu", GPR64Opnd, 0, sub>,
+                 ADD_FM_MM<0x16, 0x1d0>, ISA_MICROMIPS64R2;
+  def DADDiu_MM : Micro64R6Rel<"micro">, MMRel, ArithLogicI<"daddiu", simm16_64, GPR64Opnd,
                                      immSExt16, add>,
-                  ADDI_FM_MM<0x17>, ISA_MICROMIPS64_PRE_R6, IsAsCheapAsAMove;
+                  ADDI_FM_MM<0x17>, ISA_MICROMIPS64R2, IsAsCheapAsAMove;
 
   // DADDI has a signed ten-bit immediate in POOL32S.
   def DADDi_MM : InstSE<(outs GPR64Opnd:$rt),
@@ -61,7 +64,9 @@ let DecoderNamespace = "MicroMips64" in {
 
   defm DSLL : WideShift<"dsll", 0x00, mshl_64, mshl_64>;
   defm DSRL : WideShift<"dsrl", 0x40, msrl_64, msrl_64>;
-  defm DSRA : WideShift<"dsra", 0x80, msra_64, msra_64>;
+  // Revision 6.05 assigns conflicting minors to DSRA32 in its instruction
+  // diagram and opcode table. Keep the upper-immediate form revision-specific.
+  defm DSRA : WideShift<"dsra", 0x80, msra_64, msra_64, 0>;
   defm DROTR : WideShift<"drotr", 0xc0, rotr, rotr>;
 
   def DMULT_MM : MMRel, Mult<"dmult", GPR64Opnd, [HI0_64, LO0_64]>,
@@ -73,22 +78,22 @@ let DecoderNamespace = "MicroMips64" in {
   def DUDIV_MM : MMRel, Div<"ddivu", GPR64Opnd, [HI0_64, LO0_64]>,
                  MULT_FM_MM<0x2ec, 0x16>, ISA_MICROMIPS64_PRE_R6;
 
-  def DCLZ_MM : MMRel, CountLeading0<"dclz", GPR64Opnd>,
-                CLO_FM_MM<0x16c, 0x16>, ISA_MICROMIPS64_PRE_R6;
-  def DCLO_MM : MMRel, CountLeading1<"dclo", GPR64Opnd>,
-                CLO_FM_MM<0x12c, 0x16>, ISA_MICROMIPS64_PRE_R6;
-  def DSBH_MM : MMRel, SubwordSwap<"dsbh", GPR64Opnd>,
-                SEB_FM_MM<0x1ec, 0x16>, ISA_MICROMIPS64_PRE_R6;
-  def DSHD_MM : MMRel, SubwordSwap<"dshd", GPR64Opnd>,
-                SEB_FM_MM<0x3ec, 0x16>, ISA_MICROMIPS64_PRE_R6;
+  def DCLZ_MM : Micro64R6Rel<"micro">, MMRel, CountLeading0<"dclz", GPR64Opnd>,
+                CLO_FM_MM<0x16c, 0x16>, ISA_MICROMIPS64R2;
+  def DCLO_MM : Micro64R6Rel<"micro">, MMRel, CountLeading1<"dclo", GPR64Opnd>,
+                CLO_FM_MM<0x12c, 0x16>, ISA_MICROMIPS64R2;
+  def DSBH_MM : Micro64R6Rel<"micro">, MMRel, SubwordSwap<"dsbh", GPR64Opnd>,
+                SEB_FM_MM<0x1ec, 0x16>, ISA_MICROMIPS64R2;
+  def DSHD_MM : Micro64R6Rel<"micro">, MMRel, SubwordSwap<"dshd", GPR64Opnd>,
+                SEB_FM_MM<0x3ec, 0x16>, ISA_MICROMIPS64R2;
 
   let DecoderMethod = "DecodeDEXT<true>" in {
     def DEXT_MM : MMRel, DEXTDesc, EXT_FM_MM<0x2c, 0x16>,
-                  ISA_MICROMIPS64_PRE_R6;
+                  ISA_MICROMIPS64R2;
     def DEXTM_MM : MMRel, DEXTMDesc, EXT_FM_MM<0x24, 0x16>,
-                  ISA_MICROMIPS64_PRE_R6;
+                  ISA_MICROMIPS64R2;
     def DEXTU_MM : MMRel, DEXTUDesc, EXT_FM_MM<0x14, 0x16>,
-                  ISA_MICROMIPS64_PRE_R6;
+                  ISA_MICROMIPS64R2;
   }
   let DecoderMethod = "DecodeDINS<true>" in {
     def DINS_MM : MMRel, DINSDesc, EXT_FM_MM<0x0c, 0x16>,
@@ -100,10 +105,10 @@ let DecoderNamespace = "MicroMips64" in {
   }
 
   let AdditionalPredicates = [IsNotSingleFloat] in {
-    def DMFC1_MM : MMRel, MFC1_FT<"dmfc1", GPR64Opnd, FGR64Opnd, bitconvert>,
-                   MFC1_FM_MM<0x90>, ISA_MICROMIPS64_PRE_R6, FGR_64;
-    def DMTC1_MM : MMRel, MTC1_FT<"dmtc1", FGR64Opnd, GPR64Opnd, bitconvert>,
-                   MFC1_FM_MM<0xb0>, ISA_MICROMIPS64_PRE_R6, FGR_64;
+    def DMFC1_MM : Micro64R6Rel<"micro">, MMRel, MFC1_FT<"dmfc1", GPR64Opnd, FGR64Opnd, bitconvert>,
+                   MFC1_FM_MM<0x90>, ISA_MICROMIPS64R2, FGR_64;
+    def DMTC1_MM : Micro64R6Rel<"micro">, MMRel, MTC1_FT<"dmtc1", FGR64Opnd, GPR64Opnd, bitconvert>,
+                   MFC1_FM_MM<0xb0>, ISA_MICROMIPS64R2, FGR_64;
   }
 
   let mayRaiseFPException = 1 in {
@@ -130,7 +135,7 @@ let DecoderNamespace = "MicroMips64" in {
   }
 
   let DecoderMethod = "DecodeMemMMImm12<Mips::GPR64RegClassID>" in {
-    def LWU64_MM : LoadWordUnsignedMM<GPR64Opnd>, ISA_MICROMIPS64_PRE_R6;
+    def LWU64_MM : LoadWordUnsignedMM<GPR64Opnd>, ISA_MICROMIPS64R2;
     def LDL_MM : LoadLeftRightMM<"ldl", MipsLDL, GPR64Opnd, mem_simm12>,
                  LWL_FM_MM<0x4>, ISA_MICROMIPS64_PRE_R6;
     def LDR_MM : LoadLeftRightMM<"ldr", MipsLDR, GPR64Opnd, mem_simm12>,
@@ -146,15 +151,22 @@ let DecoderNamespace = "MicroMips64" in {
   }
 
   let DecoderMethod = "DecodeMemMMImm16<Mips::GPR64RegClassID>" in {
-    def LD_MM : MMRel, LoadMemory<"ld", GPR64Opnd, mem_simmptr, load>,
-                LW_FM_MM<0x37>, ISA_MICROMIPS64_PRE_R6;
-    def SD_MM : MMRel, StoreMemory<"sd", GPR64Opnd, mem_simmptr, store>,
-                LW_FM_MM<0x36>, ISA_MICROMIPS64_PRE_R6;
+    def LD_MM : Micro64R6Rel<"micro">, MMRel, LoadMemory<"ld", GPR64Opnd, mem_simmptr, load>,
+                LW_FM_MM<0x37>, ISA_MICROMIPS64R2;
+    def SD_MM : Micro64R6Rel<"micro">, MMRel, StoreMemory<"sd", GPR64Opnd, mem_simmptr, store>,
+                LW_FM_MM<0x36>, ISA_MICROMIPS64R2;
   }
 }
 
+// Materialize large arithmetic shift counts in a GPR while the R6 encoding
+// of DSRA32 is unresolved. Register shifts read the low six bits of the count.
+def micro64UpperShift : ImmLeaf<i32, [{ return Imm >= 32 && Imm < 64; }]>;
+let AddedComplexity = 2 in
+def : MipsPat<(msra_64 GPR64:$src, micro64UpperShift:$count),
+              (DSRAV_MM GPR64:$src, (ORi ZERO, imm:$count))>, ISA_MICROMIPS64R6;
+
 def : MipsPat<(bswap GPR64:$rt), (DSHD_MM (DSBH_MM GPR64:$rt))>,
-      ISA_MICROMIPS64_PRE_R6;
+      ISA_MICROMIPS64R2;
 
 let InsnPredicates = [HasMips64r2, NotMips32r6],
     EncodingPredicates = [InMicroMips] in {
@@ -180,10 +192,10 @@ def : MipsInstAlias<"dins $rt, $rs, $pos, $size",
                               uimm5_plus1:$size)>, ISA_MICROMIPS64_PRE_R6;
 def : MipsInstAlias<"dext $rt, $rs, $pos, $size",
                     (DEXTM_MM GPR64Opnd:$rt, GPR64Opnd:$rs, uimm5:$pos,
-                              uimm5_plus33:$size)>, ISA_MICROMIPS64_PRE_R6;
+                              uimm5_plus33:$size)>, ISA_MICROMIPS64R2;
 def : MipsInstAlias<"dext $rt, $rs, $pos, $size",
                     (DEXTU_MM GPR64Opnd:$rt, GPR64Opnd:$rs, uimm5_plus32:$pos,
-                              uimm5_plus1:$size)>, ISA_MICROMIPS64_PRE_R6;
+                              uimm5_plus1:$size)>, ISA_MICROMIPS64R2;
 
 def : MipsPat<(MipsTruncIntFP FGR32Opnd:$src), (TRUNC_L_S_MM FGR32Opnd:$src)>,
       ISA_MICROMIPS64_PRE_R6, FGR_64;

@@ -22,6 +22,7 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
@@ -46,7 +47,8 @@ bool hasTarget(StringRef TripleName) {
 
 std::optional<mc_rewrite::RewriteResult>
 assemble(StringRef TripleName, StringRef Assembly,
-         const mc_rewrite::RewriteOptions &Options) {
+         const mc_rewrite::RewriteOptions &Options, StringRef CPU = {},
+         StringRef Features = {}) {
   InitializeAllTargetInfos();
   InitializeAllTargetMCs();
   InitializeAllAsmParsers();
@@ -60,7 +62,8 @@ assemble(StringRef TripleName, StringRef Assembly,
   MCTargetOptions MCOptions;
   std::unique_ptr<MCRegisterInfo> MRI(T->createMCRegInfo(TT));
   std::unique_ptr<MCAsmInfo> MAI(T->createMCAsmInfo(*MRI, TT, MCOptions));
-  std::unique_ptr<MCSubtargetInfo> STI(T->createMCSubtargetInfo(TT, {}, {}));
+  std::unique_ptr<MCSubtargetInfo> STI(
+      T->createMCSubtargetInfo(TT, CPU, Features));
   std::unique_ptr<MCInstrInfo> MII(T->createMCInstrInfo());
   SourceMgr Sources;
   Sources.AddNewSourceBuffer(MemoryBuffer::getMemBuffer(Assembly), SMLoc());
@@ -113,6 +116,71 @@ ArrayRef<uint8_t> bytes(const mc_rewrite::RewriteResult &Result,
       return Section.Bytes;
   ADD_FAILURE() << SectionName;
   return {};
+}
+
+TEST(BinaryRewriteRelocationTest, MicroMips64R6CompactCallsUseTaggedTargets) {
+  constexpr uint64_t Base = 0x100210100;
+  constexpr StringLiteral Assembly = ".set noreorder\n.option pic0\n"
+                                     ".text\nbalc target\n";
+  for (StringRef TT : {"mips64-linux-gnuabi64", "mips64el-linux-gnuabi64"}) {
+    if (!hasTarget(TT))
+      GTEST_SKIP();
+    auto Endian =
+        Triple(TT).isLittleEndian() ? endianness::little : endianness::big;
+    for (uint64_t Address : {Base - 0x2000, Base + 0x2000}) {
+      SCOPED_TRACE(TT.str());
+      SCOPED_TRACE(Address);
+      auto Result = assemble(TT, Assembly, options(Base, Address | 1),
+                             "mips64r6", "+micromips");
+      ASSERT_TRUE(Result);
+      ASSERT_TRUE(Result->ImageValid);
+      ASSERT_TRUE(Result->Unresolved.empty());
+      auto Text = bytes(*Result, ".text");
+      ASSERT_EQ(Text.size(), 4u);
+      uint32_t Word =
+          (uint32_t(support::endian::read16(Text.data(), Endian)) << 16) |
+          support::endian::read16(Text.data() + 2, Endian);
+      EXPECT_EQ(Word >> 26, 0x2du);
+      EXPECT_EQ(Base + 4 + SignExtend64<26>(Word & 0x3ffffff) * 2, Address);
+    }
+    EXPECT_FALSE(assemble(TT, Assembly, options(Base, Base - 0x2000),
+                          "mips64r6", "+micromips"));
+    EXPECT_FALSE(assemble(TT, Assembly, options(Base, Base + 0x4000005),
+                          "mips64r6", "+micromips"));
+  }
+}
+
+TEST(BinaryRewriteRelocationTest, Mips64R6ClassicBranchesKeepTheirISAMode) {
+  constexpr uint64_t Base = 0x100210100;
+  for (StringRef TT : {"mips64-linux-gnuabi64", "mips64el-linux-gnuabi64"}) {
+    if (!hasTarget(TT))
+      GTEST_SKIP();
+    auto Endian =
+        Triple(TT).isLittleEndian() ? endianness::little : endianness::big;
+    for (StringRef Branch :
+         {"balc target", "beqzc $4, target", "beq $4,$5,target"}) {
+      SCOPED_TRACE(TT.str());
+      SCOPED_TRACE(Branch.str());
+      auto Assembly =
+          (Twine(".set noreorder\n.option pic0\n.text\n") + Branch + "\n")
+              .str();
+      for (uint64_t Address : {Base - 0x2000, Base + 0x2000}) {
+        auto R = assemble(TT, Assembly, options(Base, Address), "mips64r6");
+        ASSERT_TRUE(R && R->ImageValid && R->Unresolved.empty());
+        auto Text = bytes(*R, ".text");
+        ASSERT_GE(Text.size(), 4u);
+        unsigned FieldBits = Branch.starts_with("balc")    ? 26
+                             : Branch.starts_with("beqzc") ? 21
+                                                           : 16;
+        uint32_t Word = support::endian::read32(Text.data(), Endian);
+        EXPECT_EQ(Base + 4 + SignExtend64(Word, FieldBits) * 4, Address);
+        EXPECT_FALSE(
+            assemble(TT, Assembly, options(Base, Address | 1), "mips64r6"));
+        EXPECT_FALSE(
+            assemble(TT, Assembly, options(Base, Address + 2), "mips64r6"));
+      }
+    }
+  }
 }
 
 TEST(BinaryRewriteRelocationTest,

@@ -400,6 +400,10 @@ class MIPS3_GPR64 {
   list<Predicate> GPRPredicates = [IsGP64bit];
   list<Predicate> EncodingPredicates = [NotInMips16Mode];
 }
+class ISA_MICROMIPS64R2 {
+  list<Predicate> InsnPredicates = [HasMips64r2];
+  list<Predicate> EncodingPredicates = [InMicroMips];
+}
 class ISA_MICROMIPS64_PRE_R6 {
   list<Predicate> InsnPredicates = [HasMips64r2, NotMips32r6];
   list<Predicate> EncodingPredicates = [InMicroMips];
@@ -872,6 +876,8 @@ def MipsJumpTargetAsmOperand : AsmOperandClass {
 def jmptarget   : Operand<OtherVT> {
   let EncoderMethod = "getJumpTargetOpValue";
   let ParserMatchClass = MipsJumpTargetAsmOperand;
+  let OperandNamespace = "MipsII";
+  let OperandType = "OPERAND_JUMP_TARGET";
   let PrintMethod = "printJumpOperand";
 }
 def brtarget    : Operand<OtherVT> {
@@ -881,16 +887,11 @@ def brtarget    : Operand<OtherVT> {
   let ParserMatchClass = MipsJumpTargetAsmOperand;
   let PrintMethod = "printBranchOperand";
 }
-def brtarget1SImm16 : Operand<OtherVT> {
-  let EncoderMethod = "getBranchTargetOpValue1SImm16";
-  let OperandType = "OPERAND_PCREL";
-  let DecoderMethod = "DecodeBranchTarget1SImm16";
-  let ParserMatchClass = MipsJumpTargetAsmOperand;
-  let PrintMethod = "printBranchOperand";
-}
 def calltarget  : Operand<iPTR> {
   let EncoderMethod = "getJumpTargetOpValue";
   let ParserMatchClass = MipsJumpTargetAsmOperand;
+  let OperandNamespace = "MipsII";
+  let OperandType = "OPERAND_JUMP_TARGET";
   let PrintMethod = "printJumpOperand";
 }
 
@@ -2086,7 +2087,7 @@ let AdditionalPredicates = [NotInMicroMips] in {
   def SLTiu : MMRel, SetCC_I<"sltiu", setult, simm16, immSExt16, GPR32Opnd>,
               SLTI_FM<0xb>, ISA_MIPS1;
 
-  def LUi   : MMRel, LoadUpper<"lui", GPR32Opnd, uimm16_relaxed>, LUI_FM,
+  def LUi   : StdMMR6Rel, MMRel, LoadUpper<"lui", GPR32Opnd, uimm16_relaxed>, LUI_FM,
               ISA_MIPS1;
 
   /// Arithmetic Instructions (3-Operand, R-Type)
@@ -2120,24 +2121,24 @@ let AdditionalPredicates = [NotInMicroMips] in {
 
 let AdditionalPredicates = [NotInMicroMips] in {
   /// Shift Instructions
-  def SLL  : MMRel, shift_rotate_imm<"sll", uimm5, GPR32Opnd, mshl_32,
+  def SLL  : MMRel, StdMMR6Rel, shift_rotate_imm<"sll", uimm5, GPR32Opnd, mshl_32,
                                      immZExt5>, SRA_FM<0, 0>, ISA_MIPS1;
   def SRL  : MMRel, shift_rotate_imm<"srl", uimm5, GPR32Opnd, msrl_32,
                                      immZExt5>, SRA_FM<2, 0>, ISA_MIPS1;
-  def SRA  : MMRel, shift_rotate_imm<"sra", uimm5, GPR32Opnd, msra_32,
+  def SRA  : Micro64R6Rel<"standard">, MMRel, shift_rotate_imm<"sra", uimm5, GPR32Opnd, msra_32,
                                      immZExt5>, SRA_FM<3, 0>, ISA_MIPS1;
-  def SLLV : MMRel, shift_rotate_reg<"sllv", GPR32Opnd, mshl_32>,
+  def SLLV : Micro64R6Rel<"standard">, MMRel, shift_rotate_reg<"sllv", GPR32Opnd, mshl_32>,
              SRLV_FM<4, 0>, ISA_MIPS1;
-  def SRLV : MMRel, shift_rotate_reg<"srlv", GPR32Opnd, msrl_32>,
+  def SRLV : Micro64R6Rel<"standard">, MMRel, shift_rotate_reg<"srlv", GPR32Opnd, msrl_32>,
              SRLV_FM<6, 0>, ISA_MIPS1;
-  def SRAV : MMRel, shift_rotate_reg<"srav", GPR32Opnd, msra_32>,
+  def SRAV : Micro64R6Rel<"standard">, MMRel, shift_rotate_reg<"srav", GPR32Opnd, msra_32>,
              SRLV_FM<7, 0>, ISA_MIPS1;
 
   // Rotate Instructions
-  def ROTR  : MMRel, shift_rotate_imm<"rotr", uimm5, GPR32Opnd, rotr,
+  def ROTR  : Micro64R6Rel<"standard">, MMRel, shift_rotate_imm<"rotr", uimm5, GPR32Opnd, rotr,
                                       immZExt5>,
               SRA_FM<2, 1>, ISA_MIPS32R2;
-  def ROTRV : MMRel, shift_rotate_reg<"rotrv", GPR32Opnd, rotr>,
+  def ROTRV : Micro64R6Rel<"standard">, MMRel, shift_rotate_reg<"rotrv", GPR32Opnd, rotr>,
               SRLV_FM<6, 1>, ISA_MIPS32R2;
 }
 
@@ -2470,7 +2471,7 @@ let AdditionalPredicates = [NotInMicroMips] in {
                                  0, 1, 1>, ISA_MIPS1_NOT_32R6_64R6;
   def PseudoUDIV : MultDivPseudo<UDIV, ACC64, GPR32Opnd, MipsDivRemU,
                                  0, 1, 1>, ISA_MIPS1_NOT_32R6_64R6;
-  def RDHWR : MMRel, ReadHardware<GPR32Opnd, HWRegsOpnd>, RDHWR_FM, ISA_MIPS1;
+  def RDHWR : StdMMR6Rel, MMRel, ReadHardware<GPR32Opnd, HWRegsOpnd>, RDHWR_FM, ISA_MIPS1;
   // TODO: Add '0 < pos+size <= 32' constraint check to ext instruction
   def EXT : MMRel, StdMMR6Rel, ExtBase<"ext", GPR32Opnd, uimm5, uimm5_plus1,
                                        immZExt5, immZExt5Plus1, MipsExt>,

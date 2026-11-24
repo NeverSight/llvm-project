@@ -62,6 +62,17 @@ def GP64ToMicroMips : InstrMapping {
   let ValueCols = [["micromips"]];
 }
 
+// A GP64-only standard opcode can use an R6 compact encoding also used by
+// the word register view. Only wire-compatible instruction records opt in.
+class Micro64R6Rel<string form> { string Micro64R6Form = form; }
+def GP64ToMicroMipsR6 : InstrMapping {
+  let FilterClass = "Micro64R6Rel";
+  let RowFields = ["BaseOpcode"];
+  let ColFields = ["Micro64R6Form"];
+  let KeyCol = ["standard"];
+  let ValueCols = [["micro"]];
+}
+
 class StdMMR6Rel;
 
 def Std2MicroMipsR6 : InstrMapping {

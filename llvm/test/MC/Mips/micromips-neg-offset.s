@@ -6,7 +6,7 @@
 
 # CHECK: 0:   8f 7e        beqzc16  $6, 0xfffffffc <.text+0xfffffffffffffffc>
 # CHECK: 2:   cf fe        bc16     0xfffffffe <.text+0xfffffffffffffffe>
-# CHECK: 4:   b7 ff ff fe  balc     0x0 <.text>
+# CHECK: 4:   b7 ff ff fe  balc     0x4 <.text+0x4>
 
 beqz16  $6, -4
 b16     -4

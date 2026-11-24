@@ -119,69 +119,69 @@ let DecoderNamespace = "Mips64" in {
 def DADDi   : ArithLogicI<"daddi", simm16_64, GPR64Opnd>,
               ADDI_FM<0x18>, ISA_MIPS3_NOT_32R6_64R6;
 let AdditionalPredicates = [NotInMicroMips] in {
-  def DADDiu : MMRel, ArithLogicI<"daddiu", simm16_64, GPR64Opnd,
+  def DADDiu : Micro64R6Rel<"standard">, MMRel, ArithLogicI<"daddiu", simm16_64, GPR64Opnd,
                            immSExt16, add>,
                ADDI_FM<0x19>, IsAsCheapAsAMove, ISA_MIPS3;
 }
 
 let isCodeGenOnly = 1, Arch = "se64" in {
-def SLTi64  : MMRel, SetCC_I<"slti", setlt, simm16_64, immSExt16, GPR64Opnd>,
+def SLTi64  : Micro64R6Rel<"standard">, MMRel, SetCC_I<"slti", setlt, simm16_64, immSExt16, GPR64Opnd>,
               SLTI_FM<0xa>, GPR_64;
-def SLTiu64 : MMRel, SetCC_I<"sltiu", setult, simm16_64, immSExt16, GPR64Opnd>,
+def SLTiu64 : Micro64R6Rel<"standard">, MMRel, SetCC_I<"sltiu", setult, simm16_64, immSExt16, GPR64Opnd>,
               SLTI_FM<0xb>, GPR_64;
-def ANDi64 : MMRel, ArithLogicI<"andi", uimm16_64, GPR64Opnd, immZExt16, and>,
+def ANDi64 : Micro64R6Rel<"standard">, MMRel, ArithLogicI<"andi", uimm16_64, GPR64Opnd, immZExt16, and>,
              ADDI_FM<0xc>, GPR_64;
-def ORi64   : MMRel, ArithLogicI<"ori", uimm16_64, GPR64Opnd, immZExt16, or>,
+def ORi64   : Micro64R6Rel<"standard">, MMRel, ArithLogicI<"ori", uimm16_64, GPR64Opnd, immZExt16, or>,
               ADDI_FM<0xd>, GPR_64;
-def XORi64  : MMRel, ArithLogicI<"xori", uimm16_64, GPR64Opnd, immZExt16, xor>,
+def XORi64  : Micro64R6Rel<"standard">, MMRel, ArithLogicI<"xori", uimm16_64, GPR64Opnd, immZExt16, xor>,
               ADDI_FM<0xe>, GPR_64;
-def LUi64   : MMRel, LoadUpper<"lui", GPR64Opnd, uimm16_64_relaxed>, LUI_FM, GPR_64;
+def LUi64   : Micro64R6Rel<"standard">, MMRel, LoadUpper<"lui", GPR64Opnd, uimm16_64_relaxed>, LUI_FM, GPR_64;
 }
 
 /// Arithmetic Instructions (3-Operand, R-Type)
 let AdditionalPredicates = [NotInMicroMips] in {
-  def DADD   : MMRel, ArithLogicR<"dadd", GPR64Opnd, 1>, ADD_FM<0, 0x2c>,
+  def DADD   : Micro64R6Rel<"standard">, MMRel, ArithLogicR<"dadd", GPR64Opnd, 1>, ADD_FM<0, 0x2c>,
                ISA_MIPS3;
-  def DADDu  : MMRel, ArithLogicR<"daddu", GPR64Opnd, 1, add>,
+  def DADDu  : Micro64R6Rel<"standard">, MMRel, ArithLogicR<"daddu", GPR64Opnd, 1, add>,
                ADD_FM<0, 0x2d>, ISA_MIPS3;
-  def DSUBu  : MMRel, ArithLogicR<"dsubu", GPR64Opnd, 0, sub>,
+  def DSUBu  : Micro64R6Rel<"standard">, MMRel, ArithLogicR<"dsubu", GPR64Opnd, 0, sub>,
                ADD_FM<0, 0x2f>, ISA_MIPS3;
-  def DSUB   : MMRel, ArithLogicR<"dsub", GPR64Opnd, 0>, ADD_FM<0, 0x2e>,
+  def DSUB   : Micro64R6Rel<"standard">, MMRel, ArithLogicR<"dsub", GPR64Opnd, 0>, ADD_FM<0, 0x2e>,
                ISA_MIPS3;
 }
 
 let isCodeGenOnly = 1, Arch = "se64" in {
-def SLT64  : MMRel, SetCC_R<"slt", setlt, GPR64Opnd>, ADD_FM<0, 0x2a>, GPR_64;
-def SLTu64 : MMRel, SetCC_R<"sltu", setult, GPR64Opnd>, ADD_FM<0, 0x2b>, GPR_64;
-def AND64  : MMRel, ArithLogicR<"and", GPR64Opnd, 1, and>, ADD_FM<0, 0x24>,
+def SLT64  : Micro64R6Rel<"standard">, MMRel, SetCC_R<"slt", setlt, GPR64Opnd>, ADD_FM<0, 0x2a>, GPR_64;
+def SLTu64 : Micro64R6Rel<"standard">, MMRel, SetCC_R<"sltu", setult, GPR64Opnd>, ADD_FM<0, 0x2b>, GPR_64;
+def AND64  : Micro64R6Rel<"standard">, MMRel, ArithLogicR<"and", GPR64Opnd, 1, and>, ADD_FM<0, 0x24>,
              GPR_64;
-def OR64   : MMRel, ArithLogicR<"or", GPR64Opnd, 1, or>, ADD_FM<0, 0x25>,
+def OR64   : Micro64R6Rel<"standard">, MMRel, ArithLogicR<"or", GPR64Opnd, 1, or>, ADD_FM<0, 0x25>,
              GPR_64;
-def XOR64  : MMRel, ArithLogicR<"xor", GPR64Opnd, 1, xor>, ADD_FM<0, 0x26>,
+def XOR64  : Micro64R6Rel<"standard">, MMRel, ArithLogicR<"xor", GPR64Opnd, 1, xor>, ADD_FM<0, 0x26>,
              GPR_64;
-def NOR64  : MMRel, LogicNOR<"nor", GPR64Opnd>, ADD_FM<0, 0x27>, GPR_64;
+def NOR64  : Micro64R6Rel<"standard">, MMRel, LogicNOR<"nor", GPR64Opnd>, ADD_FM<0, 0x27>, GPR_64;
 }
 
 /// Shift Instructions
 let AdditionalPredicates = [NotInMicroMips] in {
-  def DSLL : MMRel, shift_rotate_imm<"dsll", uimm6, GPR64Opnd, mshl_64,
+  def DSLL : Micro64R6Rel<"standard">, MMRel, shift_rotate_imm<"dsll", uimm6, GPR64Opnd, mshl_64,
                               immZExt6>,
              SRA_FM<0x38, 0>, ISA_MIPS3;
-  def DSRL : MMRel, shift_rotate_imm<"dsrl", uimm6, GPR64Opnd, msrl_64,
+  def DSRL : Micro64R6Rel<"standard">, MMRel, shift_rotate_imm<"dsrl", uimm6, GPR64Opnd, msrl_64,
                               immZExt6>,
              SRA_FM<0x3a, 0>, ISA_MIPS3;
-  def DSRA : MMRel, shift_rotate_imm<"dsra", uimm6, GPR64Opnd, msra_64,
+  def DSRA : Micro64R6Rel<"standard">, MMRel, shift_rotate_imm<"dsra", uimm6, GPR64Opnd, msra_64,
                               immZExt6>,
              SRA_FM<0x3b, 0>, ISA_MIPS3;
-  def DSLLV  : MMRel, shift_rotate_reg<"dsllv", GPR64Opnd, mshl_64>,
+  def DSLLV  : Micro64R6Rel<"standard">, MMRel, shift_rotate_reg<"dsllv", GPR64Opnd, mshl_64>,
                SRLV_FM<0x14, 0>, ISA_MIPS3;
-  def DSRAV  : MMRel, shift_rotate_reg<"dsrav", GPR64Opnd, msra_64>,
+  def DSRAV  : Micro64R6Rel<"standard">, MMRel, shift_rotate_reg<"dsrav", GPR64Opnd, msra_64>,
                SRLV_FM<0x17, 0>, ISA_MIPS3;
-  def DSRLV  : MMRel, shift_rotate_reg<"dsrlv", GPR64Opnd, msrl_64>,
+  def DSRLV  : Micro64R6Rel<"standard">, MMRel, shift_rotate_reg<"dsrlv", GPR64Opnd, msrl_64>,
                SRLV_FM<0x16, 0>, ISA_MIPS3;
-  def DSLL32 : MMRel, shift_rotate_imm<"dsll32", uimm5, GPR64Opnd>,
+  def DSLL32 : Micro64R6Rel<"standard">, MMRel, shift_rotate_imm<"dsll32", uimm5, GPR64Opnd>,
                SRA_FM<0x3c, 0>, ISA_MIPS3;
-  def DSRL32 : MMRel, shift_rotate_imm<"dsrl32", uimm5, GPR64Opnd>,
+  def DSRL32 : Micro64R6Rel<"standard">, MMRel, shift_rotate_imm<"dsrl32", uimm5, GPR64Opnd>,
                SRA_FM<0x3e, 0>, ISA_MIPS3;
   def DSRA32 : MMRel, shift_rotate_imm<"dsra32", uimm5, GPR64Opnd>,
                SRA_FM<0x3f, 0>, ISA_MIPS3;
@@ -199,24 +199,24 @@ let AdditionalPredicates = [NotInMicroMips] in {
 /// Load and Store Instructions
 ///  aligned
 let isCodeGenOnly = 1, Arch = "se64" in {
-def LB64  : MMRel, Load<"lb", GPR64Opnd, sextloadi8>, LW_FM<0x20>, GPR_64;
-def LBu64 : MMRel, Load<"lbu", GPR64Opnd, zextloadi8>, LW_FM<0x24>, GPR_64;
-def LH64  : MMRel, Load<"lh", GPR64Opnd, sextloadi16>, LW_FM<0x21>, GPR_64;
-def LHu64 : MMRel, Load<"lhu", GPR64Opnd, zextloadi16>, LW_FM<0x25>, GPR_64;
-def LW64  : MMRel, Load<"lw", GPR64Opnd, sextloadi32>, LW_FM<0x23>, GPR_64;
-def SB64  : MMRel, Store<"sb", GPR64Opnd, truncstorei8>, LW_FM<0x28>, GPR_64;
-def SH64  : MMRel, Store<"sh", GPR64Opnd, truncstorei16>, LW_FM<0x29>,
+def LB64  : Micro64R6Rel<"standard">, MMRel, Load<"lb", GPR64Opnd, sextloadi8>, LW_FM<0x20>, GPR_64;
+def LBu64 : Micro64R6Rel<"standard">, MMRel, Load<"lbu", GPR64Opnd, zextloadi8>, LW_FM<0x24>, GPR_64;
+def LH64  : Micro64R6Rel<"standard">, MMRel, Load<"lh", GPR64Opnd, sextloadi16>, LW_FM<0x21>, GPR_64;
+def LHu64 : Micro64R6Rel<"standard">, MMRel, Load<"lhu", GPR64Opnd, zextloadi16>, LW_FM<0x25>, GPR_64;
+def LW64  : Micro64R6Rel<"standard">, MMRel, Load<"lw", GPR64Opnd, sextloadi32>, LW_FM<0x23>, GPR_64;
+def SB64  : Micro64R6Rel<"standard">, MMRel, Store<"sb", GPR64Opnd, truncstorei8>, LW_FM<0x28>, GPR_64;
+def SH64  : Micro64R6Rel<"standard">, MMRel, Store<"sh", GPR64Opnd, truncstorei16>, LW_FM<0x29>,
             GPR_64;
-def SW64  : MMRel, Store<"sw", GPR64Opnd, truncstorei32>, LW_FM<0x2b>,
+def SW64  : Micro64R6Rel<"standard">, MMRel, Store<"sw", GPR64Opnd, truncstorei32>, LW_FM<0x2b>,
             GPR_64;
 }
 
 let AdditionalPredicates = [NotInMicroMips] in {
   def LWu : MMRel, Load<"lwu", GPR64Opnd, zextloadi32>,
             LW_FM<0x27>, ISA_MIPS3;
-  def LD  : MMRel, LoadMemory<"ld", GPR64Opnd, mem_simmptr, load>,
+  def LD  : Micro64R6Rel<"standard">, MMRel, LoadMemory<"ld", GPR64Opnd, mem_simmptr, load>,
             LW_FM<0x37>, ISA_MIPS3;
-  def SD  : MMRel, StoreMemory<"sd", GPR64Opnd, mem_simmptr, store>,
+  def SD  : Micro64R6Rel<"standard">, MMRel, StoreMemory<"sd", GPR64Opnd, mem_simmptr, store>,
             LW_FM<0x3f>, ISA_MIPS3;
 }
 
@@ -359,23 +359,23 @@ def PseudoMTLOHI64 : PseudoMTLOHI<ACC128, GPR64>, ISA_MIPS3_NOT_32R6_64R6<NotInM
 /// Sign Ext In Register Instructions.
 let isCodeGenOnly = 1, Arch = "se64",
     EncodingPredicates = [NotInMips16Mode] in {
-def SEB64 : MMRel, SignExtInReg<"seb", i8, GPR64Opnd>, SEB_FM<0x10, 0x20>,
+def SEB64 : Micro64R6Rel<"standard">, MMRel, SignExtInReg<"seb", i8, GPR64Opnd>, SEB_FM<0x10, 0x20>,
             ISA_MIPS32R2, GPR_64;
-def SEH64 : MMRel, SignExtInReg<"seh", i16, GPR64Opnd>, SEB_FM<0x18, 0x20>,
+def SEH64 : Micro64R6Rel<"standard">, MMRel, SignExtInReg<"seh", i16, GPR64Opnd>, SEB_FM<0x18, 0x20>,
             ISA_MIPS32R2, GPR_64;
 }
 
 /// Count Leading
 let AdditionalPredicates = [NotInMicroMips] in {
-  def DCLZ : MMRel, CountLeading0<"dclz", GPR64Opnd>, CLO_FM<0x24>,
+  def DCLZ : Micro64R6Rel<"standard">, MMRel, CountLeading0<"dclz", GPR64Opnd>, CLO_FM<0x24>,
              ISA_MIPS64_NOT_64R6, GPR_64;
-  def DCLO : MMRel, CountLeading1<"dclo", GPR64Opnd>, CLO_FM<0x25>,
+  def DCLO : Micro64R6Rel<"standard">, MMRel, CountLeading1<"dclo", GPR64Opnd>, CLO_FM<0x25>,
              ISA_MIPS64_NOT_64R6, GPR_64;
 
 /// Double Word Swap Bytes/HalfWords
-  def DSBH : MMRel, SubwordSwap<"dsbh", GPR64Opnd>, SEB_FM<2, 0x24>,
+  def DSBH : Micro64R6Rel<"standard">, MMRel, SubwordSwap<"dsbh", GPR64Opnd>, SEB_FM<2, 0x24>,
              ISA_MIPS64R2;
-  def DSHD : MMRel, SubwordSwap<"dshd", GPR64Opnd>, SEB_FM<5, 0x24>,
+  def DSHD : Micro64R6Rel<"standard">, MMRel, SubwordSwap<"dshd", GPR64Opnd>, SEB_FM<5, 0x24>,
              ISA_MIPS64R2;
 
   def LEA_ADDiu64 : EffectiveAddress<"daddiu", GPR64Opnd>, LW_FM<0x19>,
@@ -383,7 +383,7 @@ let AdditionalPredicates = [NotInMicroMips] in {
 }
 
 let isCodeGenOnly = 1, Arch = "se64" in
-def RDHWR64 : MMRel, ReadHardware<GPR64Opnd, HWRegsOpnd>, RDHWR_FM, GPR_64;
+def RDHWR64 : Micro64R6Rel<"standard">, MMRel, ReadHardware<GPR64Opnd, HWRegsOpnd>, RDHWR_FM, GPR_64;
 
 class DEXTDesc : ExtBase<"dext", GPR64Opnd, uimm5_report_uimm6,
                          uimm5_plus1_report_uimm6, immZExt5, immZExt5Plus1,

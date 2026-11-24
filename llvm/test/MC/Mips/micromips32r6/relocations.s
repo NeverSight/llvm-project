@@ -26,10 +26,10 @@
 # CHECK-FIXUP: bnezc $3, bar    # encoding: [0xa0,0b011AAAAA,A,A]
 # CHECK-FIXUP:                  #   fixup A - offset: 0,
 # CHECK-FIXUP:                      value: bar-4, kind: fixup_MICROMIPS_PC21_S1
-# CHECK-FIXUP: jialc $5, bar    # encoding: [0x80,0x05,A,A]
+# CHECK-FIXUP: jialc $5, bar    # encoding: [0xa0,0x05,A,A]
 # CHECK-FIXUP:                  #   fixup A - offset: 0,
 # CHECK-FIXUP:                      value: bar, kind: fixup_MICROMIPS_LO16
-# CHECK-FIXUP: jic   $5, bar    # encoding: [0xa0,0x05,A,A]
+# CHECK-FIXUP: jic   $5, bar    # encoding: [0x80,0x05,A,A]
 # CHECK-FIXUP:                  #   fixup A - offset: 0,
 # CHECK-FIXUP:                      value: bar, kind: fixup_MICROMIPS_LO16
 #------------------------------------------------------------------------------

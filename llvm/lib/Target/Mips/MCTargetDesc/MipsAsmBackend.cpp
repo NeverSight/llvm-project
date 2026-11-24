@@ -333,6 +333,23 @@ static bool isPseudoDirectJump(MCFixupKind Kind) {
          Kind == Mips::fixup_MICROMIPS_26_S1;
 }
 
+static unsigned branchTargetAlignment(MCFixupKind Kind) {
+  switch (static_cast<unsigned>(Kind)) {
+  case Mips::fixup_Mips_PC16:
+  case Mips::fixup_MIPS_PC21_S2:
+  case Mips::fixup_MIPS_PC26_S2:
+    return 4;
+  case Mips::fixup_MICROMIPS_PC7_S1:
+  case Mips::fixup_MICROMIPS_PC10_S1:
+  case Mips::fixup_MICROMIPS_PC16_S1:
+  case Mips::fixup_MICROMIPS_PC21_S1:
+  case Mips::fixup_MICROMIPS_PC26_S1:
+    return 2;
+  default:
+    return 0;
+  }
+}
+
 static bool needsGPOrTLSBase(MCFixupKind Kind) {
   switch (static_cast<unsigned>(Kind)) {
   case Mips::fixup_Mips16_GPREL:
@@ -435,6 +452,33 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
       if (TheTriple.isArch32Bit())
         NextPC = static_cast<uint32_t>(NextPC);
       applyFinalJump(getContext(), Endian, Fixup, Target, Data, Value, NextPC);
+      return;
+    }
+  }
+  if (unsigned Align = branchTargetAlignment(Kind);
+      Align && TheTriple.isOSBinFormatELF() && IsResolved &&
+      !Target.getSubSym() && Asm->getWriter().getFinalFixupVA(F, Fixup)) {
+    const unsigned Mode = Align == 2 ? ELF::STO_MIPS_MICROMIPS : 0;
+    if (const auto *Sym =
+            static_cast<const MCSymbolELF *>(Target.getAddSym())) {
+      unsigned TargetMode = Mode;
+      if (Sym->isUndefined()) {
+        // External resolutions return callable pointers. Drop the ISA tag
+        // before scaling the signed PC-relative displacement.
+        bool Tagged = (Value - Target.getConstant()) & 1;
+        TargetMode = Tagged ? ELF::STO_MIPS_MICROMIPS : 0;
+        Value -= Tagged;
+      } else if (Sym->isInSection() && Sym->getType() == ELF::STT_FUNC) {
+        TargetMode = compressedMode(*Sym);
+      }
+      if (Mode != TargetMode) {
+        getContext().reportError(Fixup.getLoc(),
+                                 "MIPS branch cannot change ISA mode");
+        return;
+      }
+    }
+    if (Value & (Align - 1)) {
+      getContext().reportError(Fixup.getLoc(), "misaligned MIPS branch target");
       return;
     }
   }

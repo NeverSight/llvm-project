@@ -139,14 +139,15 @@ class CACHE_PREF_FM_MMR6<bits<6> opgroup, bits<4> funct> : MipsR6Inst {
   let Inst{11-0}  = addr{11-0};
 }
 
-class ARITH_FM_MMR6<string instr_asm, bits<10> funct> : MMR6Arch<instr_asm> {
+class ARITH_FM_MMR6<string instr_asm, bits<10> funct, bits<6> major = 0>
+    : MMR6Arch<instr_asm> {
   bits<5> rd;
   bits<5> rt;
   bits<5> rs;
 
   bits<32> Inst;
 
-  let Inst{31-26} = 0;
+  let Inst{31-26} = major;
   let Inst{25-21} = rt;
   let Inst{20-16} = rs;
   let Inst{15-11} = rd;

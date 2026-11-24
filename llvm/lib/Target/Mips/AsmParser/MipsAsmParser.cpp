@@ -568,9 +568,6 @@ public:
     const Triple &TheTriple = sti.getTargetTriple();
     IsLittleEndian = TheTriple.isLittleEndian();
 
-    if (hasMips64r6() && inMicroMipsMode())
-      report_fatal_error("microMIPS64R6 is not supported", false);
-
     if (!isABI_O32() && inMicroMipsMode() && !hasMips64r2())
       report_fatal_error("microMIPS64 is not supported", false);
   }
@@ -7555,9 +7552,6 @@ bool MipsAsmParser::parseSetArchDirective() {
   if (ArchFeatureName.empty())
     return reportParseError("unsupported architecture");
 
-  if (ArchFeatureName == "mips64r6" && inMicroMipsMode())
-    return reportParseError("mips64r6 does not support microMIPS");
-
   selectArch(ArchFeatureName);
   getTargetStreamer().emitDirectiveSetArch(Arch);
   return false;
@@ -7965,13 +7959,8 @@ bool MipsAsmParser::parseDirectiveSet() {
     getParser().eatToEndOfStatement();
     return false;
   }
-  if (IdVal == "micromips") {
-    if (hasMips64r6()) {
-      Error(Loc, ".set micromips directive is not supported with MIPS64R6");
-      return false;
-    }
+  if (IdVal == "micromips")
     return parseSetFeature(Mips::FeatureMicroMips);
-  }
   if (IdVal == "mips0")
     return parseSetMips0Directive();
   if (IdVal == "mips1")
@@ -8002,13 +7991,8 @@ bool MipsAsmParser::parseDirectiveSet() {
     return parseSetFeature(Mips::FeatureMips64r3);
   if (IdVal == "mips64r5")
     return parseSetFeature(Mips::FeatureMips64r5);
-  if (IdVal == "mips64r6") {
-    if (inMicroMipsMode()) {
-      Error(Loc, "MIPS64R6 is not supported with microMIPS");
-      return false;
-    }
+  if (IdVal == "mips64r6")
     return parseSetFeature(Mips::FeatureMips64r6);
-  }
   if (IdVal == "dsp")
     return parseSetFeature(Mips::FeatureDSP);
   if (IdVal == "dspr2")
