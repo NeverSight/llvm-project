@@ -99,6 +99,36 @@ let DecoderNamespace = "MicroMips64" in {
                   ISA_MICROMIPS64_PRE_R6;
   }
 
+  let AdditionalPredicates = [IsNotSingleFloat] in {
+    def DMFC1_MM : MMRel, MFC1_FT<"dmfc1", GPR64Opnd, FGR64Opnd, bitconvert>,
+                   MFC1_FM_MM<0x90>, ISA_MICROMIPS64_PRE_R6, FGR_64;
+    def DMTC1_MM : MMRel, MTC1_FT<"dmtc1", FGR64Opnd, GPR64Opnd, bitconvert>,
+                   MFC1_FM_MM<0xb0>, ISA_MICROMIPS64_PRE_R6, FGR_64;
+  }
+
+  let mayRaiseFPException = 1 in {
+    let Uses = [FCR31] in {
+      def CVT_D64_L_MM : MMRel, ABSS_FT<"cvt.d.l", FGR64Opnd, FGR64Opnd>,
+                         ABS_FM_MM<2, 0x4d>, ISA_MICROMIPS64_PRE_R6, FGR_64;
+      def CVT_S_L_MM : MMRel, ABSS_FT<"cvt.s.l", FGR32Opnd, FGR64Opnd>,
+                       ABS_FM_MM<2, 0x6d>, ISA_MICROMIPS64_PRE_R6, FGR_64;
+    }
+    def TRUNC_L_S_MM : MMRel, ABSS_FT<"trunc.l.s", FGR64Opnd, FGR32Opnd>,
+                       ROUND_W_FM_MM<0, 0x8c>, ISA_MICROMIPS64_PRE_R6, FGR_64;
+    def TRUNC_L_D64_MM : MMRel, ABSS_FT<"trunc.l.d", FGR64Opnd, FGR64Opnd>,
+                         ROUND_W_FM_MM<1, 0x8c>, ISA_MICROMIPS64_PRE_R6, FGR_64;
+  }
+
+  def MOVT_D64_MM : CMov_F_F_FT<"movt.d", FGR64Opnd, MipsCMovFP_T>,
+                    CMov_F_F_FM_MM<0x60, 1>, ISA_MICROMIPS64_PRE_R6, FGR_64;
+  def MOVF_D64_MM : CMov_F_F_FT<"movf.d", FGR64Opnd, MipsCMovFP_F>,
+                    CMov_F_F_FM_MM<0x20, 1>, ISA_MICROMIPS64_PRE_R6, FGR_64;
+  def FCMP_D64_MM : CEQS_FT<"d", FGR64, MipsFPCmp>, CEQS_FM_MM<1>,
+                    ISA_MICROMIPS64_PRE_R6, FGR_64 {
+    let isCodeGenOnly = 1;
+    bits<3> fcc = 0;
+  }
+
   let DecoderMethod = "DecodeMemMMImm12<Mips::GPR64RegClassID>" in {
     def LWU64_MM : LoadWordUnsignedMM<GPR64Opnd>, ISA_MICROMIPS64_PRE_R6;
     def LDL_MM : LoadLeftRightMM<"ldl", MipsLDL, GPR64Opnd, mem_simm12>,
@@ -154,3 +184,8 @@ def : MipsInstAlias<"dext $rt, $rs, $pos, $size",
 def : MipsInstAlias<"dext $rt, $rs, $pos, $size",
                     (DEXTU_MM GPR64Opnd:$rt, GPR64Opnd:$rs, uimm5_plus32:$pos,
                               uimm5_plus1:$size)>, ISA_MICROMIPS64_PRE_R6;
+
+def : MipsPat<(MipsTruncIntFP FGR32Opnd:$src), (TRUNC_L_S_MM FGR32Opnd:$src)>,
+      ISA_MICROMIPS64_PRE_R6, FGR_64;
+def : MipsPat<(MipsTruncIntFP FGR64Opnd:$src), (TRUNC_L_D64_MM FGR64Opnd:$src)>,
+      ISA_MICROMIPS64_PRE_R6, FGR_64;

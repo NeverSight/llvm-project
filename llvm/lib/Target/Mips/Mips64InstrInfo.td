@@ -357,7 +357,8 @@ def PseudoMTLOHI64 : PseudoMTLOHI<ACC128, GPR64>, ISA_MIPS3_NOT_32R6_64R6<NotInM
 }
 
 /// Sign Ext In Register Instructions.
-let isCodeGenOnly = 1, Arch = "se64" in {
+let isCodeGenOnly = 1, Arch = "se64",
+    EncodingPredicates = [NotInMips16Mode] in {
 def SEB64 : MMRel, SignExtInReg<"seb", i8, GPR64Opnd>, SEB_FM<0x10, 0x20>,
             ISA_MIPS32R2, GPR_64;
 def SEH64 : MMRel, SignExtInReg<"seh", i16, GPR64Opnd>, SEB_FM<0x18, 0x20>,
@@ -381,8 +382,8 @@ let AdditionalPredicates = [NotInMicroMips] in {
                     GPR_64;
 }
 
-let isCodeGenOnly = 1 in
-def RDHWR64 : ReadHardware<GPR64Opnd, HWRegsOpnd>, RDHWR_FM, GPR_64;
+let isCodeGenOnly = 1, Arch = "se64" in
+def RDHWR64 : MMRel, ReadHardware<GPR64Opnd, HWRegsOpnd>, RDHWR_FM, GPR_64;
 
 class DEXTDesc : ExtBase<"dext", GPR64Opnd, uimm5_report_uimm6,
                          uimm5_plus1_report_uimm6, immZExt5, immZExt5Plus1,
@@ -697,8 +698,8 @@ def : MipsPat<(MipsGotHi texternalsym:$in), (LUi64 texternalsym:$in)>,
 def : MipsPat<(MipsTlsHi tglobaltlsaddr:$in), (LUi64 tglobaltlsaddr:$in)>,
       ISA_MIPS3, GPR_64;
 
-// highest/higher/hi/lo relocs
-let AdditionalPredicates = [NotInMicroMips] in {
+// Both instruction encodings materialize the four chunks of a 64-bit symbol.
+let EncodingPredicates = [NotInMips16Mode] in {
   def : MipsPat<(MipsJmpLink (i64 texternalsym:$dst)),
                 (JAL texternalsym:$dst)>, ISA_MIPS3, GPR_64, SYM_64;
 
@@ -801,12 +802,12 @@ def : MipsPat<(add GPR64:$gp, (MipsGPRel tglobaladdr:$in)),
 def : MipsPat<(add GPR64:$gp, (MipsGPRel tconstpool:$in)),
               (DADDiu GPR64:$gp, tconstpool:$in)>, ISA_MIPS3, ABI_N64;
 
-def : WrapperPat<tglobaladdr, DADDiu, GPR64>, ISA_MIPS3, GPR_64;
-def : WrapperPat<tconstpool, DADDiu, GPR64>, ISA_MIPS3, GPR_64;
-def : WrapperPat<texternalsym, DADDiu, GPR64>, ISA_MIPS3, GPR_64;
-def : WrapperPat<tblockaddress, DADDiu, GPR64>, ISA_MIPS3, GPR_64;
-def : WrapperPat<tjumptable, DADDiu, GPR64>, ISA_MIPS3, GPR_64;
-def : WrapperPat<tglobaltlsaddr, DADDiu, GPR64>, ISA_MIPS3, GPR_64;
+def : WrapperPat<tglobaladdr, DADDiu, GPR64>, MIPS3_GPR64;
+def : WrapperPat<tconstpool, DADDiu, GPR64>, MIPS3_GPR64;
+def : WrapperPat<texternalsym, DADDiu, GPR64>, MIPS3_GPR64;
+def : WrapperPat<tblockaddress, DADDiu, GPR64>, MIPS3_GPR64;
+def : WrapperPat<tjumptable, DADDiu, GPR64>, MIPS3_GPR64;
+def : WrapperPat<tglobaltlsaddr, DADDiu, GPR64>, MIPS3_GPR64;
 
 
 defm : BrcondPats<GPR64, BEQ64, BEQ, BNE64, SLT64, SLTu64, SLTi64, SLTiu64,

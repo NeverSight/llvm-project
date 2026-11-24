@@ -109,6 +109,10 @@ wide:
 .end wide
 
 .p2align 2
+# The halfword between the two functions is independently executable.
+# BE: 52: 0c 00
+# LE: 52: 00 0c
+# REG-SAME: nop
 .globl extended
 .ent extended
 extended:
@@ -194,3 +198,49 @@ extended:
 # REG-SAME: scd $3, 8($4)
   scd $3,8($4)
 .end extended
+
+.globl fpwide
+.ent fpwide
+fpwide:
+# REG-LABEL: <fpwide>:
+# BE: 54 87 24 3b
+# LE: 87 54 3b 24
+# REG-SAME: dmfc1 $4, $f7
+  dmfc1 $4, $f7
+# BE: 54 a6 2c 3b
+# LE: a6 54 3b 2c
+# REG-SAME: dmtc1 $5, $f6
+  dmtc1 $5, $f6
+# BE: 54 44 53 7b
+# LE: 44 54 7b 53
+# REG-SAME: cvt.d.l $f2, $f4
+  cvt.d.l $f2, $f4
+# BE: 54 44 5b 7b
+# LE: 44 54 7b 5b
+# REG-SAME: cvt.s.l $f2, $f4
+  cvt.s.l $f2, $f4
+# BE: 54 44 63 3b
+# LE: 44 54 3b 63
+# REG-SAME: trunc.l.d $f2, $f4
+  trunc.l.d $f2, $f4
+# BE: 54 44 23 3b
+# LE: 44 54 3b 23
+# REG-SAME: trunc.l.s $f2, $f4
+  trunc.l.s $f2, $f4
+# BE: 54 44 02 60
+# LE: 44 54 60 02
+# REG-SAME: movt.d $f2, $f4, $fcc0
+  movt.d $f2, $f4, $fcc0
+# BE: 54 44 62 20
+# LE: 44 54 20 62
+# REG-SAME: movf.d $f2, $f4, $fcc3
+  movf.d $f2, $f4, $fcc3
+# BE: 55 ac 05 3c
+# LE: ac 55 3c 05
+# REG-SAME: c.olt.d {{(\$fcc0, )?}}$f12, $f13
+  c.olt.d $fcc0, $f12, $f13
+# BE: 54 44 20 7b
+# LE: 44 54 7b 20
+# REG-SAME: mov.d $f2, $f4
+  mov.d $f2, $f4
+.end fpwide

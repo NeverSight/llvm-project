@@ -865,7 +865,7 @@ static DecodeStatus DecodeDINS(MCInst &MI, InsnType Insn, uint64_t Address,
   MI.addOperand(MCOperand::createImm(Pos));
   MI.addOperand(MCOperand::createImm(Size));
   if (Micro)
-    MI.addOperand(MI.getOperand(0));
+    MI.addOperand(MCOperand::createReg(MI.getOperand(0).getReg()));
 
   return MCDisassembler::Success;
 }

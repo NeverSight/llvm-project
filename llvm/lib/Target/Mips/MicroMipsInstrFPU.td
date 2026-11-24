@@ -16,8 +16,7 @@ multiclass ADDS_MMM<string opstr, bit IsComm,
                 FGR_32 {
     string DecoderNamespace = "MicroMips";
   }
-  // FIXME: This needs to be part of the instruction mapping tables.
-  def _D64_MM : ADDS_FT<opstr, FGR64Opnd, IsComm, OpNode>, FGR_64 {
+  def _D64_MM : MMRel<1>, ADDS_FT<opstr, FGR64Opnd, IsComm, OpNode>, FGR_64 {
     string DecoderNamespace = "MicroMipsFP64";
   }
 }
@@ -119,7 +118,7 @@ multiclass ABSS_MMM<string opstr,
                 ISA_MICROMIPS, FGR_32 {
     string DecoderNamespace = "MicroMips";
   }
-  def _D64_MM : StdMMR6Rel, ABSS_FT<opstr, FGR64Opnd, FGR64Opnd, OpNode>,
+  def _D64_MM : MMRel<1>, StdMMR6Rel, ABSS_FT<opstr, FGR64Opnd, FGR64Opnd, OpNode>,
                 ISA_MICROMIPS, FGR_64 {
     string DecoderNamespace = "MicroMipsFP64";
   }
@@ -393,7 +392,7 @@ let DecoderNamespace = "MicroMips" in {
              ISA_MICROMIPS32_NOT_MIPS32R6, FGR_32;
 }
 
-let DecoderNamespace = "Mips64" in
+let DecoderNamespace = "MicroMipsFP64" in
   defm D64 : C_COND_MM<"d", FGR64Opnd, 0b01>,
              ISA_MICROMIPS32_NOT_MIPS32R6, FGR_64;
 

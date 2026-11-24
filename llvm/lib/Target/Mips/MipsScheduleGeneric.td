@@ -807,7 +807,7 @@ def GenericWriteFPUSqrtD : SchedWriteRes<[GenericFPUDivSqrt]> {
 // ---------------------------------
 //
 // c.<cc>.[ds], bc1[tf], bc1[tf]l
-def : InstRW<[GenericWriteFPUCmp], (instrs FCMP_D32, FCMP_D64, FCMP_S32, BC1F,
+def : InstRW<[GenericWriteFPUCmp], (instrs FCMP_D32, FCMP_D64, FCMP_D64_MM, FCMP_S32, BC1F,
                                     BC1T, BC1FL, BC1TL)>;
 
 def : InstRW<[GenericWriteFPUCmp], (instregex "C_[A-Z]+_(S|D32|D64)$")>;
@@ -923,7 +923,7 @@ def : InstRW<[GenericWriteFPUS], (instrs MADDF_S, MSUBF_S, MADDF_D, MSUBF_D)>;
 // microMIPS
 // =========
 
-def : InstRW<[GenericWriteFPUMoveFP], (instrs MOVF_D32_MM, MOVF_S_MM,
+def : InstRW<[GenericWriteFPUMoveFP], (instrs MOVF_D32_MM, MOVF_D64_MM, MOVT_D64_MM, MOVF_S_MM,
                                        MOVN_I_D32_MM, MOVN_I_S_MM,
                                        MOVT_D32_MM, MOVT_S_MM, MOVZ_I_D32_MM,
                                        MOVZ_I_S_MM)>;
@@ -938,7 +938,9 @@ def : InstRW<[GenericWriteFPUL], (instrs CVT_D32_S_MM, CVT_D32_W_MM,
                                   FLOOR_W_MM, FLOOR_W_S_MM, NMADD_S_MM,
                                   NMADD_D32_MM, NMSUB_S_MM, NMSUB_D32_MM,
                                   MADD_S_MM, MADD_D32_MM, ROUND_W_MM,
-                                  ROUND_W_S_MM, TRUNC_W_MM, TRUNC_W_S_MM)>;
+                                  ROUND_W_S_MM, TRUNC_W_MM, TRUNC_W_S_MM,
+                                  CVT_D64_L_MM, CVT_S_L_MM, TRUNC_L_D64_MM,
+                                  TRUNC_L_S_MM)>;
 
 def : InstRW<[GenericWriteFPUCmp], (instregex "^C_[A-Z]_(S|D32|D64)_MM$")>;
 def : InstRW<[GenericWriteFPUCmp], (instregex "^C_[A-Z][A-Z]_(S|D32|D64)_MM$")>;
@@ -1030,7 +1032,7 @@ def : InstRW<[GenericWriteFPULoad], (instrs LDC1_D64_MMR6)>;
 // MIPS64
 // ======
 
-def : InstRW<[GenericWriteFPUMoveGPRFPU], (instrs DMFC1, DMTC1)>;
+def : InstRW<[GenericWriteFPUMoveGPRFPU], (instrs DMFC1, DMTC1, DMFC1_MM, DMTC1_MM)>;
 
 // MIPS DSP ASE, HasDSP
 // ====================

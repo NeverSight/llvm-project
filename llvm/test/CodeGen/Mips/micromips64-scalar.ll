@@ -127,3 +127,42 @@ define i64 @call_indirect(ptr %f, i64 %v) {
   %sum = add i64 %r, %v
   ret i64 %sum
 }
+
+define i64 @fp_payload(double %a) {
+; CHECK-LABEL: <fp_payload>:
+; CHECK:       dmfc1 $2, $f12
+  %bits = bitcast double %a to i64
+  ret i64 %bits
+}
+
+define double @from_bits(i64 %a) {
+; CHECK-LABEL: <from_bits>:
+; CHECK:       dmtc1 $4, $f0
+  %r = bitcast i64 %a to double
+  ret double %r
+}
+
+define i64 @trunc_to_integer(double %a) {
+; CHECK-LABEL: <trunc_to_integer>:
+; CHECK:       trunc.l.d
+; CHECK:       dmfc1
+  %r = fptosi double %a to i64
+  ret i64 %r
+}
+
+define double @convert_signed(i64 %a) {
+; CHECK-LABEL: <convert_signed>:
+; CHECK:       dmtc1
+; CHECK:       cvt.d.l
+  %r = sitofp i64 %a to double
+  ret double %r
+}
+
+define double @choose_double(double %a, double %b) {
+; CHECK-LABEL: <choose_double>:
+; CHECK:       c.olt.d
+; CHECK:       mov{{[tf]}}.d
+  %c = fcmp olt double %a, %b
+  %r = select i1 %c, double %a, double %b
+  ret double %r
+}

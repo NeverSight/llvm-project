@@ -35,12 +35,15 @@ def FrmFR     : Format<4>;
 def FrmFI     : Format<5>;
 def FrmOther  : Format<6>; // Instruction w/ a custom format
 
-class MMRel;
+// Paired 32-bit FPRs and native 64-bit FPRs may share a mnemonic.
+class MMRel<bit nativeFPR64 = 0> {
+  bit NativeFPR64 = nativeFPR64;
+}
 
 def Std2MicroMips : InstrMapping {
   let FilterClass = "MMRel";
-  // Instructions with the same BaseOpcode and isNVStore values form a row.
-  let RowFields = ["BaseOpcode"];
+  // Select the matching mnemonic and floating register layout.
+  let RowFields = ["BaseOpcode", "NativeFPR64"];
   // Instructions with the same predicate sense form a column.
   let ColFields = ["Arch"];
   // The key column is the unpredicated instructions.
@@ -53,7 +56,7 @@ def Std2MicroMips : InstrMapping {
 // counterpart. Both use the same microMIPS instruction record.
 def GP64ToMicroMips : InstrMapping {
   let FilterClass = "MMRel";
-  let RowFields = ["BaseOpcode"];
+  let RowFields = ["BaseOpcode", "NativeFPR64"];
   let ColFields = ["Arch"];
   let KeyCol = ["se64"];
   let ValueCols = [["micromips"]];
