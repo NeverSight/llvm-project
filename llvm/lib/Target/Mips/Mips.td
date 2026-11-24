@@ -94,8 +94,7 @@ def FeatureMips3_32r2  : SubtargetFeature<"mips3_32r2", "HasMips3_32r2", "true",
 def FeatureMips3       : SubtargetFeature<"mips3", "MipsArchVersion", "Mips3",
                                 "MIPS III ISA Support [highly experimental]",
                                 [FeatureMips2, FeatureMips3_32,
-                                 FeatureMips3_32r2, FeatureGP64Bit,
-                                 FeatureFP64Bit]>;
+                                 FeatureMips3_32r2, FeatureGP64Bit]>;
 def FeatureMips4_32    : SubtargetFeature<"mips4_32", "HasMips4_32", "true",
                                 "Subset of MIPS-IV that is also in MIPS32 "
                                 "[highly experimental]">;
@@ -292,18 +291,22 @@ def : Proc<"mips32r3", [FeatureMips32r3]>;
 def : Proc<"mips32r5", [FeatureMips32r5]>;
 def : Proc<"mips32r6", [FeatureMips32r6]>;
 
-def : Proc<"mips3", [FeatureMips3]>;
-def : Proc<"mips4", [FeatureMips4]>;
-def : Proc<"mips5", [FeatureMips5]>;
-def : Proc<"mips64", [FeatureMips64]>;
-def : Proc<"mips64r2", [FeatureMips64r2]>;
-def : Proc<"mips64r3", [FeatureMips64r3]>;
-def : Proc<"mips64r5", [FeatureMips64r5]>;
+// Pre-R6 processors also support the paired 32-bit FPR view. Making fp64 a
+// processor default lets -fp64 select FR=0 without disabling the integer ISA.
+class FP64Proc<string Name, list<SubtargetFeature> Features>
+    : Proc<Name, !listconcat(Features, [FeatureFP64Bit])>;
+def : FP64Proc<"mips3", [FeatureMips3]>;
+def : FP64Proc<"mips4", [FeatureMips4]>;
+def : FP64Proc<"mips5", [FeatureMips5]>;
+def : FP64Proc<"mips64", [FeatureMips64]>;
+def : FP64Proc<"mips64r2", [FeatureMips64r2]>;
+def : FP64Proc<"mips64r3", [FeatureMips64r3]>;
+def : FP64Proc<"mips64r5", [FeatureMips64r5]>;
 def : Proc<"mips64r6", [FeatureMips64r6]>;
-def : Proc<"octeon", [FeatureMips64r2, FeatureCnMips]>;
-def : Proc<"octeon+", [FeatureMips64r2, FeatureCnMips, FeatureCnMipsP]>;
+def : FP64Proc<"octeon", [FeatureMips64r2, FeatureCnMips]>;
+def : FP64Proc<"octeon+", [FeatureMips64r2, FeatureCnMips, FeatureCnMipsP]>;
 def : ProcessorModel<"p5600", MipsP5600Model, [ImplP5600]>;
-def : Proc<"r5900", [FeatureR5900]>;
+def : FP64Proc<"r5900", [FeatureR5900]>;
 def : ProcessorModel<"i6400", MipsI6400Model, [ImplI6400]>;
 def : ProcessorModel<"i6500", MipsI6400Model, [ImplI6500]>;
 
