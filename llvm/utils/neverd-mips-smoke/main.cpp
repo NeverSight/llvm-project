@@ -170,7 +170,7 @@ static bool objectModes(bool Little, bool N32) {
 }
 
 static bool fixedAddressLeaf(const Triple &TT, StringRef CPU,
-                             StringRef Mode = {}) {
+                             StringRef Mode = {}, bool EmitUnwind = true) {
   LLVMContext Context;
   SMDiagnostic Diagnostic;
   const bool WideMicro = TT.isMIPS64() && Mode == "micromips";
@@ -185,8 +185,13 @@ static bool fixedAddressLeaf(const Triple &TT, StringRef CPU,
       Diagnostic, Context);
   if (!Module)
     return false;
+  Function *LeafFunction = Module->getFunction("leaf");
+  if (!EmitUnwind) {
+    LeafFunction->removeFnAttr(Attribute::UWTable);
+    LeafFunction->setDoesNotThrow();
+  }
   if (!Mode.empty())
-    Module->getFunction("leaf")->addFnAttr(Mode);
+    LeafFunction->addFnAttr(Mode);
   const bool Wide = TT.isMIPS64(), Little = TT.isLittleEndian(),
              N32 = TT.isABIN32();
   std::string Err;
@@ -398,7 +403,8 @@ int main() {
                             Target.isMIPS64() ? "mips64r2" : "mips32r2") ||
           (Target.isMIPS64() &&
            (!fixedAddressLeaf(Target, "mips5") ||
-            !fixedAddressLeaf(Target, "mips64r2", "micromips"))) ||
+            !fixedAddressLeaf(Target, "mips64r2", "micromips") ||
+            !fixedAddressLeaf(Target, "mips64r2", "micromips", false))) ||
           (!Target.isMIPS64() &&
            (!fixedAddressLeaf(Target, "mips32r2", "mips16") ||
             !fixedAddressLeaf(Target, "mips32r2", "micromips")))) {

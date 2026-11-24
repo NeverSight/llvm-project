@@ -2075,6 +2075,14 @@ void AsmPrinter::emitDanglingPrefetchTargets() {
 /// EmitFunctionBody - This method emits the body and trailer for a
 /// function.
 void AsmPrinter::emitFunctionBody() {
+  const Triple &TT = TM.getTargetTriple();
+  const bool RewriteMipsELF = OutContext.requiresRewriteFunctionProvenance() &&
+                              TT.isMIPS() && TT.isOSBinFormatELF();
+  // The current function's CFI can begin in emitFunctionHeader().
+  const size_t FirstRewriteRange =
+      RewriteMipsELF
+          ? OutStreamer->getAssemblerPtr()->getRewriteFunctionRanges().size()
+          : 0;
   emitFunctionHeader();
 
   // Emit target-specific gunk before the function body.
@@ -2441,7 +2449,6 @@ void AsmPrinter::emitFunctionBody() {
   // after linking, causing the kernel not to load the binary:
   // https://developercommunity.visualstudio.com/content/problem/45366/vc-linker-creates-invalid-dll-with-clang-cl.html
   // FIXME: Hide this behind some API in e.g. MCAsmInfo or MCTargetStreamer.
-  const Triple &TT = TM.getTargetTriple();
   if (!HasAnyRealCode && (MAI.hasSubsectionsViaSymbols() ||
                           (TT.isOSWindows() && TT.isOSBinFormatCOFF()))) {
     MCInst Noop = MF->getSubtarget().getInstrInfo()->getNop();
@@ -2474,17 +2481,18 @@ void AsmPrinter::emitFunctionBody() {
   // Even though wasm supports .type and .size in general, function symbols
   // are automatically sized.
   bool EmitFunctionSize = MAI.hasDotTypeDotSizeDirective() && !TT.isWasm();
-  // PE32 registration EH does not use DWARF or Windows table-unwind CFI.
-  // Still publish an exact compiler range for its root and filter callbacks.
-  const bool RewriteX86Range = OutContext.requiresRewriteFunctionProvenance() &&
-                               TT.getArch() == Triple::x86 &&
-                               TT.isOSBinFormatCOFF();
+  // PE32 registration callbacks and nounwind MIPS ELF leaves may have no CFI
+  // range. The entry and end labels describe a single contiguous MIPS body.
+  const bool RewriteBodyRange =
+      (OutContext.requiresRewriteFunctionProvenance() &&
+       TT.getArch() == Triple::x86 && TT.isOSBinFormatCOFF()) ||
+      (RewriteMipsELF && HasAnyRealCode && MBBSectionRanges.size() == 1);
 
   // SPIR-V supports label instructions only inside a block, not after the
   // function body.
   if (TT.getObjectFormat() != Triple::SPIRV &&
       (EmitFunctionSize || needFuncLabels(*MF, *this) || CurrentFnEnd ||
-       RewriteX86Range)) {
+       RewriteBodyRange)) {
     // Create a symbol for the end of function, if not already pre-created
     // (e.g. for .prefalign directive).
     if (!CurrentFnEnd)
@@ -2529,13 +2537,14 @@ void AsmPrinter::emitFunctionBody() {
   for (auto &Handler : EHHandlers)
     Handler->endFunction(MF);
 
-  if (RewriteX86Range) {
+  if (RewriteBodyRange) {
     MCAssembler *Assembler = OutStreamer->getAssemblerPtr();
     assert(Assembler && "rewrite provenance requires an object streamer");
-    if (!llvm::any_of(Assembler->getRewriteFunctionRanges(),
-                      [&](const MCRewriteFunctionRange &Range) {
-                        return Range.Owner == CurrentFnSym;
-                      })) {
+    auto Ranges =
+        Assembler->getRewriteFunctionRanges().drop_front(FirstRewriteRange);
+    if (!llvm::any_of(Ranges, [&](const MCRewriteFunctionRange &Range) {
+          return Range.Owner == CurrentFnSym;
+        })) {
       Assembler->registerRewriteFunctionRange(CurrentFnSym, CurrentFnSym);
       Assembler->completeRewriteFunctionRange(CurrentFnSym, CurrentFnEnd);
     }
