@@ -568,10 +568,10 @@ public:
     const Triple &TheTriple = sti.getTargetTriple();
     IsLittleEndian = TheTriple.isLittleEndian();
 
-    if (getSTI().getCPU() == "mips64r6" && inMicroMipsMode())
+    if (hasMips64r6() && inMicroMipsMode())
       report_fatal_error("microMIPS64R6 is not supported", false);
 
-    if (!isABI_O32() && inMicroMipsMode())
+    if (!isABI_O32() && inMicroMipsMode() && !hasMips64r2())
       report_fatal_error("microMIPS64 is not supported", false);
   }
 
@@ -5851,6 +5851,7 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
     if (Inst.getOperand(0).getReg() == Inst.getOperand(1).getReg())
       return Match_RequiresDifferentOperands;
     return Match_Success;
+  case Mips::DINS_MM:
   case Mips::DINS: {
     assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
            "Operands must be immediates for dins!");
@@ -5860,7 +5861,9 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
       return Match_RequiresPosSizeRange0_32;
     return Match_Success;
   }
+  case Mips::DINSM_MM:
   case Mips::DINSM:
+  case Mips::DINSU_MM:
   case Mips::DINSU: {
     assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
            "Operands must be immediates for dinsm/dinsu!");
@@ -5870,6 +5873,7 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
       return Match_RequiresPosSizeRange33_64;
     return Match_Success;
   }
+  case Mips::DEXT_MM:
   case Mips::DEXT: {
     assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
            "Operands must be immediates for DEXTM!");
@@ -5879,7 +5883,9 @@ unsigned MipsAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
       return Match_RequiresPosSizeUImm6;
     return Match_Success;
   }
+  case Mips::DEXTM_MM:
   case Mips::DEXTM:
+  case Mips::DEXTU_MM:
   case Mips::DEXTU: {
     assert(Inst.getOperand(2).isImm() && Inst.getOperand(3).isImm() &&
            "Operands must be immediates for dextm/dextu!");

@@ -24,6 +24,8 @@
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include <tuple>
+#include <utility>
 
 using namespace llvm;
 
@@ -68,6 +70,15 @@ namespace {
     bool expandMBB(MachineBasicBlock &MBB);
    };
   char MipsExpandPseudo::ID = 0;
+}
+
+static std::pair<unsigned, unsigned>
+getDoublewordLLSC(const MipsSubtarget &STI) {
+  if (STI.hasMips64r6())
+    return {Mips::LLD_R6, Mips::SCD_R6};
+  if (STI.inMicroMipsMode())
+    return {Mips::LLD_MM, Mips::SCD_MM};
+  return {Mips::LLD, Mips::SCD};
 }
 
 bool MipsExpandPseudo::expandAtomicCmpSwapSubword(
@@ -231,8 +242,7 @@ bool MipsExpandPseudo::expandAtomicCmpSwap(MachineBasicBlock &BB,
     ZERO = Mips::ZERO;
     MOVE = Mips::OR;
   } else {
-    LL = STI->hasMips64r6() ? Mips::LLD_R6 : Mips::LLD;
-    SC = STI->hasMips64r6() ? Mips::SCD_R6 : Mips::SCD;
+    std::tie(LL, SC) = getDoublewordLLSC(*STI);
     ZERO = Mips::ZERO_64;
     BNE = Mips::BNE64;
     BEQ = Mips::BEQ64;
@@ -747,15 +757,14 @@ bool MipsExpandPseudo::expandAtomicBinOp(MachineBasicBlock &BB,
 
     ZERO = Mips::ZERO;
   } else {
-    LL = STI->hasMips64r6() ? Mips::LLD_R6 : Mips::LLD;
-    SC = STI->hasMips64r6() ? Mips::SCD_R6 : Mips::SCD;
+    std::tie(LL, SC) = getDoublewordLLSC(*STI);
     ZERO = Mips::ZERO_64;
     BEQ = Mips::BEQ64;
     SLT = Mips::SLT64;
     SLTu = Mips::SLTu64;
     OR = Mips::OR64;
-    MOVN = Mips::MOVN_I64_I64;
-    MOVZ = Mips::MOVZ_I64_I64;
+    MOVN = STI->inMicroMipsMode() ? Mips::MOVN_I64_I64_MM : Mips::MOVN_I64_I64;
+    MOVZ = STI->inMicroMipsMode() ? Mips::MOVZ_I64_I64_MM : Mips::MOVZ_I64_I64;
     SELNEZ = Mips::SELNEZ64;
     SELEQZ = Mips::SELEQZ64;
   }

@@ -43,11 +43,11 @@ static const TargetRegisterClass &getGlobalBaseRegClass(MachineFunction &MF) {
   if (STI.inMips16Mode())
     return Mips::CPU16RegsRegClass;
 
-  if (STI.inMicroMipsMode())
-    return Mips::GPRMM16RegClass;
-
   if (TM.getABI().IsN64())
     return Mips::GPR64RegClass;
+
+  if (STI.inMicroMipsMode())
+    return Mips::GPRMM16RegClass;
 
   return Mips::GPR32RegClass;
 }

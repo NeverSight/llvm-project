@@ -338,14 +338,14 @@ class ISA_MIPS3 {
   list<Predicate> InsnPredicates = [HasMips3];
   list<Predicate> EncodingPredicates = [HasStdEnc];
 }
-class ISA_MIPS3_NOT_32R6_64R6 {
+class ISA_MIPS3_NOT_32R6_64R6<Predicate Encoding = HasStdEnc> {
   list<Predicate> InsnPredicates = [HasMips3, NotMips32r6, NotMips64r6];
-  list<Predicate> EncodingPredicates = [HasStdEnc];
+  list<Predicate> EncodingPredicates = [Encoding];
 }
-class ISA_MIPS3_NOT_32R6_64R6_R5900 {
+class ISA_MIPS3_NOT_32R6_64R6_R5900<Predicate Encoding = HasStdEnc> {
   list<Predicate> InsnPredicates = [HasMips3, NotMips32r6, NotMips64r6,
                                     NotR5900];
-  list<Predicate> EncodingPredicates = [HasStdEnc];
+  list<Predicate> EncodingPredicates = [Encoding];
 }
 class ISA_MIPS32 {
   list<Predicate> InsnPredicates = [HasMips32];
@@ -392,6 +392,16 @@ class ISA_MIPS64R6 {
   list<Predicate> EncodingPredicates = [HasStdEnc];
 }
 class ISA_MICROMIPS {
+  list<Predicate> EncodingPredicates = [InMicroMips];
+}
+// GP64 selection patterns shared by the standard and microMIPS encodings.
+class MIPS3_GPR64 {
+  list<Predicate> InsnPredicates = [HasMips3];
+  list<Predicate> GPRPredicates = [IsGP64bit];
+  list<Predicate> EncodingPredicates = [NotInMips16Mode];
+}
+class ISA_MICROMIPS64_PRE_R6 {
+  list<Predicate> InsnPredicates = [HasMips64r2, NotMips32r6];
   list<Predicate> EncodingPredicates = [InMicroMips];
 }
 class ISA_MICROMIPS32R5 {
@@ -2297,7 +2307,7 @@ def JAL  : MMRel, JumpLink<"jal", calltarget>, FJ<3>, ISA_MIPS1;
 }
 
 let AdditionalPredicates = [NotInMicroMips, NoIndirectJumpGuards] in {
-  def JALR : JumpLinkReg<"jalr", GPR32Opnd>, JALR_FM, ISA_MIPS1;
+  def JALR : MMRel, JumpLinkReg<"jalr", GPR32Opnd>, JALR_FM, ISA_MIPS1;
   def JALRPseudo : JumpLinkRegPseudo<GPR32Opnd, JALR, RA>, ISA_MIPS1;
 }
 
@@ -3448,6 +3458,7 @@ include "MipsMTInstrInfo.td"
 // Micromips
 include "MicroMipsInstrFormats.td"
 include "MicroMipsInstrInfo.td"
+include "MicroMips64InstrInfo.td"
 include "MicroMipsInstrFPU.td"
 
 // Micromips r6

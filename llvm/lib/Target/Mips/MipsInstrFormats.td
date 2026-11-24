@@ -35,18 +35,31 @@ def FrmFR     : Format<4>;
 def FrmFI     : Format<5>;
 def FrmOther  : Format<6>; // Instruction w/ a custom format
 
-class MMRel;
+// Paired 32-bit FPRs and native 64-bit FPRs may share a mnemonic.
+class MMRel<bit nativeFPR64 = 0> {
+  bit NativeFPR64 = nativeFPR64;
+}
 
 def Std2MicroMips : InstrMapping {
   let FilterClass = "MMRel";
-  // Instructions with the same BaseOpcode and isNVStore values form a row.
-  let RowFields = ["BaseOpcode"];
+  // Select the matching mnemonic and floating register layout.
+  let RowFields = ["BaseOpcode", "NativeFPR64"];
   // Instructions with the same predicate sense form a column.
   let ColFields = ["Arch"];
   // The key column is the unpredicated instructions.
   let KeyCol = ["se"];
   // Value columns are PredSense=true and PredSense=false
   let ValueCols = [["se"], ["micromips"]];
+}
+
+// A GPR64 codegen-only view can share the wire encoding of its GPR32
+// counterpart. Both use the same microMIPS instruction record.
+def GP64ToMicroMips : InstrMapping {
+  let FilterClass = "MMRel";
+  let RowFields = ["BaseOpcode", "NativeFPR64"];
+  let ColFields = ["Arch"];
+  let KeyCol = ["se64"];
+  let ValueCols = [["micromips"]];
 }
 
 class StdMMR6Rel;
@@ -107,6 +120,7 @@ class MipsInst<dag outs, dag ins, string asmstr, list<dag> pattern,
   let TSFlags{6}     = hasFCCRegOperand;
 
   let DecoderNamespace = "Mips";
+  let TSFlags{8} = !eq(!find(DecoderNamespace, "MicroMips"), 0);
 }
 
 // Mips32/64 Instruction Format
@@ -385,7 +399,7 @@ class LUI_FM : StdArch {
   let Inst{15-0}  = imm16;
 }
 
-class JALR_FM {
+class JALR_FM : StdArch {
   bits<5> rd;
   bits<5> rs;
 

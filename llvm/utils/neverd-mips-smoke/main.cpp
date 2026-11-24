@@ -8,6 +8,7 @@
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
@@ -169,18 +170,28 @@ static bool objectModes(bool Little, bool N32) {
 }
 
 static bool fixedAddressLeaf(const Triple &TT, StringRef CPU,
-                             StringRef Mode = {}) {
+                             StringRef Mode = {}, bool EmitUnwind = true) {
   LLVMContext Context;
   SMDiagnostic Diagnostic;
-  auto Module = parseAssemblyString(R"(
-    @entry = global [2 x ptr] [ptr @leaf, ptr getelementptr (i8, ptr @leaf, i32 1)]
-    define i32 @leaf() uwtable { ret i32 37 }
-  )",
-                                    Diagnostic, Context);
+  const bool WideMicro = TT.isMIPS64() && Mode == "micromips";
+  StringRef Leaf = WideMicro ? "define i64 @leaf(i64 %a, i64 %b) uwtable { "
+                               "%r = add i64 %a, %b ret i64 %r }"
+                             : "define i32 @leaf() uwtable { ret i32 37 }";
+  auto Module = parseAssemblyString(
+      (Twine("@entry = global [2 x ptr] [ptr @leaf, ptr getelementptr "
+             "(i8, ptr @leaf, i32 1)]\n") +
+       Leaf)
+          .str(),
+      Diagnostic, Context);
   if (!Module)
     return false;
+  Function *LeafFunction = Module->getFunction("leaf");
+  if (!EmitUnwind) {
+    LeafFunction->removeFnAttr(Attribute::UWTable);
+    LeafFunction->setDoesNotThrow();
+  }
   if (!Mode.empty())
-    Module->getFunction("leaf")->addFnAttr(Mode);
+    LeafFunction->addFnAttr(Mode);
   const bool Wide = TT.isMIPS64(), Little = TT.isLittleEndian(),
              N32 = TT.isABIN32();
   std::string Err;
@@ -221,7 +232,9 @@ static bool fixedAddressLeaf(const Triple &TT, StringRef CPU,
            << ", entry=" << utohexstr(Result.SymbolAddrs["entry"]) << '\n';
     return false;
   }
-  const unsigned BodySize = Mode == "mips16" ? 6 : Mode == "micromips" ? 4 : 8;
+  const unsigned BodySize = Mode == "mips16"                      ? 6
+                            : (Mode == "micromips" && !WideMicro) ? 4
+                                                                  : 8;
   const auto &Range = Result.FunctionRanges.front();
   if (Range.OwnerSymbol != "leaf" || Range.BeginVA != Base + 0x10000 ||
       Range.EndVA != Base + 0x10000 + BodySize) {
@@ -239,6 +252,12 @@ static bool fixedAddressLeaf(const Triple &TT, StringRef CPU,
         SawText = support::endian::read16(Text, Order) == 0xf020 &&
                   support::endian::read16(Text + 2, Order) == 0x6a05 &&
                   support::endian::read16(Text + 4, Order) == 0xe8a0;
+      else if (WideMicro)
+        // GNU as encodes JR $ra followed by DADDU $v0, $a0, $a1.
+        SawText = support::endian::read16(Text, Order) == 0x001f &&
+                  support::endian::read16(Text + 2, Order) == 0x0f3c &&
+                  support::endian::read16(Text + 4, Order) == 0x58a4 &&
+                  support::endian::read16(Text + 6, Order) == 0x1150;
       else if (Mode == "micromips")
         SawText = support::endian::read16(Text, Order) == 0xed25 &&
                   support::endian::read16(Text + 2, Order) == 0x45bf;
@@ -382,7 +401,10 @@ int main() {
       Triple Target(Triple::normalize(TT));
       if (!fixedAddressLeaf(Target,
                             Target.isMIPS64() ? "mips64r2" : "mips32r2") ||
-          (Target.isMIPS64() && !fixedAddressLeaf(Target, "mips5")) ||
+          (Target.isMIPS64() &&
+           (!fixedAddressLeaf(Target, "mips5") ||
+            !fixedAddressLeaf(Target, "mips64r2", "micromips") ||
+            !fixedAddressLeaf(Target, "mips64r2", "micromips", false))) ||
           (!Target.isMIPS64() &&
            (!fixedAddressLeaf(Target, "mips32r2", "mips16") ||
             !fixedAddressLeaf(Target, "mips32r2", "micromips")))) {

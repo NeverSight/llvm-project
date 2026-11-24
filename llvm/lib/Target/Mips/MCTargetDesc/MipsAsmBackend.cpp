@@ -26,6 +26,7 @@
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Support/EndianStream.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -782,13 +783,13 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
 /// \return - True on success.
 bool MipsAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,
                                   const MCSubtargetInfo *STI) const {
-  // Check for a less than instruction size number of bytes
-  // FIXME: 16 bit instructions are not handled yet here.
-  // We shouldn't be using a hard coded number for instruction size.
-
-  // If the count is not 4-byte aligned, we must be writing data into the text
-  // section (otherwise we have unaligned instructions, and thus have far
-  // bigger problems), so just write zeros instead.
+  // A zero halfword starts a 32-bit instruction. Use MOVE16 $zero, $zero
+  // for a two-byte remainder so execution cannot consume the next symbol.
+  if (STI && STI->hasFeature(Mips::FeatureMicroMips) &&
+      !STI->hasFeature(Mips::FeatureMips32r6) && Count % 4 == 2) {
+    support::endian::write<uint16_t>(OS, 0x0c00, Endian);
+    Count -= 2;
+  }
   OS.write_zeros(Count);
   return true;
 }
