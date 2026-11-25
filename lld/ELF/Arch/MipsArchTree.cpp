@@ -306,7 +306,10 @@ template <class ELFT> uint32_t elf::calcMipsEFlags(Ctx &ctx) {
     return ctx.arg.mipsN32Abi ? EF_MIPS_ABI2 : EF_MIPS_ABI_O32;
   }
   checkFlags(ctx, v);
-  return getMiscFlags(v) | getPicFlags(ctx, v) | getArchFlags(ctx, v);
+  uint32_t flags = getMiscFlags(v);
+  if ((flags & EF_MIPS_MICROMIPS) && (flags & EF_MIPS_ARCH_ASE_M16))
+    Err(ctx) << "MIPS16 and microMIPS cannot share an ELF ISA mode bit";
+  return flags | getPicFlags(ctx, v) | getArchFlags(ctx, v);
 }
 
 static int compareMipsFpAbi(uint8_t fpA, uint8_t fpB) {

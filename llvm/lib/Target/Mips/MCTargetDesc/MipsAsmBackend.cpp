@@ -16,6 +16,7 @@
 #include "MCTargetDesc/MipsFixupKinds.h"
 #include "MCTargetDesc/MipsMCTargetDesc.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/BinaryFormat/ELFRelocs/Mips.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
@@ -370,10 +371,6 @@ static bool needsGPOrTLSBase(MCFixupKind Kind) {
   }
 }
 
-static uint32_t mips16JumpField(uint32_t Word) {
-  return (Word & 0xffff) | ((Word & 0x1f0000) << 5) | ((Word & 0x3e00000) >> 5);
-}
-
 // The jump instruction concatenates high bits of PC+4 with its immediate.
 // JALX exchanges ISA mode and, for microMIPS, also changes the target scale.
 static void applyFinalJump(MCContext &Ctx, endianness Endian,
@@ -410,7 +407,7 @@ static void applyFinalJump(MCContext &Ctx, endianness Endian,
   }
   uint32_t Field = (Value >> Scale) & 0x03ffffff;
   if (Mips16) {
-    Field = mips16JumpField(Field);
+    Field = ELF::encodeMips16JumpField(Field);
     support::endian::write16(Data, (Exchange ? 0x1c00 : 0x1800) | (Field >> 16),
                              Endian);
     support::endian::write16(Data + 2, Field, Endian);
@@ -512,7 +509,7 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
     if (!Mode)
       Data[Endian == llvm::endianness::little ? 1 : 0] |= 4;
     uint32_t Word = (Value >> 2) & 0x03ffffff;
-    Value = mips16JumpField(Word);
+    Value = ELF::encodeMips16JumpField(Word);
   } else if (Kind == Mips::fixup_MICROMIPS_26_S1 &&
              (support::endian::read16(Data, Endian) >> 10) == 0x3c) {
     // The microMIPS JALX REL addend is word-scaled even though it uses
