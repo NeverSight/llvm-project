@@ -475,6 +475,14 @@ unsigned MipsInstrInfo::getEquivalentCompactForm(
       if (I->getOperand(1).getReg() == Subtarget.getABI().GetZeroReg())
         canUseShortMicroMipsCTI = true;
       break;
+    // The pre-R6 microMIPS64 compact jump uses the full register address.
+    case Mips::JR64:
+    case Mips::PseudoReturn64:
+    case Mips::PseudoIndirectBranch64:
+    case Mips::TAILCALLREG64:
+      if (!Subtarget.hasMips32r6())
+        return Mips::JRC16_MM64;
+      break;
     // microMIPS has a compact register jump in both ISA revisions.
     case Mips::JR:
     case Mips::PseudoReturn:

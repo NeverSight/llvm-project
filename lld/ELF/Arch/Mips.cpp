@@ -1128,7 +1128,7 @@ template <class ELFT> bool elf::isMipsPIC(const Defined *sym) {
   if (!sym->isFunc())
     return false;
 
-  if (sym->stOther & STO_MIPS_PIC)
+  if (!sym->isMips16() && (sym->stOther & STO_MIPS_PIC))
     return true;
 
   if (!sym->section)

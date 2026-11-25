@@ -2156,20 +2156,13 @@ template <class ELFT> void SymbolTableSection<ELFT>::writeTo(uint8_t *buf) {
       Symbol *sym = ent.sym;
       if (sym->isInPlt(ctx) && sym->hasFlag(NEEDS_COPY))
         eSym->st_other |= STO_MIPS_PLT;
-      if (isMicroMips(ctx)) {
-        // We already set the less-significant bit for symbols
-        // marked by the `STO_MIPS_MICROMIPS` flag and for microMIPS PLT
-        // records. That allows us to distinguish such symbols in
-        // the `MIPS<ELFT>::relocate()` routine. Now we should
-        // clear that bit for non-dynamic symbol table, so tools
-        // like `objdump` will be able to deal with a correct
-        // symbol position.
-        if (sym->isDefined() &&
-            ((sym->stOther & STO_MIPS_MICROMIPS) || sym->hasFlag(NEEDS_COPY))) {
-          if (!strTabSec.isDynamic())
-            eSym->st_value &= ~1;
+      if (sym->isDefined() && sym->hasMipsCodeBit(ctx)) {
+        // .symtab records the physical address and carries the ISA in st_other.
+        // .dynsym retains the tagged callable address.
+        if (!strTabSec.isDynamic())
+          eSym->st_value &= ~1;
+        if (!sym->isMips16())
           eSym->st_other |= STO_MIPS_MICROMIPS;
-        }
       }
       if (ctx.arg.relocatable)
         if (auto *d = dyn_cast<Defined>(sym))

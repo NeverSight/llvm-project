@@ -1323,6 +1323,15 @@ void MipsR6ModeThunk::addSymbols(ThunkSection &isec) {
 // Write MIPS LA25 thunk code to call PIC function from the non-PIC one.
 void MipsThunk::writeTo(uint8_t *buf) {
   uint64_t s = destination.getVA(ctx);
+  if (destination.isMips16()) {
+    write32(ctx, buf, 0x3c190000);     // lui   $25, %hi(func)
+    write32(ctx, buf + 4, 0x27390000); // addiu $25, $25, %lo(func)
+    write32(ctx, buf + 8, 0x03200008); // jr    $25
+    write32(ctx, buf + 12, 0);         // nop
+    ctx.target->relocateNoSym(buf, R_MIPS_HI16, s);
+    ctx.target->relocateNoSym(buf + 4, R_MIPS_LO16, s);
+    return;
+  }
   write32(ctx, buf, 0x3c190000);                // lui   $25, %hi(func)
   write32(ctx, buf + 4, 0x08000000 | (s >> 2)); // j     func
   write32(ctx, buf + 8, 0x27390000);            // addiu $25, $25, %lo(func)
@@ -1867,10 +1876,11 @@ static std::unique_ptr<Thunk> addThunkMips(Ctx &ctx, const Relocation &rel) {
   Symbol &s = *rel.sym;
   if (needsMipsR6ModeThunk(ctx, rel.expr, rel.type, s, rel.addend))
     return std::make_unique<MipsR6ModeThunk>(ctx, rel);
-  if ((s.stOther & STO_MIPS_MICROMIPS) && isMipsR6(ctx))
-    return std::make_unique<MicroMipsR6Thunk>(ctx, s);
-  if (s.stOther & STO_MIPS_MICROMIPS)
+  if (!s.isMips16() && (s.stOther & STO_MIPS_MICROMIPS)) {
+    if (isMipsR6(ctx))
+      return std::make_unique<MicroMipsR6Thunk>(ctx, s);
     return std::make_unique<MicroMipsThunk>(ctx, s);
+  }
   return std::make_unique<MipsThunk>(ctx, s);
 }
 

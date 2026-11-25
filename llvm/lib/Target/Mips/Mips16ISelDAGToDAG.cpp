@@ -42,8 +42,12 @@ Mips16DAGToDAGISel::selectMULT(SDNode *N, unsigned Opc, const SDLoc &DL, EVT Ty,
 
   if (HasLo) {
     unsigned Opcode = Mips::Mflo16;
-    Lo = CurDAG->getMachineNode(Opcode, DL, Ty, MVT::Glue, InGlue);
-    InGlue = SDValue(Lo, 1);
+    Lo = CurDAG->getMachineNode(Opcode, DL,
+                                HasHi ? CurDAG->getVTList(Ty, MVT::Glue)
+                                      : CurDAG->getVTList(Ty),
+                                InGlue);
+    if (HasHi)
+      InGlue = SDValue(Lo, 1);
   }
   if (HasHi) {
     unsigned Opcode = Mips::Mfhi16;
@@ -197,6 +201,12 @@ bool Mips16DAGToDAGISel::trySelect(SDNode *Node) {
     CurDAG->RemoveDeadNode(Node);
     return true;
   }
+
+  case ISD::MUL:
+    ReplaceNode(
+        Node,
+        selectMULT(Node, Mips::MultRxRy16, DL, NodeTy, true, false).first);
+    return true;
 
   case ISD::MULHS:
   case ISD::MULHU: {

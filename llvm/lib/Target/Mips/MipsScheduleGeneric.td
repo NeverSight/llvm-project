@@ -211,8 +211,7 @@ def : InstRW<[GenericWriteDIV], (instrs MOD, MODU, DIV, DIVU)>;
 // MIPS16e
 // =======
 
-def : InstRW<[GenericWriteHILO], (instrs MultRxRy16, MultuRxRy16,
-                                  MultRxRyRz16, MultuRxRyRz16)>;
+def : InstRW<[GenericWriteHILO], (instrs MultRxRy16, MultuRxRy16)>;
 
 def : InstRW<[GenericWriteDIV], (instrs DivRxRy16)>;
 
@@ -399,7 +398,7 @@ def : InstRW<[GenericWriteJump], (instrs BC16_MMR6, BC1EQZC_MMR6, BC1NEZC_MMR6,
                                   BNEZC16_MMR6, BNEZC_MMR6, BNVC_MMR6,
                                   BOVC_MMR6, DERET_MMR6, ERETNC_MMR6, JAL_MMR6,
                                   ERET_MMR6, JIC_MMR6, JRADDIUSP, JRC16_MM,
-                                  JRC16_MMR6, JRCADDIUSP_MMR6, SIGRIE_MMR6,
+                                  JRC16_MM64, JRC16_MMR6, JRCADDIUSP_MMR6, SIGRIE_MMR6,
                                   B_MMR6_Pseudo, PseudoIndirectBranch_MMR6)>;
 
 def : InstRW<[GenericWriteJumpAndLink], (instrs BALC_MMR6, BEQZALC_MMR6,
