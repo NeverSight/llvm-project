@@ -1585,11 +1585,8 @@ public:
   }
 
   bool isMM16AsmReg() const {
-    if (!(isRegIdx() && RegIdx.Kind))
-      return false;
-    return ((RegIdx.Index >= 2 && RegIdx.Index <= 7)
-            || RegIdx.Index == 16 || RegIdx.Index == 17);
-
+    return isGPRAsmReg() && ((RegIdx.Index >= 2 && RegIdx.Index <= 7) ||
+                             RegIdx.Index == 16 || RegIdx.Index == 17);
   }
   bool isMM16AsmRegZero() const {
     if (!(isRegIdx() && RegIdx.Kind))

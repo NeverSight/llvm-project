@@ -334,15 +334,14 @@ class FI8_MOVR3216<dag outs, dag ins, string asmstr,
                    list<dag> pattern>:
   MipsInst16<outs, ins, asmstr, pattern>
 {
-  // FIXME: this seems wrong? 'ry' should be 3 bits, and 'r32' 5?
-  bits<4> ry;
-  bits<4> r32;
+  bits<3> ry;
+  bits<5> r32;
 
   let Opcode = 0b01100;
 
   let Inst{10-8} = 0b111;
-  let Inst{7-4} = ry;
-  let Inst{3-0} = r32;
+  let Inst{7-5} = ry;
+  let Inst{4-0} = r32;
 
 }
 

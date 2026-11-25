@@ -211,7 +211,7 @@ def : InstRW<[GenericWriteDIV], (instrs MOD, MODU, DIV, DIVU)>;
 // MIPS16e
 // =======
 
-def : InstRW<[GenericWriteHILO], (instrs MultRxRy16, MultuRxRy16)>;
+def : InstRW<[GenericWriteHILO], (instrs MultRxRy16, MultuRxRy16, MultRxRyRz16)>;
 
 def : InstRW<[GenericWriteDIV], (instrs DivRxRy16)>;
 
