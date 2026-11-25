@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/BinaryFormat/ELFRelocs/Mips.h"
 #include "InputFiles.h"
 #include "RelocScan.h"
 #include "Symbols.h"
@@ -179,6 +180,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MICROMIPS_GPREL7_S2:
     return RE_MIPS_GOTREL;
   case R_MIPS_26:
+  case R_MIPS16_26:
   case R_MICROMIPS_26_S1:
     return R_PLT;
   case R_MICROMIPS_PC26_S1:
@@ -550,7 +552,7 @@ bool MIPS<ELFT>::needsThunk(RelExpr expr, RelType type, const InputFile *file,
   // we cannot make the jump directly and need to create a small stubs
   // to save the target function address.
   // See page 3-38 ftp://www.linux-mips.org/pub/linux/mips/doc/ABI/mipsabi.pdf
-  if (type != R_MIPS_26 && type != R_MIPS_PC26_S2 &&
+  if (type != R_MIPS_26 && type != R_MIPS16_26 && type != R_MIPS_PC26_S2 &&
       type != R_MICROMIPS_26_S1 && type != R_MICROMIPS_PC26_S1)
     return false;
   auto *f = dyn_cast<ObjFile<ELFT>>(file);
@@ -576,6 +578,8 @@ int64_t MIPS<ELFT>::getImplicitAddend(const uint8_t *buf, RelType type) const {
   case R_MIPS_TLS_DTPMOD32:
   case R_MIPS_TLS_TPREL32:
     return SignExtend64<32>(read32(ctx, buf));
+  case R_MIPS16_26:
+    return SignExtend64<28>(readShuffle<e>(ctx, buf) << 2);
   case R_MIPS_26:
     // FIXME (simon): If the relocation target symbol is not a PLT entry
     // we should use another expression for calculation:
@@ -896,6 +900,17 @@ void MIPS<ELFT>::relocateAlloc(InputSection &sec, uint8_t *buf) const {
       }
       checkAlignment(ctx, loc, val & ~uint64_t(1), 4, rel);
     }
+    if (!ctx.arg.relocatable &&
+        (rel.type == R_MIPS16_26 ||
+         (rel.type == R_MIPS_26 && rel.sym->isMips16()))) {
+      Addr target = val & ~uint64_t(1), next = place + 4;
+      if ((target ^ next) >> 28) {
+        Err(ctx) << getErrorLoc(ctx, loc) << rel.type
+                 << " target outside the jump region of PC+4: " << rel.sym;
+        continue;
+      }
+      checkAlignment(ctx, loc, target, 4, rel);
+    }
     if (rel.type == R_MICROMIPS_26_S1) {
       // J/JAL inherit the high bits from PC+4. A switch to classic MIPS
       // selects JALX, whose target field counts words instead of halfwords.
@@ -949,6 +964,21 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
   case (R_MIPS_64 << 8) | R_MIPS_REL32:
     write64(ctx, loc, val);
     break;
+  case R_MIPS16_26: {
+    if (ctx.arg.relocatable) {
+      writeShuffle<e>(ctx, loc, val, 26, 2);
+      break;
+    }
+    if ((read16(ctx, loc) & 0xf800) != 0x1800) {
+      Err(ctx) << getErrorLoc(ctx, loc) << rel.type
+               << " requires MIPS16 JAL or JALX";
+      break;
+    }
+    uint32_t field = encodeMips16JumpField(val >> 2);
+    write16(ctx, loc, ((val & 1) ? 0x1800 : 0x1c00) | (field >> 16));
+    write16(ctx, loc + 2, field);
+    break;
+  }
   case R_MIPS_26:
     writeValue(ctx, loc, val, 26, 2);
     break;
@@ -1128,7 +1158,7 @@ template <class ELFT> bool elf::isMipsPIC(const Defined *sym) {
   if (!sym->isFunc())
     return false;
 
-  if (sym->stOther & STO_MIPS_PIC)
+  if (!sym->isMips16() && (sym->stOther & STO_MIPS_PIC))
     return true;
 
   if (!sym->section)

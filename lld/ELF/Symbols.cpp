@@ -113,17 +113,8 @@ static uint64_t getSymVA(Ctx &ctx, const Symbol &sym, int64_t addend) {
     if (d.isSection())
       va -= addend;
 
-    // MIPS relocatable files can mix regular and microMIPS code.
-    // Linker needs to distinguish such code. To do so microMIPS
-    // symbols has the `STO_MIPS_MICROMIPS` flag in the `st_other`
-    // field. Unfortunately, the `MIPS::relocate()` method has
-    // a symbol value only. To pass type of the symbol (regular/microMIPS)
-    // to that routine as well as other places where we write
-    // a symbol value as-is (.dynamic section, `Elf_Ehdr::e_entry`
-    // field etc) do the same trick as compiler uses to mark microMIPS
-    // for CPU - set the less-significant bit.
-    if (ctx.arg.emachine == EM_MIPS && isMicroMips(ctx) &&
-        ((sym.stOther & STO_MIPS_MICROMIPS) || sym.hasFlag(NEEDS_COPY)))
+    // Function pointers, e_entry and branch relocations carry the ISA in bit 0.
+    if (ctx.arg.emachine == EM_MIPS && sym.hasMipsCodeBit(ctx))
       va |= 1;
 
     if (d.isTls() && !ctx.arg.relocatable) {
@@ -152,6 +143,11 @@ static uint64_t getSymVA(Ctx &ctx, const Symbol &sym, int64_t addend) {
     llvm_unreachable("placeholder symbol reached writer");
   }
   llvm_unreachable("invalid symbol kind");
+}
+
+bool Symbol::hasMipsCodeBit(Ctx &ctx) const {
+  return isMips16() || (isMicroMips(ctx) && ((stOther & STO_MIPS_MICROMIPS) ||
+                                             hasFlag(NEEDS_COPY)));
 }
 
 uint64_t Symbol::getVA(Ctx &ctx, int64_t addend) const {

@@ -364,6 +364,13 @@ public:
 
   bool isSection() const { return type == llvm::ELF::STT_SECTION; }
   bool isTls() const { return type == llvm::ELF::STT_TLS; }
+  // MIPS16 uses the whole high nibble of st_other, overlapping the separate
+  // PIC and microMIPS bits used for other MIPS symbols.
+  bool isMips16() const {
+    return (stOther & llvm::ELF::STO_MIPS_MIPS16) == llvm::ELF::STO_MIPS_MIPS16;
+  }
+  bool hasMipsCodeBit(Ctx &ctx) const;
+
   bool isFunc() const { return type == llvm::ELF::STT_FUNC; }
   bool isGnuIFunc() const { return type == llvm::ELF::STT_GNU_IFUNC; }
   bool isObject() const { return type == llvm::ELF::STT_OBJECT; }

@@ -629,6 +629,11 @@ def GPRMM16Opnd : RegisterOperand<GPRMM16> {
   let ParserMatchClass = GPRMM16AsmOperand;
 }
 
+// MIPS16 uses the same eight registers, with a different allocation order.
+def CPU16RegsOpnd : RegisterOperand<CPU16Regs> {
+  let ParserMatchClass = GPRMM16AsmOperand;
+}
+
 def GPRMM16OpndZero : RegisterOperand<GPRMM16Zero> {
   let ParserMatchClass = GPRMM16AsmOperandZero;
 }

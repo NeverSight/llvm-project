@@ -35,6 +35,10 @@ defm MOVN : WideCondMove<"movn", 0x18>;
 defm MOVZ : WideCondMove<"movz", 0x58>;
 
 let DecoderNamespace = "MicroMips64" in {
+  let isCodeGenOnly = 1 in
+  def JRC16_MM64 : JumpRegCMM16<"jrc", GPR64Opnd>, JALR_FM_MM16<0x0d>,
+                   ISA_MICROMIPS64_PRE_R6;
+
   def DADD_MM : Micro64R6Rel<"micro">, MMRel, ArithLogicR<"dadd", GPR64Opnd, 1>,
                 ADD_FM_MM<0x16, 0x110>, ISA_MICROMIPS64R2;
   def DADDu_MM : Micro64R6Rel<"micro">, MMRel, ArithLogicR<"daddu", GPR64Opnd, 1, add>,

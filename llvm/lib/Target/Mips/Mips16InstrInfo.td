@@ -262,7 +262,7 @@ class FEXT_T8I8I16_ins<string asmstr, string asmstr2>:
 // I8_MOVR32 instruction format (used only by the MOVR32 instructio
 //
 class FI8_MOVR3216_ins<string asmstr>:
-       FI8_MOVR3216<(outs CPU16Regs:$ry), (ins GPR32:$r32),
+       FI8_MOVR3216<(outs CPU16RegsOpnd:$ry), (ins GPR32Opnd:$r32),
        !strconcat(asmstr,  "\t$ry, $r32"), []>;
 
 //
@@ -270,27 +270,8 @@ class FI8_MOVR3216_ins<string asmstr>:
 //
 
 class FI8_MOV32R16_ins<string asmstr>:
-  FI8_MOV32R16<(outs GPR32:$r32), (ins CPU16Regs:$rz),
+  FI8_MOV32R16<(outs GPR32Opnd:$r32), (ins CPU16RegsOpnd:$rz),
                !strconcat(asmstr,  "\t$r32, $rz"), []>;
-
-//
-// This are pseudo formats for multiply
-// This first one can be changed to non-pseudo now.
-//
-// MULT
-//
-class FMULT16_ins<string asmstr> :
-  MipsPseudo16<(outs), (ins CPU16Regs:$rx, CPU16Regs:$ry),
-               !strconcat(asmstr, "\t$rx, $ry"), []>;
-
-//
-// MULT-LO
-//
-class FMULT16_LO_ins<string asmstr> :
-  MipsPseudo16<(outs CPU16Regs:$rz), (ins CPU16Regs:$rx, CPU16Regs:$ry),
-               !strconcat(asmstr, "\t$rx, $ry\n\tmflo\t$rz"), []> {
-  let isCodeGenOnly=1;
-}
 
 //
 // RR-type instruction format
@@ -307,7 +288,7 @@ class FRRBreakNull16_ins<string asmstr> :
 }
 
 class FRR16R_ins<bits<5> f, string asmstr> :
-  FRR16<f, (outs), (ins  CPU16Regs:$rx, CPU16Regs:$ry),
+  FRR16<f, (outs), (ins CPU16RegsOpnd:$rx, CPU16RegsOpnd:$ry),
         !strconcat(asmstr, "\t$rx, $ry"), []> {
 }
 
@@ -328,7 +309,7 @@ class FUnaryRR16_ins<bits<5> f, string asmstr> :
 
 
 class FRR16_M_ins<bits<5> f, string asmstr> :
-  FRR16<f, (outs CPU16Regs:$rx), (ins),
+  FRR16<f, (outs CPU16RegsOpnd:$rx), (ins),
         !strconcat(asmstr, "\t$rx"), []>;
 
 class FRxRxRy16_ins<bits<5> f, string asmstr> :
@@ -873,41 +854,14 @@ def Mflo16: FRR16_M_ins<0b10010, "mflo"> {
   let isMoveReg = 0;
 }
 
-//
-// Pseudo Instruction for mult
-//
-def MultRxRy16:  FMULT16_ins<"mult"> {
-  let isCommutable = 1;
-  let hasSideEffects = 0;
-  let Defs = [HI0, LO0];
-}
-
-def MultuRxRy16: FMULT16_ins<"multu"> {
-  let isCommutable = 1;
-  let hasSideEffects = 0;
-  let Defs = [HI0, LO0];
-}
-
-//
-// Format: MULT rx, ry MIPS16e
-// Purpose: Multiply Word
-// To multiply 32-bit signed integers.
-//
-def MultRxRyRz16: FMULT16_LO_ins<"mult"> {
-  let isCommutable = 1;
-  let hasSideEffects = 0;
-  let Defs = [HI0, LO0];
-}
-
-//
-// Format: MULTU rx, ry MIPS16e
-// Purpose: Multiply Unsigned Word
-// To multiply 32-bit unsigned integers.
-//
-def MultuRxRyRz16: FMULT16_LO_ins<"multu"> {
-  let isCommutable = 1;
-  let hasSideEffects = 0;
-  let Defs = [HI0, LO0];
+let Defs = [HI0, LO0], hasSideEffects = 0, isCommutable = 1 in {
+  def MultRxRy16  : FRR16R_ins<0b11000, "mult">;
+  def MultuRxRy16 : FRR16R_ins<0b11001, "multu">;
+  // Keep the low product as a single value until its use has been scheduled.
+  // Exposing LO earlier prevents machine sinking across conditional branches.
+  let Size = 4 in
+  def MultRxRyRz16 : MipsPseudo16<(outs CPU16Regs:$rz),
+                                  (ins CPU16Regs:$rx, CPU16Regs:$ry), "", []>;
 }
 
 //

@@ -902,10 +902,13 @@ bool MipsDelaySlotFiller::searchRange(MachineBasicBlock &MBB, IterTy Begin,
     // to be able to reach the target. b16 only has a range of +/- 1 KB.
     // It's entirely possible that the target function is reachable with b16
     // but we don't have enough information to make that decision.
-     if (InMicroMipsMode && TII->getInstSizeInBytes(*CurrI) == 2 &&
-        (Opcode == Mips::JR || Opcode == Mips::PseudoIndirectBranch ||
+    if (InMicroMipsMode && TII->getInstSizeInBytes(*CurrI) == 2 &&
+        (Opcode == Mips::JR || Opcode == Mips::JR_MM || Opcode == Mips::JR64 ||
+         Opcode == Mips::PseudoIndirectBranch ||
          Opcode == Mips::PseudoIndirectBranch_MM ||
-         Opcode == Mips::PseudoReturn || Opcode == Mips::TAILCALL))
+         Opcode == Mips::PseudoIndirectBranch64 ||
+         Opcode == Mips::PseudoReturn || Opcode == Mips::PseudoReturn64 ||
+         Opcode == Mips::TAILCALL || Opcode == Mips::TAILCALLREG64))
       continue;
      // Instructions LWP/SWP and MOVEP should not be in a delay slot as that
      // results in unpredictable behaviour

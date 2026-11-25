@@ -141,6 +141,13 @@ bool Mips16InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case Mips::RetRA16:
     ExpandRetRA16(MBB, MI, Mips::JrcRa16);
     break;
+  case Mips::MultRxRyRz16:
+    BuildMI(MBB, MI, MI.getDebugLoc(), get(Mips::MultRxRy16))
+        .add(MI.getOperand(1))
+        .add(MI.getOperand(2));
+    BuildMI(MBB, MI, MI.getDebugLoc(), get(Mips::Mflo16))
+        .add(MI.getOperand(0));
+    break;
   }
 
   MBB.erase(MI.getIterator());
