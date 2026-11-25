@@ -22,6 +22,10 @@
 .globl wide
 .ent wide
 wide:
+# BE: 00 a4 16 1f
+# LE: a4 00 1f 16
+# REG-SAME: align $2, $4, $5, 3
+  align $2, $4, $5, 3
 # BE: 58 a4 10 18
 # LE: a4 58 18 10
 # REG-SAME: dmul $2, $4, $5

@@ -84,7 +84,7 @@ define signext i1 @lshr_i1(i1 signext %a, i1 signext %b) {
 ; MMR6-LABEL: lshr_i1:
 ; MMR6:       # %bb.0: # %entry
 ; MMR6-NEXT:    move $2, $4
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
   %r = lshr i1 %a, %b
@@ -145,7 +145,7 @@ define zeroext i8 @lshr_i8(i8 zeroext %a, i8 zeroext %b) {
 ; MMR6-LABEL: lshr_i8:
 ; MMR6:       # %bb.0: # %entry
 ; MMR6-NEXT:    srlv $2, $4, $5
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
   %r = lshr i8 %a, %b
@@ -206,7 +206,7 @@ define zeroext i16 @lshr_i16(i16 zeroext %a, i16 zeroext %b) {
 ; MMR6-LABEL: lshr_i16:
 ; MMR6:       # %bb.0: # %entry
 ; MMR6-NEXT:    srlv $2, $4, $5
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
   %r = lshr i16 %a, %b
@@ -267,7 +267,7 @@ define signext i32 @lshr_i32(i32 signext %a, i32 signext %b) {
 ; MMR6-LABEL: lshr_i32:
 ; MMR6:       # %bb.0: # %entry
 ; MMR6-NEXT:    srlv $2, $4, $5
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
   %r = lshr i32 %a, %b
@@ -386,7 +386,7 @@ define signext i64 @lshr_i64(i64 signext %a, i64 signext %b) {
 ; MMR6-NEXT:    selnez $3, $4, $2
 ; MMR6-NEXT:    or $3, $3, $1
 ; MMR6-NEXT:    seleqz $2, $4, $2
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
   %r = lshr i64 %a, %b
@@ -716,7 +716,7 @@ define signext i128 @lshr_i128(i128 signext %a, i128 signext %b) {
 ; MMR6-NEXT:    srlv $2, $16, $6
 ; MMR6-NEXT:    lw $16, 36($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    addiu $sp, $sp, 40
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
 
 ; o32 shouldn't use TImode helpers.

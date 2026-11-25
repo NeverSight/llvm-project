@@ -104,7 +104,7 @@ define i32 @test_max_32(ptr nocapture %ptr, i32 signext %val) {
 ; MMR6-NEXT:    beqc $1, $zero, $BB0_1
 ; MMR6-NEXT:  # %bb.2: # %entry
 ; MMR6-NEXT:    sync
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_max_32:
 ; MIPS32:       # %bb.0: # %entry
@@ -185,7 +185,7 @@ define i32 @test_max_32(ptr nocapture %ptr, i32 signext %val) {
 ; MMELR6-NEXT:    beqc $1, $zero, $BB0_1
 ; MMELR6-NEXT:  # %bb.2: # %entry
 ; MMELR6-NEXT:    sync
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_max_32:
 ; MIPS64:       # %bb.0: # %entry
@@ -351,7 +351,7 @@ define i32 @test_min_32(ptr nocapture %ptr, i32 signext %val) {
 ; MMR6-NEXT:    beqc $1, $zero, $BB1_1
 ; MMR6-NEXT:  # %bb.2: # %entry
 ; MMR6-NEXT:    sync
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_min_32:
 ; MIPS32:       # %bb.0: # %entry
@@ -432,7 +432,7 @@ define i32 @test_min_32(ptr nocapture %ptr, i32 signext %val) {
 ; MMELR6-NEXT:    beqc $1, $zero, $BB1_1
 ; MMELR6-NEXT:  # %bb.2: # %entry
 ; MMELR6-NEXT:    sync
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_min_32:
 ; MIPS64:       # %bb.0: # %entry
@@ -598,7 +598,7 @@ define i32 @test_umax_32(ptr nocapture %ptr, i32 signext %val) {
 ; MMR6-NEXT:    beqc $1, $zero, $BB2_1
 ; MMR6-NEXT:  # %bb.2: # %entry
 ; MMR6-NEXT:    sync
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_umax_32:
 ; MIPS32:       # %bb.0: # %entry
@@ -679,7 +679,7 @@ define i32 @test_umax_32(ptr nocapture %ptr, i32 signext %val) {
 ; MMELR6-NEXT:    beqc $1, $zero, $BB2_1
 ; MMELR6-NEXT:  # %bb.2: # %entry
 ; MMELR6-NEXT:    sync
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_umax_32:
 ; MIPS64:       # %bb.0: # %entry
@@ -845,7 +845,7 @@ define i32 @test_umin_32(ptr nocapture %ptr, i32 signext %val) {
 ; MMR6-NEXT:    beqc $1, $zero, $BB3_1
 ; MMR6-NEXT:  # %bb.2: # %entry
 ; MMR6-NEXT:    sync
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_umin_32:
 ; MIPS32:       # %bb.0: # %entry
@@ -926,7 +926,7 @@ define i32 @test_umin_32(ptr nocapture %ptr, i32 signext %val) {
 ; MMELR6-NEXT:    beqc $1, $zero, $BB3_1
 ; MMELR6-NEXT:  # %bb.2: # %entry
 ; MMELR6-NEXT:    sync
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_umin_32:
 ; MIPS64:       # %bb.0: # %entry
@@ -1213,7 +1213,7 @@ define i16 @test_max_16(ptr nocapture %ptr, i16 signext %val) {
 ; MMR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    sync
 ; MMR6-NEXT:    addiu $sp, $sp, 8
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_max_16:
 ; MIPS32:       # %bb.0: # %entry
@@ -1411,7 +1411,7 @@ define i16 @test_max_16(ptr nocapture %ptr, i16 signext %val) {
 ; MMELR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMELR6-NEXT:    sync
 ; MMELR6-NEXT:    addiu $sp, $sp, 8
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_max_16:
 ; MIPS64:       # %bb.0: # %entry
@@ -1795,7 +1795,7 @@ define i16 @test_min_16(ptr nocapture %ptr, i16 signext %val) {
 ; MMR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    sync
 ; MMR6-NEXT:    addiu $sp, $sp, 8
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_min_16:
 ; MIPS32:       # %bb.0: # %entry
@@ -1993,7 +1993,7 @@ define i16 @test_min_16(ptr nocapture %ptr, i16 signext %val) {
 ; MMELR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMELR6-NEXT:    sync
 ; MMELR6-NEXT:    addiu $sp, $sp, 8
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_min_16:
 ; MIPS64:       # %bb.0: # %entry
@@ -2375,7 +2375,7 @@ define i16 @test_umax_16(ptr nocapture %ptr, i16 signext %val) {
 ; MMR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    sync
 ; MMR6-NEXT:    addiu $sp, $sp, 8
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_umax_16:
 ; MIPS32:       # %bb.0: # %entry
@@ -2572,7 +2572,7 @@ define i16 @test_umax_16(ptr nocapture %ptr, i16 signext %val) {
 ; MMELR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMELR6-NEXT:    sync
 ; MMELR6-NEXT:    addiu $sp, $sp, 8
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_umax_16:
 ; MIPS64:       # %bb.0: # %entry
@@ -2954,7 +2954,7 @@ define i16 @test_umin_16(ptr nocapture %ptr, i16 signext %val) {
 ; MMR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    sync
 ; MMR6-NEXT:    addiu $sp, $sp, 8
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_umin_16:
 ; MIPS32:       # %bb.0: # %entry
@@ -3151,7 +3151,7 @@ define i16 @test_umin_16(ptr nocapture %ptr, i16 signext %val) {
 ; MMELR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMELR6-NEXT:    sync
 ; MMELR6-NEXT:    addiu $sp, $sp, 8
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_umin_16:
 ; MIPS64:       # %bb.0: # %entry
@@ -3535,7 +3535,7 @@ define i8 @test_max_8(ptr nocapture %ptr, i8 signext %val) {
 ; MMR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    sync
 ; MMR6-NEXT:    addiu $sp, $sp, 8
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_max_8:
 ; MIPS32:       # %bb.0: # %entry
@@ -3733,7 +3733,7 @@ define i8 @test_max_8(ptr nocapture %ptr, i8 signext %val) {
 ; MMELR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMELR6-NEXT:    sync
 ; MMELR6-NEXT:    addiu $sp, $sp, 8
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_max_8:
 ; MIPS64:       # %bb.0: # %entry
@@ -4116,7 +4116,7 @@ define i8 @test_min_8(ptr nocapture %ptr, i8 signext %val) {
 ; MMR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    sync
 ; MMR6-NEXT:    addiu $sp, $sp, 8
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_min_8:
 ; MIPS32:       # %bb.0: # %entry
@@ -4314,7 +4314,7 @@ define i8 @test_min_8(ptr nocapture %ptr, i8 signext %val) {
 ; MMELR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMELR6-NEXT:    sync
 ; MMELR6-NEXT:    addiu $sp, $sp, 8
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_min_8:
 ; MIPS64:       # %bb.0: # %entry
@@ -4696,7 +4696,7 @@ define i8 @test_umax_8(ptr nocapture %ptr, i8 signext %val) {
 ; MMR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    sync
 ; MMR6-NEXT:    addiu $sp, $sp, 8
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_umax_8:
 ; MIPS32:       # %bb.0: # %entry
@@ -4893,7 +4893,7 @@ define i8 @test_umax_8(ptr nocapture %ptr, i8 signext %val) {
 ; MMELR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMELR6-NEXT:    sync
 ; MMELR6-NEXT:    addiu $sp, $sp, 8
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_umax_8:
 ; MIPS64:       # %bb.0: # %entry
@@ -5275,7 +5275,7 @@ define i8 @test_umin_8(ptr nocapture %ptr, i8 signext %val) {
 ; MMR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMR6-NEXT:    sync
 ; MMR6-NEXT:    addiu $sp, $sp, 8
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 ;
 ; MIPS32-LABEL: test_umin_8:
 ; MIPS32:       # %bb.0: # %entry
@@ -5472,7 +5472,7 @@ define i8 @test_umin_8(ptr nocapture %ptr, i8 signext %val) {
 ; MMELR6-NEXT:    lw $2, 4($sp) # 4-byte Folded Reload
 ; MMELR6-NEXT:    sync
 ; MMELR6-NEXT:    addiu $sp, $sp, 8
-; MMELR6-NEXT:    jrc $ra
+; MMELR6-NEXT:    jrc16 $ra
 ;
 ; MIPS64-LABEL: test_umin_8:
 ; MIPS64:       # %bb.0: # %entry

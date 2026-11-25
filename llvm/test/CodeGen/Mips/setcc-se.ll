@@ -16,7 +16,7 @@ define i32 @seteq0(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:A0>
 ; MMR6-NEXT:    # <MCOperand Imm:1>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST2:]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST2:]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %cmp = icmp eq i32 %a, 0
@@ -36,7 +36,7 @@ define i32 @setne0(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Reg:ZERO>
 ; MMR6-NEXT:    # <MCOperand Reg:A0>>
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST2]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST2]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %cmp = icmp ne i32 %a, 0
@@ -87,7 +87,7 @@ define void @slti_beq0(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Imm:0>>
 ; MMR6-NEXT:  $BB2_2: # %if.end
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST2]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST2]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %cmp = icmp slt i32 %a, -32768
@@ -153,7 +153,7 @@ define void @slti_beq1(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Imm:0>>
 ; MMR6-NEXT:  $BB3_2: # %if.end
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST2]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST2]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %cmp = icmp slt i32 %a, -32769
@@ -210,7 +210,7 @@ define void @slti_beq2(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Imm:0>>
 ; MMR6-NEXT:  $BB4_2: # %if.end
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST2]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST2]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %cmp = icmp slt i32 %a, 32767
@@ -272,7 +272,7 @@ define void @slti_beq3(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Imm:0>>
 ; MMR6-NEXT:  $BB5_2: # %if.end
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST2]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST2]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %cmp = icmp slt i32 %a, 32768
@@ -329,7 +329,7 @@ define void @sltiu_beq0(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Imm:0>>
 ; MMR6-NEXT:  $BB6_2: # %if.end
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST2]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST2]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %cmp = icmp ult i32 %a, 32767
@@ -391,7 +391,7 @@ define void @sltiu_beq1(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Imm:0>>
 ; MMR6-NEXT:  $BB7_2: # %if.end
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST2]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST2]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %cmp = icmp ult i32 %a, 32768
@@ -448,7 +448,7 @@ define void @sltiu_beq2(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Imm:0>>
 ; MMR6-NEXT:  $BB8_2: # %if.end
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST2]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST2]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %cmp = icmp ult i32 %a, -32768
@@ -514,7 +514,7 @@ define void @sltiu_beq3(i32 %a) {
 ; MMR6-NEXT:    # <MCOperand Reg:V0>
 ; MMR6-NEXT:    # <MCOperand Imm:0>>
 ; MMR6-NEXT:  $BB9_2: # %if.end
-; MMR6-NEXT:    jrc $ra # <MCInst #[[#MCINST2]] JRC16_MM
+; MMR6-NEXT:    jrc16 $ra # <MCInst #[[#MCINST2]] JRC16_MMR6
 ; MMR6-NEXT:    # <MCOperand Reg:RA>>
 entry:
   %cmp = icmp ult i32 %a, -32769

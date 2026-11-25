@@ -87,7 +87,7 @@ define dso_local double @foo(double %a) #0 {
 ; MMR6-LABEL: foo:
 ; MMR6:       # %bb.0: # %entry
 ; MMR6-NEXT:    abs.d $f0, $f12
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
   %0 = tail call fast double @llvm.fabs.f64(double %a)
   ret double %0
@@ -152,7 +152,7 @@ define dso_local float @foo_2(float %a) #0 {
 ; MMR6-LABEL: foo_2:
 ; MMR6:       # %bb.0: # %entry
 ; MMR6-NEXT:    abs.s $f0, $f12
-; MMR6-NEXT:    jrc $ra
+; MMR6-NEXT:    jrc16 $ra
 entry:
   %0 = tail call fast float @llvm.fabs.f32(float %a)
   ret float %0

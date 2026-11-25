@@ -819,8 +819,7 @@ bool MipsDelaySlotFiller::runOnMachineBasicBlock(
     // For microMIPS if instruction is BEQ or BNE with one ZERO register, then
     // instead of adding NOP replace this instruction with the corresponding
     // compact branch instruction, i.e. BEQZC or BNEZC. Additionally
-    // PseudoReturn and PseudoIndirectBranch are expanded to JR_MM, so they can
-    // be replaced with JRC16_MM.
+    // register jumps and returns can use the ISA's compact register jump.
 
     // For MIPSR6 attempt to produce the corresponding compact (no delay slot)
     // form of the CTI. For indirect jumps this will not require inserting a

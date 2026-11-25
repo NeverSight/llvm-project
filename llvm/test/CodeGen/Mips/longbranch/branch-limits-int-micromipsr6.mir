@@ -185,7 +185,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 131068", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BEQC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -208,7 +208,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 131068", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0
@@ -272,7 +272,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 131068", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BNEC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -295,7 +295,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 131068", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0
@@ -359,7 +359,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 131068", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BGEC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -382,7 +382,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 131068", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0
@@ -446,7 +446,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 131068", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BGEUC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -469,7 +469,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 131068", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0
@@ -533,7 +533,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 131068", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BGEZC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -556,7 +556,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 131068", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0
@@ -620,7 +620,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 131068", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BGTZC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -643,7 +643,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 131068", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0
@@ -707,7 +707,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 131068", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BLEZC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -730,7 +730,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 131068", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0
@@ -794,7 +794,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 131068", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BLTC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -817,7 +817,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 131068", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0
@@ -881,7 +881,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 131068", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BLTUC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -904,7 +904,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 131068", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0
@@ -968,7 +968,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 131068", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BLTZC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -991,7 +991,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 131068", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0
@@ -1055,7 +1055,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 8388608", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BEQZC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -1078,7 +1078,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 8388608", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0
@@ -1142,7 +1142,7 @@ body:             |
   ; MMR6:   successors: %bb.3(0x80000000)
   ; MMR6:   INLINEASM &".space 8388608", sideeffect attdialect
   ; MMR6: bb.3.tail:
-  ; MMR6:   JRC16_MM undef $ra
+  ; MMR6:   JRC16_MMR6 undef $ra
   ; PIC-LABEL: name: expand_BNEZC_MMR6
   ; PIC: bb.0 (%ir-block.0):
   ; PIC:   successors: %bb.3(0x40000000), %bb.1(0x40000000)
@@ -1165,7 +1165,7 @@ body:             |
   ; PIC:   successors: %bb.4(0x80000000)
   ; PIC:   INLINEASM &".space 8388608", sideeffect attdialect
   ; PIC: bb.4.tail:
-  ; PIC:   JRC16_MM undef $ra
+  ; PIC:   JRC16_MMR6 undef $ra
   bb.0 (%ir-block.0):
     successors: %bb.1(0x40000000), %bb.2(0x40000000)
     liveins: $a0

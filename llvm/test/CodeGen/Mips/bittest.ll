@@ -80,7 +80,7 @@ define signext i32 @bittest_10_i32(i32 signext %a) nounwind {
 ; MM32R6:       # %bb.0:
 ; MM32R6-NEXT:    andi $1, $4, 1024
 ; MM32R6-NEXT:    sltiu $2, $1, 1
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
   %shr = lshr i32 %a, 10
   %not = xor i32 %shr, -1
   %and = and i32 %not, 1
@@ -137,7 +137,7 @@ define signext i32 @bittest_15_i32(i32 signext %a) nounwind {
 ; MM32R6:       # %bb.0:
 ; MM32R6-NEXT:    andi16 $2, $4, 32768
 ; MM32R6-NEXT:    sltiu $2, $2, 1
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
   %shr = lshr i32 %a, 15
   %not = xor i32 %shr, -1
   %and = and i32 %not, 1
@@ -196,7 +196,7 @@ define signext i32 @bittest_16_i32(i32 signext %a) nounwind {
 ; MM32R6:       # %bb.0:
 ; MM32R6-NEXT:    not16 $2, $4
 ; MM32R6-NEXT:    ext $2, $2, 16, 1
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
   %shr = lshr i32 %a, 16
   %not = xor i32 %shr, -1
   %and = and i32 %not, 1
@@ -250,7 +250,7 @@ define signext i32 @bittest_31_i32(i32 signext %a) nounwind {
 ; MM32R6:       # %bb.0:
 ; MM32R6-NEXT:    not16 $2, $4
 ; MM32R6-NEXT:    srl $2, $2, 31
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
   %shr = lshr i32 %a, 31
   %not = xor i32 %shr, -1
   %and = and i32 %not, 1
@@ -313,7 +313,7 @@ define i64 @bittest_10_i64(i64 %a) nounwind {
 ; MM32R6-NEXT:    andi $1, $5, 1024
 ; MM32R6-NEXT:    sltiu $3, $1, 1
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
   %shr = lshr i64 %a, 10
   %not = xor i64 %shr, -1
   %and = and i64 %not, 1
@@ -376,7 +376,7 @@ define i64 @bittest_15_i64(i64 %a) nounwind {
 ; MM32R6-NEXT:    andi16 $2, $5, 32768
 ; MM32R6-NEXT:    sltiu $3, $2, 1
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
   %shr = lshr i64 %a, 15
   %not = xor i64 %shr, -1
   %and = and i64 %not, 1
@@ -440,7 +440,7 @@ define i64 @bittest_16_i64(i64 %a) nounwind {
 ; MM32R6-NEXT:    not16 $2, $5
 ; MM32R6-NEXT:    ext $3, $2, 16, 1
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
   %shr = lshr i64 %a, 16
   %not = xor i64 %shr, -1
   %and = and i64 %not, 1
@@ -503,7 +503,7 @@ define i64 @bittest_31_i64(i64 %a) nounwind {
 ; MM32R6-NEXT:    not16 $2, $5
 ; MM32R6-NEXT:    srl $3, $2, 31
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
   %shr = lshr i64 %a, 31
   %not = xor i64 %shr, -1
   %and = and i64 %not, 1
@@ -566,7 +566,7 @@ define i64 @bittest_32_i64(i64 %a) nounwind {
 ; MM32R6-NEXT:    not16 $2, $4
 ; MM32R6-NEXT:    andi16 $3, $2, 1
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
   %shr = lshr i64 %a, 32
   %not = xor i64 %shr, -1
   %and = and i64 %not, 1
@@ -628,7 +628,7 @@ define i64 @bittest_63_i64(i64 %a) nounwind {
 ; MM32R6-NEXT:    not16 $2, $4
 ; MM32R6-NEXT:    srl $3, $2, 31
 ; MM32R6-NEXT:    li16 $2, 0
-; MM32R6-NEXT:    jrc $ra
+; MM32R6-NEXT:    jrc16 $ra
   %shr = lshr i64 %a, 63
   %not = xor i64 %shr, -1
   %and = and i64 %not, 1
