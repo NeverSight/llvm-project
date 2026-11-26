@@ -8909,7 +8909,5 @@ bool MipsAsmParser::mnemonicIsValid(StringRef Mnemonic, unsigned VariantID) {
   default: llvm_unreachable("invalid variant!");
   case 0: Start = std::begin(MatchTable0); End = std::end(MatchTable0); break;
   }
-  // Search the table.
-  auto MnemonicRange = std::equal_range(Start, End, Mnemonic, LessOpcode());
-  return MnemonicRange.first != MnemonicRange.second;
+  return std::binary_search(Start, End, Mnemonic, LessOpcode());
 }
