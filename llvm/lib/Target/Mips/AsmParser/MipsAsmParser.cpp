@@ -14,6 +14,7 @@
 #include "MCTargetDesc/MipsTargetStreamer.h"
 #include "TargetInfo/MipsTargetInfo.h"
 #include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -143,6 +144,7 @@ class MipsAsmParser : public MCTargetAsmParser {
 
   MipsABIInfo ABI;
   SmallVector<std::unique_ptr<MipsAssemblerOptions>, 2> AssemblerOptions;
+  SmallDenseSet<StringRef> KnownMnemonics;
   MCSymbol *CurrentFn; // Pointer to the function being parsed. It may be a
                        // nullptr, which indicates that no function is currently
                        // selected. This usually happens after an '.end func'
@@ -8903,14 +8905,20 @@ LLVMInitializeMipsAsmParser() {
 #include "MipsGenAsmMatcher.inc"
 
 bool MipsAsmParser::mnemonicIsValid(StringRef Mnemonic) {
+  if (KnownMnemonics.contains(Mnemonic))
+    return true;
+
   const MatchEntry *First = std::begin(MatchTable0);
   const MatchEntry *Last = std::end(MatchTable0);
   while (First != Last) {
     const MatchEntry *Mid = First + (Last - First) / 2;
     StringRef Name = Mid->getMnemonic();
     int Order = Mnemonic.compare(Name);
-    if (Order == 0)
+    if (Order == 0) {
+      // The match table owns the spelling even when the input came from a macro.
+      KnownMnemonics.insert(Name);
       return true;
+    }
     if (Order < 0)
       Last = Mid;
     else
