@@ -22,8 +22,13 @@ using namespace lld::elf;
 
 namespace {
 template <class ELFT> class MIPS final : public TargetInfo {
+  // In o32, a classic caller passes a floating-point prefix in FPRs.
+  // A MIPS16 body with that signature supplies a classic entry adapter.
+  DenseMap<const Symbol *, Defined *> fpStubs;
+
 public:
   MIPS(Ctx &);
+  void collectFpStubs();
   uint32_t calcEFlags() const override;
   void initTargetSpecificSections() override;
   RelExpr getRelExpr(RelType type, const Symbol &s,
@@ -128,6 +133,43 @@ template <class ELFT> uint32_t MIPS<ELFT>::calcEFlags() const {
   return calcMipsEFlags<ELFT>(ctx);
 }
 
+template <class ELFT> void MIPS<ELFT>::collectFpStubs() {
+  for (InputSectionBase *isec : ctx.inputSections) {
+    StringRef name = isec->name;
+    if (!name.consume_front(".mips16.fn."))
+      continue;
+    auto *stub = dyn_cast<InputSection>(isec);
+    if (!stub || !(stub->flags & SHF_EXECINSTR))
+      continue;
+    // PIC adapters identify their function with R_MIPS_NONE. A non-PIC
+    // adapter materializes the address with %hi/%lo. Use the relocation to
+    // identify the definition even for local symbols and discarded weak copies.
+    for (const auto &rel : stub->template relsOrRelas<ELFT>().rels) {
+      auto type = rel.getType(false);
+      if (type != R_MIPS_NONE && type != R_MIPS_HI16)
+        continue;
+      auto *body = dyn_cast<Defined>(&stub->file->getRelocTargetSym(rel));
+      if (!body || body->file != stub->file || !body->isMips16() ||
+          body->getName() != name)
+        continue;
+      if (auto *sec = dyn_cast_or_null<InputSection>(body->section)) {
+        sec->dependentSections.push_back(stub);
+        fpStubs.try_emplace(body, makeDefined(ctx, stub->file, stub->name,
+                                              STB_LOCAL, STV_DEFAULT, STT_FUNC,
+                                              0, stub->getSize(), stub));
+      }
+      break;
+    }
+  }
+}
+
+void elf::collectMips16FpStubs(Ctx &ctx) {
+  if (ctx.arg.ekind == ELF32LEKind)
+    static_cast<MIPS<ELF32LE> *>(ctx.target.get())->collectFpStubs();
+  else if (ctx.arg.ekind == ELF32BEKind)
+    static_cast<MIPS<ELF32BE> *>(ctx.target.get())->collectFpStubs();
+}
+
 template <class ELFT> void MIPS<ELFT>::initTargetSpecificSections() {
   if (ELFT::Is64Bits && isMicroMips(ctx)) {
     // Each n64 stub can carry an aligned 64-bit GOT-relative displacement.
@@ -175,6 +217,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MICROMIPS_JALR:
     return R_NONE;
   case R_MIPS_GPREL16:
+  case R_MIPS16_GPREL:
   case R_MIPS_GPREL32:
   case R_MICROMIPS_GPREL16:
   case R_MICROMIPS_GPREL7_S2:
@@ -187,6 +230,8 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
     return R_PLT_PC;
   case R_MIPS_HI16:
   case R_MIPS_LO16:
+  case R_MIPS16_HI16:
+  case R_MIPS16_LO16:
   case R_MIPS_HIGHER:
   case R_MIPS_HIGHEST:
   case R_MICROMIPS_HIGHER:
@@ -238,11 +283,13 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MICROMIPS_PC21_S1:
     return R_PC;
   case R_MIPS_GOT16:
+  case R_MIPS16_GOT16:
   case R_MICROMIPS_GOT16:
     if (s.isLocal())
       return RE_MIPS_GOT_LOCAL_PAGE;
     [[fallthrough]];
   case R_MIPS_CALL16:
+  case R_MIPS16_CALL16:
   case R_MIPS_GOT_DISP:
   case R_MICROMIPS_GOT_DISP:
   case R_MIPS_TLS_GOTTPREL:
@@ -313,6 +360,14 @@ static void writeValue(Ctx &ctx, uint8_t *loc, uint64_t v, uint8_t bitsSize,
   uint32_t mask = 0xffffffff >> (32 - bitsSize);
   uint32_t data = (instr & ~mask) | ((v >> shift) & mask);
   write32(ctx, loc, data);
+}
+
+static void writeMips16Imm16(Ctx &ctx, uint8_t *loc, uint16_t imm) {
+  constexpr uint32_t mask = encodeMips16Imm16(0xffff);
+  uint32_t field = encodeMips16Imm16(imm);
+  write16(ctx, loc, (read16(ctx, loc) & ~(mask >> 16)) | (field >> 16));
+  write16(ctx, loc + 2,
+          (read16(ctx, loc + 2) & ~uint16_t(mask)) | uint16_t(field));
 }
 
 template <endianness E>
@@ -580,6 +635,14 @@ int64_t MIPS<ELFT>::getImplicitAddend(const uint8_t *buf, RelType type) const {
     return SignExtend64<32>(read32(ctx, buf));
   case R_MIPS16_26:
     return SignExtend64<28>(readShuffle<e>(ctx, buf) << 2);
+  case R_MIPS16_HI16:
+  case R_MIPS16_GOT16:
+    return SignExtend64<32>(
+        uint32_t(decodeMips16Imm16(readShuffle<e>(ctx, buf))) << 16);
+  case R_MIPS16_LO16:
+  case R_MIPS16_GPREL:
+  case R_MIPS16_CALL16:
+    return SignExtend64<16>(decodeMips16Imm16(readShuffle<e>(ctx, buf)));
   case R_MIPS_26:
     // FIXME (simon): If the relocation target symbol is not a PLT entry
     // we should use another expression for calculation:
@@ -779,6 +842,10 @@ static RelType getMipsPairType(RelType type, bool isLocal) {
   switch (type) {
   case R_MIPS_HI16:
     return R_MIPS_LO16;
+  case R_MIPS16_HI16:
+    return R_MIPS16_LO16;
+  case R_MIPS16_GOT16:
+    return isLocal ? R_MIPS16_LO16 : R_MIPS_NONE;
   case R_MIPS_GOT16:
     // In case of global symbol, the R_MIPS_GOT16 relocation does not
     // have a pair. Each global symbol has a unique entry in the GOT
@@ -805,6 +872,7 @@ template <class RelTy>
 void MIPS<ELFT>::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels) {
   RelocScan rs(ctx, &sec);
   sec.relocations.reserve(rels.size());
+  const bool hasFpStubs = !fpStubs.empty();
   RelType type;
   for (auto it = rels.begin(); it != rels.end();) {
     const RelTy &rel = *it;
@@ -868,7 +936,18 @@ void MIPS<ELFT>::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels) {
     } else {
       if (expr == R_TPREL && rs.checkTlsLe(offset, sym, type))
         continue;
-      rs.process(expr, type, offset, sym, addend);
+      Symbol *target = &sym;
+      if (hasFpStubs && sym.isMips16() && !addend &&
+          (expr == R_ABS || expr == RE_MIPS_GOT_LOCAL_PAGE ||
+           (expr == RE_MIPS_GOT_OFF && type != R_MIPS16_CALL16) ||
+           expr == RE_MIPS_GOT_OFF32 || type == R_MIPS_26 ||
+           type == R_MIPS_JALR)) {
+        // MIPS16 direct calls and the adapter's own transfer use the body.
+        // Ordinary calls and callable pointers use the classic entry.
+        if (Defined *stub = fpStubs.lookup(&sym); stub && stub->section != &sec)
+          target = stub;
+      }
+      rs.process(expr, type, offset, *target, addend);
     }
   }
 }
@@ -981,6 +1060,22 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
   }
   case R_MIPS_26:
     writeValue(ctx, loc, val, 26, 2);
+    break;
+  case R_MIPS16_HI16:
+    writeMips16Imm16(ctx, loc, (val + 0x8000) >> 16);
+    break;
+  case R_MIPS16_GOT16:
+    if (ctx.arg.relocatable) {
+      writeMips16Imm16(ctx, loc, (val + 0x8000) >> 16);
+      break;
+    }
+    [[fallthrough]];
+  case R_MIPS16_CALL16:
+  case R_MIPS16_GPREL:
+    checkInt(ctx, loc, val, 16, rel);
+    [[fallthrough]];
+  case R_MIPS16_LO16:
+    writeMips16Imm16(ctx, loc, val);
     break;
   case R_MIPS_GOT16:
     // The R_MIPS_GOT16 relocation's value in "relocatable" linking mode
@@ -1149,8 +1244,9 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
 }
 
 template <class ELFT> bool MIPS<ELFT>::usesOnlyLowPageBits(RelType type) const {
-  return type == R_MIPS_LO16 || type == R_MIPS_GOT_OFST ||
-         type == R_MICROMIPS_LO16 || type == R_MICROMIPS_GOT_OFST;
+  return type == R_MIPS_LO16 || type == R_MIPS16_LO16 ||
+         type == R_MIPS_GOT_OFST || type == R_MICROMIPS_LO16 ||
+         type == R_MICROMIPS_GOT_OFST;
 }
 
 // Return true if the symbol is a PIC function.

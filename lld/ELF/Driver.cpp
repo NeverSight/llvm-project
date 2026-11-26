@@ -3570,6 +3570,9 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
   setTarget(ctx);
 
   ctx.arg.eflags = ctx.target->calcEFlags();
+  if (ctx.arg.emachine == EM_MIPS && (ctx.arg.eflags & EF_MIPS_ARCH_ASE_M16) &&
+      !ctx.arg.relocatable && !ctx.hasDynsym)
+    collectMips16FpStubs(ctx);
   // maxPageSize (sometimes called abi page size) is the maximum page size that
   // the output can be run on. For example if the OS can use 4k or 64k page
   // sizes then maxPageSize must be 64k for the output to be useable on both.

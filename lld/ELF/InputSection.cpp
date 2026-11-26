@@ -864,6 +864,11 @@ uint64_t InputSectionBase::getRelocTargetVA(Ctx &ctx, const Relocation &r,
   case RE_MIPS_GOT_GP:
     return ctx.in.mipsGot->getGp(file) + a;
   case RE_MIPS_GOT_GP_PC: {
+    // The MIPS16 prologue adds the displacement to the word-aligned PC of
+    // ADDIUPC, which is the second instruction in the HI16/LO16 pair.
+    if (r.type == R_MIPS16_HI16 || r.type == R_MIPS16_LO16)
+      return ctx.in.mipsGot->getGp(file) + a -
+             alignDown(p + (r.type == R_MIPS16_HI16 ? 4 : 0), 4);
     // R_MIPS_LO16 expression has RE_MIPS_GOT_GP_PC r.type iif the target
     // is _gp_disp symbol. In that case we should use the following
     // formula for calculation "AHL + GP - P + 4". For details see p. 4-19 at

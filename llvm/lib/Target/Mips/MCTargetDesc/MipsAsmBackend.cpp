@@ -522,12 +522,11 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
     return; // Doesn't change encoding.
 
   if (Kind >= Mips::fixup_Mips16_HI16 && Kind <= Mips::fixup_Mips16_GPREL) {
-    // EXTEND carries bits 10:5 and 15:11. The opcode halfword carries 4:0.
+    uint32_t Field = ELF::encodeMips16Imm16(Value);
     uint16_t Ext = support::endian::read16(Data, Endian);
     uint16_t Op = support::endian::read16(Data + 2, Endian);
-    support::endian::write16(Data, Ext | (Value & 0x7e0) | ((Value >> 11) & 31),
-                             Endian);
-    support::endian::write16(Data + 2, Op | (Value & 31), Endian);
+    support::endian::write16(Data, Ext | (Field >> 16), Endian);
+    support::endian::write16(Data + 2, Op | uint16_t(Field), Endian);
     return;
   }
 

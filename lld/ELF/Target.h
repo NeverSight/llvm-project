@@ -234,6 +234,7 @@ static inline std::string getErrorLoc(Ctx &ctx, const uint8_t *loc) {
 void processArmCmseSymbols(Ctx &);
 
 template <class ELFT> uint32_t calcMipsEFlags(Ctx &);
+void collectMips16FpStubs(Ctx &);
 uint8_t getMipsFpAbiFlag(Ctx &, InputFile *file, uint8_t oldFlag,
                          uint8_t newFlag);
 uint64_t getMipsPageAddr(uint64_t addr);
