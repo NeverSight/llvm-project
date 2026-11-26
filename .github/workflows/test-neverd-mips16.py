@@ -54,6 +54,8 @@ elif platform.system() == "Linux":
     config += ["-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++",
                "-DLLVM_USE_LINKER=lld"]
 run("configure", config)
+run("standalone-parser", ["cmake", "--build", build, "--target",
+                          "LLVMMipsAsmParser", "--parallel", "4"])
 run("build", ["cmake", "--build", build, "--target", "llc", "FileCheck",
               "llvm-mc", "llvm-objdump", "llvm-config", "llvm-readobj", "not", "count",
               "llvm-readelf", "llvm-dwarfdump", "obj2yaml", "split-file", "opt", "llvm-as",

@@ -188,7 +188,7 @@ class MipsAsmParser : public MCTargetAsmParser {
 
   bool parseBracketSuffix(StringRef Name, OperandVector &Operands);
 
-  bool mnemonicIsValid(StringRef Mnemonic, unsigned VariantID);
+  bool mnemonicIsValid(StringRef Mnemonic);
 
   bool parseInstruction(ParseInstructionInfo &Info, StringRef Name,
                         SMLoc NameLoc, OperandVector &Operands) override;
@@ -6992,7 +6992,7 @@ bool MipsAsmParser::parseInstruction(ParseInstructionInfo &Info, StringRef Name,
   getTargetStreamer().forbidModuleDirective();
 
   // Check if we have valid mnemonic
-  if (!mnemonicIsValid(Name, 0)) {
+  if (!mnemonicIsValid(Name)) {
     FeatureBitset FBS = ComputeAvailableFeatures(getSTI().getFeatureBits());
     std::string Suggestion = MipsMnemonicSpellCheck(Name, FBS);
     return Error(NameLoc, "unknown instruction" + Suggestion);
@@ -8902,14 +8902,19 @@ LLVMInitializeMipsAsmParser() {
 #define GET_MNEMONIC_SPELL_CHECKER
 #include "MipsGenAsmMatcher.inc"
 
-bool MipsAsmParser::mnemonicIsValid(StringRef Mnemonic, unsigned VariantID) {
-  // Find the appropriate table for this asm variant.
-  const MatchEntry *Start, *End;
-  switch (VariantID) {
-  default: llvm_unreachable("invalid variant!");
-  case 0: Start = std::begin(MatchTable0); End = std::end(MatchTable0); break;
+bool MipsAsmParser::mnemonicIsValid(StringRef Mnemonic) {
+  const MatchEntry *First = std::begin(MatchTable0);
+  const MatchEntry *Last = std::end(MatchTable0);
+  while (First != Last) {
+    const MatchEntry *Mid = First + (Last - First) / 2;
+    StringRef Name = Mid->getMnemonic();
+    int Order = Mnemonic.compare(Name);
+    if (Order == 0)
+      return true;
+    if (Order < 0)
+      Last = Mid;
+    else
+      First = Mid + 1;
   }
-  // Search the table.
-  auto MnemonicRange = std::equal_range(Start, End, Mnemonic, LessOpcode());
-  return MnemonicRange.first != MnemonicRange.second;
+  return false;
 }
