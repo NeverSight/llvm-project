@@ -39,7 +39,7 @@ public:
   void writePltHeader(uint8_t *buf) const override;
   void writePlt(uint8_t *buf, const Symbol &sym,
                 uint64_t pltEntryAddr) const override;
-  template <class RelTy>
+  template <bool HasFpStubs, class RelTy>
   void scanSectionImpl(InputSectionBase &, Relocs<RelTy>);
   void scanSection(InputSectionBase &) override;
   bool needsThunk(RelExpr expr, RelType type, const InputFile *file,
@@ -260,6 +260,8 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MICROMIPS_TLS_DTPREL_HI16:
   case R_MICROMIPS_TLS_DTPREL_LO16:
     return R_DTPREL;
+  case R_MIPS16_TLS_TPREL_HI16:
+  case R_MIPS16_TLS_TPREL_LO16:
   case R_MIPS_TLS_TPREL_HI16:
   case R_MIPS_TLS_TPREL_LO16:
   case R_MIPS_TLS_TPREL32:
@@ -292,6 +294,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
   case R_MIPS16_CALL16:
   case R_MIPS_GOT_DISP:
   case R_MICROMIPS_GOT_DISP:
+  case R_MIPS16_TLS_GOTTPREL:
   case R_MIPS_TLS_GOTTPREL:
   case R_MICROMIPS_CALL16:
   case R_MICROMIPS_TLS_GOTTPREL:
@@ -640,6 +643,9 @@ int64_t MIPS<ELFT>::getImplicitAddend(const uint8_t *buf, RelType type) const {
     return SignExtend64<32>(
         uint32_t(decodeMips16Imm16(readShuffle<e>(ctx, buf))) << 16);
   case R_MIPS16_LO16:
+  case R_MIPS16_TLS_GOTTPREL:
+  case R_MIPS16_TLS_TPREL_HI16:
+  case R_MIPS16_TLS_TPREL_LO16:
   case R_MIPS16_GPREL:
   case R_MIPS16_CALL16:
     return SignExtend64<16>(decodeMips16Imm16(readShuffle<e>(ctx, buf)));
@@ -868,11 +874,10 @@ static RelType getMipsPairType(RelType type, bool isLocal) {
 }
 
 template <class ELFT>
-template <class RelTy>
+template <bool HasFpStubs, class RelTy>
 void MIPS<ELFT>::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels) {
   RelocScan rs(ctx, &sec);
   sec.relocations.reserve(rels.size());
-  const bool hasFpStubs = !fpStubs.empty();
   RelType type;
   for (auto it = rels.begin(); it != rels.end();) {
     const RelTy &rel = *it;
@@ -937,7 +942,7 @@ void MIPS<ELFT>::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels) {
       if (expr == R_TPREL && rs.checkTlsLe(offset, sym, type))
         continue;
       Symbol *target = &sym;
-      if (hasFpStubs && sym.isMips16() && !addend &&
+      if (HasFpStubs && sym.isMips16() && !addend &&
           (expr == R_ABS || expr == RE_MIPS_GOT_LOCAL_PAGE ||
            (expr == RE_MIPS_GOT_OFF && type != R_MIPS16_CALL16) ||
            expr == RE_MIPS_GOT_OFF32 || type == R_MIPS_26 ||
@@ -954,10 +959,19 @@ void MIPS<ELFT>::scanSectionImpl(InputSectionBase &sec, Relocs<RelTy> rels) {
 
 template <class ELFT> void MIPS<ELFT>::scanSection(InputSectionBase &sec) {
   auto relocs = sec.template relsOrRelas<ELFT>();
+  // Only o32 inputs can supply MIPS16 hard-float entry adapters. Select the
+  // scanner once per section to keep the ordinary relocation loop unchanged.
+  auto scan = [&](auto entries) {
+    if constexpr (!ELFT::Is64Bits) {
+      if (!fpStubs.empty())
+        return scanSectionImpl<true>(sec, entries);
+    }
+    scanSectionImpl<false>(sec, entries);
+  };
   if (relocs.areRelocsRel())
-    scanSectionImpl(sec, relocs.rels);
+    scan(relocs.rels);
   else
-    scanSectionImpl(sec, relocs.relas);
+    scan(relocs.relas);
 }
 
 template <class ELFT>
@@ -1061,6 +1075,7 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
   case R_MIPS_26:
     writeValue(ctx, loc, val, 26, 2);
     break;
+  case R_MIPS16_TLS_TPREL_HI16:
   case R_MIPS16_HI16:
     writeMips16Imm16(ctx, loc, (val + 0x8000) >> 16);
     break;
@@ -1071,9 +1086,11 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
     }
     [[fallthrough]];
   case R_MIPS16_CALL16:
+  case R_MIPS16_TLS_GOTTPREL:
   case R_MIPS16_GPREL:
     checkInt(ctx, loc, val, 16, rel);
     [[fallthrough]];
+  case R_MIPS16_TLS_TPREL_LO16:
   case R_MIPS16_LO16:
     writeMips16Imm16(ctx, loc, val);
     break;

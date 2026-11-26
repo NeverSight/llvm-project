@@ -80,9 +80,11 @@ bool MipsAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   Subtarget = &MF.getSubtarget<MipsSubtarget>();
 
   MipsFI = MF.getInfo<MipsFunctionInfo>();
-  if (Subtarget->inMips16Mode())
+  if (Subtarget->inMips16Mode()) {
+    NeedsMips16ReadTP |= MipsFI->NeedsMips16ReadTP;
     for (const auto &I : MipsFI->StubsNeeded)
       StubsNeeded.try_emplace(I.first, FPCallStub{I.second, Subtarget});
+  }
   MCP = MF.getConstantPool();
 
   AsmPrinter::runOnMachineFunction(MF);
@@ -1053,7 +1055,47 @@ void MipsAsmPrinter::EmitFPCallStub(const char *Symbol,
   OutStreamer->popSection();
 }
 
+void MipsAsmPrinter::emitMips16ReadTP() {
+  StringRef Name = MipsFunctionInfo::Mips16ReadTP;
+  MCSymbol *Fn = OutContext.getOrCreateSymbol(Name);
+  OutStreamer->switchSection(OutContext.getELFSection(
+      ".text." + Name, ELF::SHT_PROGBITS,
+      ELF::SHF_ALLOC | ELF::SHF_EXECINSTR | ELF::SHF_GROUP, 0, Name, true));
+  OutStreamer->emitValueToAlignment(Align(4));
+  OutStreamer->emitSymbolAttribute(Fn, MCSA_Weak);
+  OutStreamer->emitSymbolAttribute(Fn, MCSA_Hidden);
+  OutStreamer->emitSymbolAttribute(Fn, MCSA_ELF_TypeFunction);
+  MipsTargetStreamer &TS = getTargetStreamer();
+  TS.emitDirectiveSetPush();
+  TS.emitDirectiveSetNoMips16();
+  TS.emitDirectiveSetNoMicroMips();
+  TS.emitDirectiveSetMips32R2();
+  TS.emitDirectiveSetNoReorder();
+  TS.emitDirectiveEnt(*Fn);
+  OutStreamer->emitLabel(Fn);
+
+  // Linux can emulate this read on earlier CPUs when its destination is v1.
+  // Return it in v0 following the ordinary o32 integer calling convention.
+  std::unique_ptr<MCSubtargetInfo> STI(TM.getTarget().createMCSubtargetInfo(
+      TM.getTargetTriple(), "mips32r2", "-micromips,-mips16"));
+  OutStreamer->emitInstruction(
+      MCInstBuilder(Mips::RDHWR).addReg(Mips::V1).addReg(Mips::HWR29).addImm(0),
+      *STI);
+  EmitInstrReg(*STI, Mips::JR, Mips::RA);
+  EmitInstrRegRegReg(*STI, Mips::OR, Mips::V0, Mips::V1, Mips::ZERO);
+  MCSymbol *End = OutContext.createTempSymbol();
+  OutStreamer->emitLabel(End);
+  OutStreamer->emitELFSize(
+      Fn, MCBinaryExpr::createSub(MCSymbolRefExpr::create(End, OutContext),
+                                  MCSymbolRefExpr::create(Fn, OutContext),
+                                  OutContext));
+  TS.emitDirectiveEnd(Name);
+  TS.emitDirectiveSetPop(TM.getMCSubtargetInfo());
+}
+
 void MipsAsmPrinter::emitEndOfAsmFile(Module &M) {
+  if (NeedsMips16ReadTP)
+    emitMips16ReadTP();
   // Emit needed stubs
   //
   for (const auto &[Symbol, Stub] : StubsNeeded)

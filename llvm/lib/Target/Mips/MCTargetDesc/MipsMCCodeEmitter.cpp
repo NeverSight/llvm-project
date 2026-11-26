@@ -652,7 +652,8 @@ getExprOpValue(const MCExpr *Expr, SmallVectorImpl<MCFixup> &Fixups,
                                    : Mips::fixup_Mips_GOT_OFST;
       break;
     case Mips::S_GPREL:
-      FixupKind = Mips::fixup_Mips_GPREL16;
+      FixupKind = isMicroMips(STI) ? Mips::fixup_MICROMIPS_GPREL16
+                                   : Mips::fixup_Mips_GPREL16;
       break;
     case Mips::S_LO:
       // Check for %lo(%neg(%gp_rel(X)))
@@ -763,6 +764,15 @@ unsigned MipsMCCodeEmitter::getImmOpValue(const MCInst &MI, const MCOperand &MO,
         break;
       case Mips::S_GOT_CALL:
         Kind = Mips::fixup_Mips16_CALL16;
+        break;
+      case Mips::S_GOTTPREL:
+        Kind = Mips::fixup_Mips16_TLS_GOTTPREL;
+        break;
+      case Mips::S_TPREL_HI:
+        Kind = Mips::fixup_Mips16_TLS_TPREL_HI16;
+        break;
+      case Mips::S_TPREL_LO:
+        Kind = Mips::fixup_Mips16_TLS_TPREL_LO16;
         break;
       case Mips::S_GPREL:
         Kind = Mips::fixup_Mips16_GPREL;

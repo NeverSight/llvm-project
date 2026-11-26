@@ -45,6 +45,9 @@ enum Fixups {
   fixup_Mips16_GOT16,
   fixup_Mips16_CALL16,
   fixup_Mips16_GPREL,
+  fixup_Mips16_TLS_GOTTPREL,
+  fixup_Mips16_TLS_TPREL_HI16,
+  fixup_Mips16_TLS_TPREL_LO16,
 
   // Pure upper 16 bit fixup resulting in - R_MIPS_HI16.
   fixup_Mips_HI16,
@@ -168,6 +171,9 @@ enum Fixups {
 
   // resulting in - R_MICROMIPS_LO16
   fixup_MICROMIPS_LO16,
+
+  // resulting in - R_MICROMIPS_GPREL16
+  fixup_MICROMIPS_GPREL16,
 
   // resulting in - R_MICROMIPS_GOT16
   fixup_MICROMIPS_GOT16,
