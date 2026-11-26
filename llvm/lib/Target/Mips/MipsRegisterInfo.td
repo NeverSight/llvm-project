@@ -323,6 +323,9 @@ def GPRMM16 : RegisterClass<"Mips", [i32], 32, (add
   // Return Values and Arguments
   V0, V1, A0, A1, A2, A3)>;
 
+def GPRMM16_64 : RegisterClass<"Mips", [i64], 64, (add
+  S0_64, S1_64, V0_64, V1_64, A0_64, A1_64, A2_64, A3_64)>;
+
 def GPRMM16Zero : RegisterClass<"Mips", [i32], 32, (add
   // Reserved
   ZERO,
@@ -777,7 +780,7 @@ def mips_ptr_rc : RegClassByHwMode<
 
 def ptr_gpr16mm_rc : RegClassByHwMode<
   [MIPS32, MIPS64],
-  [GPRMM16, GPRMM16]>; // FIXME: Why even use this if it's just a constant
+  [GPRMM16, GPRMM16_64]>;
 
 def ptr_sp_rc : RegClassByHwMode<
   [MIPS32, MIPS64],

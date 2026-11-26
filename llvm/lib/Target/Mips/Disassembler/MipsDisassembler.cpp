@@ -924,6 +924,16 @@ static DecodeStatus DecodeGPRMM16RegisterClass(MCInst &Inst, unsigned RegNo,
 }
 
 static DecodeStatus
+DecodeGPRMM16_64RegisterClass(MCInst &Inst, unsigned RegNo, uint64_t Address,
+                              const MCDisassembler *Decoder) {
+  if (RegNo > 7)
+    return MCDisassembler::Fail;
+  MCRegister Reg = getReg(Decoder, Mips::GPRMM16_64RegClassID, RegNo);
+  Inst.addOperand(MCOperand::createReg(Reg));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus
 DecodeGPRMM16ZeroRegisterClass(MCInst &Inst, unsigned RegNo, uint64_t Address,
                                const MCDisassembler *Decoder) {
   if (RegNo > 7)
@@ -1292,9 +1302,11 @@ static DecodeStatus DecodeMemMMImm4(MCInst &Inst, unsigned Insn,
       break;
   }
 
-  if (DecodeGPRMM16RegisterClass(Inst, Base, Address, Decoder)
-        == MCDisassembler::Fail)
-    return MCDisassembler::Fail;
+  unsigned BaseClass =
+      Decoder->getSubtargetInfo().hasFeature(Mips::FeaturePTR64Bit)
+          ? Mips::GPRMM16_64RegClassID
+          : Mips::GPRMM16RegClassID;
+  Inst.addOperand(MCOperand::createReg(getReg(Decoder, BaseClass, Base)));
 
   switch (Inst.getOpcode()) {
     case Mips::LBU16_MM:

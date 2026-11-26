@@ -13,6 +13,7 @@
 
 #include "MCTargetDesc/MipsAsmBackend.h"
 #include "MCTargetDesc/MipsABIInfo.h"
+#include "MCTargetDesc/MipsBaseInfo.h"
 #include "MCTargetDesc/MipsFixupKinds.h"
 #include "MCTargetDesc/MipsMCTargetDesc.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -21,6 +22,7 @@
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCELFObjectWriter.h"
+#include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbolELF.h"
@@ -97,6 +99,18 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
       return 0;
     }
     break;
+  case Mips::fixup_Mips16_PC8_S1:
+  case Mips::fixup_Mips16_PC11_S1:
+  case Mips::fixup_Mips16_PC16_S1: {
+    unsigned Bits = Kind == Mips::fixup_Mips16_PC8_S1    ? 8
+                    : Kind == Mips::fixup_Mips16_PC11_S1 ? 11
+                                                         : 16;
+    if ((Value & 1) || !isIntN(Bits + 1, Value)) {
+      Ctx.reportError(Fixup.getLoc(), "invalid MIPS16 branch displacement");
+      return 0;
+    }
+    return (Value >> 1) & maskTrailingOnes<uint64_t>(Bits);
+  }
   case Mips::fixup_MIPS_PC19_S2:
   case Mips::fixup_MICROMIPS_PC19_S2:
     // Forcing a signed division because Value can be negative.
@@ -352,10 +366,40 @@ static unsigned branchTargetAlignment(MCFixupKind Kind) {
   case Mips::fixup_MICROMIPS_PC16_S1:
   case Mips::fixup_MICROMIPS_PC21_S1:
   case Mips::fixup_MICROMIPS_PC26_S1:
+  case Mips::fixup_Mips16_PC8_S1:
+  case Mips::fixup_Mips16_PC11_S1:
+  case Mips::fixup_Mips16_PC16_S1:
     return 2;
   default:
     return 0;
   }
+}
+
+bool MipsAsmBackend::mayNeedRelaxation(unsigned Opcode,
+                                       ArrayRef<MCOperand> Operands,
+                                       const MCSubtargetInfo &) const {
+  return MipsII::getMips16ExtendedBranchOpcode(Opcode) != Opcode &&
+         Operands.back().isExpr();
+}
+
+bool MipsAsmBackend::fixupNeedsRelaxationAdvanced(const MCFragment &,
+                                                  const MCFixup &Fixup,
+                                                  const MCValue &,
+                                                  uint64_t Value,
+                                                  bool Resolved) const {
+  switch (static_cast<unsigned>(Fixup.getKind())) {
+  case Mips::fixup_Mips16_PC8_S1:
+    return !Resolved || !isInt<9>(Value);
+  case Mips::fixup_Mips16_PC11_S1:
+    return !Resolved || !isInt<12>(Value);
+  default:
+    return false;
+  }
+}
+
+void MipsAsmBackend::relaxInstruction(MCInst &Inst,
+                                      const MCSubtargetInfo &) const {
+  Inst.setOpcode(MipsII::getMips16ExtendedBranchOpcode(Inst.getOpcode()));
 }
 
 static bool needsGPOrTLSBase(MCFixupKind Kind) {
@@ -470,7 +514,11 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   if (unsigned Align = branchTargetAlignment(Kind);
       Align && TheTriple.isOSBinFormatELF() && IsResolved &&
       !Target.getSubSym()) {
-    const unsigned Mode = Align == 2 ? ELF::STO_MIPS_MICROMIPS : 0;
+    const bool Mips16 =
+        Kind >= Mips::fixup_Mips16_PC8_S1 && Kind <= Mips::fixup_Mips16_PC16_S1;
+    const unsigned CompressedMode =
+        Mips16 ? ELF::STO_MIPS_MIPS16 : ELF::STO_MIPS_MICROMIPS;
+    const unsigned Mode = Align == 2 ? CompressedMode : 0;
     if (const auto *Sym =
             static_cast<const MCSymbolELF *>(Target.getAddSym())) {
       unsigned TargetMode = Mode;
@@ -478,7 +526,7 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
         // External resolutions return callable pointers. Drop the ISA tag
         // before scaling the signed PC-relative displacement.
         bool Tagged = (Value - Target.getConstant()) & 1;
-        TargetMode = Tagged ? ELF::STO_MIPS_MICROMIPS : 0;
+        TargetMode = Tagged ? CompressedMode : 0;
         Value -= Tagged;
       } else if (Sym->isInSection() && Sym->getType() == ELF::STT_FUNC) {
         TargetMode = compressedMode(*Sym);
@@ -529,7 +577,9 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   if (!Value)
     return; // Doesn't change encoding.
 
-  if (Kind >= Mips::fixup_Mips16_HI16 && Kind <= Mips::fixup_Mips16_TLS_TPREL_LO16) {
+  if ((Kind >= Mips::fixup_Mips16_HI16 &&
+       Kind <= Mips::fixup_Mips16_TLS_TPREL_LO16) ||
+      Kind == Mips::fixup_Mips16_PC16_S1) {
     uint32_t Field = ELF::encodeMips16Imm16(Value);
     uint16_t Ext = support::endian::read16(Data, Endian);
     uint16_t Op = support::endian::read16(Data + 2, Endian);
@@ -547,6 +597,8 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   switch ((unsigned)Kind) {
   case FK_Data_2:
   case Mips::fixup_Mips_16:
+  case Mips::fixup_Mips16_PC8_S1:
+  case Mips::fixup_Mips16_PC11_S1:
   case Mips::fixup_MICROMIPS_PC10_S1:
     FullSize = 2;
     break;
@@ -658,6 +710,9 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_Mips16_TLS_GOTTPREL", 0, 16, 0 },
     { "fixup_Mips16_TLS_TPREL_HI16", 0, 16, 0 },
     { "fixup_Mips16_TLS_TPREL_LO16", 0, 16, 0 },
+    { "fixup_Mips16_PC8_S1",     0,      8,   0 },
+    { "fixup_Mips16_PC11_S1",    0,     11,   0 },
+    { "fixup_Mips16_PC16_S1",    0,     16,   0 },
     { "fixup_Mips_HI16",         0,     16,   0 },
     { "fixup_Mips_LO16",         0,     16,   0 },
     { "fixup_Mips_AnyImm16",     0,     16,   0 },
@@ -754,6 +809,9 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_Mips16_TLS_GOTTPREL", 0, 16, 0 },
     { "fixup_Mips16_TLS_TPREL_HI16", 0, 16, 0 },
     { "fixup_Mips16_TLS_TPREL_LO16", 0, 16, 0 },
+    { "fixup_Mips16_PC8_S1",     8,      8,   0 },
+    { "fixup_Mips16_PC11_S1",    5,     11,   0 },
+    { "fixup_Mips16_PC16_S1",    0,     16,   0 },
     { "fixup_Mips_HI16",        16,     16,   0 },
     { "fixup_Mips_LO16",        16,     16,   0 },
     { "fixup_Mips_AnyImm16",    16,     16,   0 },

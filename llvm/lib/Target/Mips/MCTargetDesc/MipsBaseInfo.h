@@ -26,6 +26,23 @@ namespace llvm {
 /// instruction info tracks.
 ///
 namespace MipsII {
+inline unsigned getMips16ExtendedBranchOpcode(unsigned Opcode) {
+  switch (Opcode) {
+  case Mips::Bimm16:
+    return Mips::BimmX16;
+  case Mips::BeqzRxImm16:
+    return Mips::BeqzRxImmX16;
+  case Mips::BnezRxImm16:
+    return Mips::BnezRxImmX16;
+  case Mips::Bteqz16:
+    return Mips::BteqzX16;
+  case Mips::Btnez16:
+    return Mips::BtnezX16;
+  default:
+    return Opcode;
+  }
+}
+
 /// MD00594 rev. 6.05 assigns these DINSM positions to DSRA32 or DLSA
 /// in the instruction diagrams and to DINSM in the POOL32S opcode map.
 inline bool isAmbiguousMicro64R6DinsmPosition(unsigned Pos) {

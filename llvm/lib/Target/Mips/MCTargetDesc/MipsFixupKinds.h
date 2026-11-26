@@ -48,6 +48,9 @@ enum Fixups {
   fixup_Mips16_TLS_GOTTPREL,
   fixup_Mips16_TLS_TPREL_HI16,
   fixup_Mips16_TLS_TPREL_LO16,
+  fixup_Mips16_PC8_S1,
+  fixup_Mips16_PC11_S1,
+  fixup_Mips16_PC16_S1,
 
   // Pure upper 16 bit fixup resulting in - R_MIPS_HI16.
   fixup_Mips_HI16,

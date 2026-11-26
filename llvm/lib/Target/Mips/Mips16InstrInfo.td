@@ -44,6 +44,16 @@ def mem16_ea : Operand<i32> {
 
 def pcrel16 : Operand<i32>;
 
+class Mips16BranchTarget<int Width> : Operand<OtherVT> {
+  let EncoderMethod = "getMips16BranchTargetOpValue<" # Width # ">";
+  let OperandType = "OPERAND_PCREL";
+  let ParserMatchClass = MipsJumpTargetAsmOperand;
+  let PrintMethod = "printBranchOperand";
+}
+def brtarget16_8 : Mips16BranchTarget<8>;
+def brtarget16_11 : Mips16BranchTarget<11>;
+def brtarget16_ext : Mips16BranchTarget<16>;
+
 //
 // I-type instruction format
 //
@@ -51,7 +61,7 @@ def pcrel16 : Operand<i32>;
 // number
 //
 class FI16_ins<bits<5> op, string asmstr>:
-  FI16<op, (outs), (ins brtarget:$imm11),
+  FI16<op, (outs), (ins brtarget16_11:$imm11),
             !strconcat(asmstr, "\t$imm11 # 16 bit inst"), []>;
 
 //
@@ -65,7 +75,9 @@ class FI816_ins_base<bits<3> _func, string asmstr,
         []>;
 
 class FI816_ins<bits<3> _func, string asmstr>:
-  FI816_ins_base<_func, asmstr, "\t$imm8  # 16 bit inst">;
+  FI816_ins_base<_func, asmstr, "\t$imm8  # 16 bit inst"> {
+  let InOperandList = (ins brtarget16_8:$imm8);
+}
 
 class FI816_SP_ins<bits<3> _func, string asmstr>:
   FI816_ins_base<_func, asmstr, "\t$$sp, $imm8 # 16 bit inst">;
@@ -100,7 +112,7 @@ class F2RI16_ins<bits<5> _op, string asmstr>:
 }
 
 class FRI16_B_ins<bits<5> _op, string asmstr>:
-  FRI16<_op, (outs), (ins  CPU16Regs:$rx, brtarget:$imm8),
+  FRI16<_op, (outs), (ins CPU16RegsOpnd:$rx, brtarget16_8:$imm8),
         !strconcat(asmstr, "\t$rx, $imm8  # 16 bit inst"), []>;
 //
 // Compare a register and immediate and place result in CC
@@ -135,8 +147,10 @@ class FJALB16_ins<bits<1> _X, string asmstr>:
 // EXT-I instruction format
 //
 class FEXT_I16_ins<bits<5> eop, string asmstr> :
-  FEXT_I16<eop, (outs), (ins brtarget:$imm16),
-           !strconcat(asmstr, "\t$imm16"),[]>;
+  FEXT_I16<eop, (outs), (ins brtarget16_ext:$imm16),
+           !strconcat(asmstr, "\t$imm16"),[]> {
+  let isCodeGenOnly = 1;
+}
 
 //
 // EXT-I8 instruction format
@@ -148,7 +162,10 @@ class FEXT_I816_ins_base<bits<3> _func, string asmstr,
             []>;
 
 class FEXT_I816_ins<bits<3> _func, string asmstr>:
-  FEXT_I816_ins_base<_func, asmstr, "\t$imm16">;
+  FEXT_I816_ins_base<_func, asmstr, "\t$imm16"> {
+  let InOperandList = (ins brtarget16_ext:$imm16);
+  let isCodeGenOnly = 1;
+}
 
 class FEXT_I816_SP_ins<bits<3> _func, string asmstr>:
       FEXT_I816_ins_base<_func, asmstr, "\t$$sp, $imm16">;
@@ -191,8 +208,10 @@ class FEXT_RI16_PC_ins<bits<5> _op, string asmstr>:
   FEXT_RI16_ins_base<_op, asmstr, "\t$rx, $$pc, $imm16">;
 
 class FEXT_RI16_B_ins<bits<5> _op, string asmstr>:
-  FEXT_RI16<_op, (outs), (ins  CPU16Regs:$rx, brtarget:$imm16),
-            !strconcat(asmstr, "\t$rx, $imm16"), []>;
+  FEXT_RI16<_op, (outs), (ins CPU16RegsOpnd:$rx, brtarget16_ext:$imm16),
+            !strconcat(asmstr, "\t$rx, $imm16"), []> {
+  let isCodeGenOnly = 1;
+}
 
 class FEXT_RI16_TCP_ins<bits<5> _op, string asmstr>:
   FEXT_RI16<_op, (outs CPU16Regs:$rx), (ins pcrel16:$imm16),
@@ -626,6 +645,26 @@ def Btnez16: FI816_ins<0b001, "btnez">, cbranch16 {
 
 def BtnezX16: FEXT_I816_ins<0b001, "btnez"> ,cbranch16 {
   let Uses = [T8];
+}
+
+// The short assembly-printer forms carry an instruction-size comment.
+// Parse ordinary branch mnemonics as compact instructions and relax symbols
+// after layout. The .e spelling explicitly requests EXTEND.
+let Predicates = [InMips16Mode] in {
+  def : InstAlias<"b $off", (Bimm16 brtarget16_11:$off), 0>;
+  def : InstAlias<"b.e $off", (BimmX16 brtarget16_ext:$off), 0>;
+  def : InstAlias<"beqz $rx, $off",
+                  (BeqzRxImm16 CPU16RegsOpnd:$rx, brtarget16_8:$off), 0>;
+  def : InstAlias<"beqz.e $rx, $off",
+                  (BeqzRxImmX16 CPU16RegsOpnd:$rx, brtarget16_ext:$off), 0>;
+  def : InstAlias<"bnez $rx, $off",
+                  (BnezRxImm16 CPU16RegsOpnd:$rx, brtarget16_8:$off), 0>;
+  def : InstAlias<"bnez.e $rx, $off",
+                  (BnezRxImmX16 CPU16RegsOpnd:$rx, brtarget16_ext:$off), 0>;
+  def : InstAlias<"bteqz $off", (Bteqz16 brtarget16_8:$off), 0>;
+  def : InstAlias<"bteqz.e $off", (BteqzX16 brtarget16_ext:$off), 0>;
+  def : InstAlias<"btnez $off", (Btnez16 brtarget16_8:$off), 0>;
+  def : InstAlias<"btnez.e $off", (BtnezX16 brtarget16_ext:$off), 0>;
 }
 
 def BtnezT8CmpX16: FEXT_T8I816_ins<"btnez", "cmp">, cbranch16;

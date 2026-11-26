@@ -271,6 +271,7 @@ RelExpr MIPS<ELFT>::getRelExpr(RelType type, const Symbol &s,
     return R_TPREL;
   case R_MIPS_PC32:
   case R_MIPS_PC16:
+  case R_MIPS16_PC16_S1:
   case R_MIPS_PC19_S2:
   case R_MIPS_PC21_S2:
   case R_MIPS_PC26_S2:
@@ -638,6 +639,8 @@ int64_t MIPS<ELFT>::getImplicitAddend(const uint8_t *buf, RelType type) const {
     return SignExtend64<32>(read32(ctx, buf));
   case R_MIPS16_26:
     return SignExtend64<28>(readShuffle<e>(ctx, buf) << 2);
+  case R_MIPS16_PC16_S1:
+    return SignExtend64<17>(decodeMips16Imm16(readShuffle<e>(ctx, buf)) << 1);
   case R_MIPS16_HI16:
   case R_MIPS16_GOT16:
     return SignExtend64<32>(
@@ -1074,6 +1077,21 @@ void MIPS<ELFT>::relocate(uint8_t *loc, const Relocation &rel,
   }
   case R_MIPS_26:
     writeValue(ctx, loc, val, 26, 2);
+    break;
+  case R_MIPS16_PC16_S1:
+    if (!ctx.arg.relocatable) {
+      if (!rel.sym->isMips16() &&
+          (rel.sym->isFunc() || rel.sym->hasMipsCodeBit(ctx))) {
+        Err(ctx) << getErrorLoc(ctx, loc) << rel.type
+                 << " cannot branch to a different ISA mode: " << rel.sym;
+        return;
+      }
+      if (rel.sym->isMips16())
+        --val; // The branch addresses an instruction, not a callable pointer.
+    }
+    checkAlignment(ctx, loc, val, 2, rel);
+    checkInt(ctx, loc, val, 17, rel);
+    writeMips16Imm16(ctx, loc, val >> 1);
     break;
   case R_MIPS16_TLS_TPREL_HI16:
   case R_MIPS16_HI16:
