@@ -68,6 +68,8 @@ private:
     const MipsSubtarget *Subtarget;
   };
   std::map<const char *, FPCallStub> StubsNeeded;
+  bool NeedsMips16ReadTP = false;
+  void emitMips16ReadTP();
 
   void EmitSled(const MachineInstr &MI, SledKind Kind);
 

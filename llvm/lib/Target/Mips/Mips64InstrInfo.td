@@ -697,11 +697,11 @@ def : MipsPat<(MipsGotHi tglobaladdr:$in), (LUi64 tglobaladdr:$in)>, ISA_MIPS3,
 def : MipsPat<(MipsGotHi texternalsym:$in), (LUi64 texternalsym:$in)>,
       ISA_MIPS3, GPR_64;
 
-def : MipsPat<(MipsTlsHi tglobaltlsaddr:$in), (LUi64 tglobaltlsaddr:$in)>,
-      ISA_MIPS3, GPR_64;
-
 // Both instruction encodings materialize the four chunks of a 64-bit symbol.
 let EncodingPredicates = [NotInMips16Mode] in {
+  def : MipsPat<(MipsTlsHi tglobaltlsaddr:$in), (LUi64 tglobaltlsaddr:$in)>,
+        ISA_MIPS3, GPR_64;
+
   def : MipsPat<(MipsJmpLink (i64 texternalsym:$dst)),
                 (JAL texternalsym:$dst)>, ISA_MIPS3, GPR_64, SYM_64;
 

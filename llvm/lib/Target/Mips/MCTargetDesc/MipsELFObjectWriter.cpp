@@ -254,6 +254,12 @@ unsigned MipsELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_MIPS16_GOT16;
   case Mips::fixup_Mips16_CALL16:
     return ELF::R_MIPS16_CALL16;
+  case Mips::fixup_Mips16_TLS_GOTTPREL:
+    return ELF::R_MIPS16_TLS_GOTTPREL;
+  case Mips::fixup_Mips16_TLS_TPREL_HI16:
+    return ELF::R_MIPS16_TLS_TPREL_HI16;
+  case Mips::fixup_Mips16_TLS_TPREL_LO16:
+    return ELF::R_MIPS16_TLS_TPREL_LO16;
   case Mips::fixup_Mips16_GPREL:
     return ELF::R_MIPS16_GPREL;
   case Mips::fixup_Mips_CALL16:
@@ -312,6 +318,8 @@ unsigned MipsELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_MICROMIPS_26_S1;
   case Mips::fixup_MICROMIPS_HI16:
     return ELF::R_MICROMIPS_HI16;
+  case Mips::fixup_MICROMIPS_GPREL16:
+    return ELF::R_MICROMIPS_GPREL16;
   case Mips::fixup_MICROMIPS_LO16:
     return ELF::R_MICROMIPS_LO16;
   case Mips::fixup_MICROMIPS_GOT16:
@@ -517,6 +525,9 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCValue &V,
   case ELF::R_MIPS16_26:
   case ELF::R_MIPS16_CALL16:
   case ELF::R_MIPS16_GPREL:
+  case ELF::R_MIPS16_TLS_GOTTPREL:
+  case ELF::R_MIPS16_TLS_TPREL_HI16:
+  case ELF::R_MIPS16_TLS_TPREL_LO16:
     return true;
 
   // FIXME: Many of these relocations should probably return false but this
@@ -604,9 +615,6 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCValue &V,
   case ELF::R_MIPS16_TLS_LDM:
   case ELF::R_MIPS16_TLS_DTPREL_HI16:
   case ELF::R_MIPS16_TLS_DTPREL_LO16:
-  case ELF::R_MIPS16_TLS_GOTTPREL:
-  case ELF::R_MIPS16_TLS_TPREL_HI16:
-  case ELF::R_MIPS16_TLS_TPREL_LO16:
     llvm_unreachable("Unsupported MIPS16 relocation");
     return true;
   }

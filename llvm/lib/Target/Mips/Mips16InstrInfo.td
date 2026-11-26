@@ -1789,6 +1789,13 @@ def: SetCC_R16<setult, SltuCCRxRy16>;
 
 def: SetCC_I16<setult, immSExt16, SltiuCCRxImmX16>;
 
+def : Mips16Pat<(add CPU16Regs:$base, (MipsGPRel tglobaladdr:$in)),
+                (AddiuRxRxImmX16 CPU16Regs:$base, tglobaladdr:$in)>;
+def : Mips16Pat<(add CPU16Regs:$base, (MipsGPRel tconstpool:$in)),
+                (AddiuRxRxImmX16 CPU16Regs:$base, tconstpool:$in)>;
+def : Mips16Pat<(add CPU16Regs:$hi, (MipsLo tglobaltlsaddr:$lo)),
+                (AddiuRxRxImmX16 CPU16Regs:$hi, tglobaltlsaddr:$lo)>;
+
 def: Mips16Pat<(add CPU16Regs:$hi, (MipsLo tglobaladdr:$lo)),
                (AddiuRxRxImmX16 CPU16Regs:$hi, tglobaladdr:$lo)>;
 

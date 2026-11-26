@@ -47,6 +47,9 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
   case FK_Data_2:
   case Mips::fixup_Mips16_LO16:
   case Mips::fixup_Mips16_GPREL:
+  case Mips::fixup_Mips16_TLS_GOTTPREL:
+  case Mips::fixup_Mips16_TLS_TPREL_LO16:
+  case Mips::fixup_MICROMIPS_GPREL16:
   case Mips::fixup_Mips16_CALL16:
   case Mips::fixup_Mips_16:
   case Mips::fixup_Mips_LO16:
@@ -112,6 +115,7 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
     Value >>= 2;
     break;
   case Mips::fixup_Mips16_HI16:
+  case Mips::fixup_Mips16_TLS_TPREL_HI16:
   case Mips::fixup_Mips16_GOT16:
   case Mips::fixup_Mips_HI16:
   case Mips::fixup_Mips_GOT:
@@ -270,6 +274,9 @@ static bool shouldForceRelocation(const MCFixup &Fixup) {
   case Mips::fixup_Mips_GOT_DISP:
   case Mips::fixup_Mips_GOT_HI16:
   case Mips::fixup_Mips_GOT_LO16:
+  case Mips::fixup_Mips16_TLS_GOTTPREL:
+  case Mips::fixup_Mips16_TLS_TPREL_HI16:
+  case Mips::fixup_Mips16_TLS_TPREL_LO16:
   case Mips::fixup_Mips_GOTTPREL:
   case Mips::fixup_Mips_DTPREL_HI:
   case Mips::fixup_Mips_DTPREL_LO:
@@ -354,6 +361,7 @@ static unsigned branchTargetAlignment(MCFixupKind Kind) {
 static bool needsGPOrTLSBase(MCFixupKind Kind) {
   switch (static_cast<unsigned>(Kind)) {
   case Mips::fixup_Mips16_GPREL:
+  case Mips::fixup_MICROMIPS_GPREL16:
   case Mips::fixup_Mips_GPREL16:
   case Mips::fixup_Mips_GPREL32:
   case Mips::fixup_Mips_LITERAL:
@@ -521,13 +529,12 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   if (!Value)
     return; // Doesn't change encoding.
 
-  if (Kind >= Mips::fixup_Mips16_HI16 && Kind <= Mips::fixup_Mips16_GPREL) {
-    // EXTEND carries bits 10:5 and 15:11. The opcode halfword carries 4:0.
+  if (Kind >= Mips::fixup_Mips16_HI16 && Kind <= Mips::fixup_Mips16_TLS_TPREL_LO16) {
+    uint32_t Field = ELF::encodeMips16Imm16(Value);
     uint16_t Ext = support::endian::read16(Data, Endian);
     uint16_t Op = support::endian::read16(Data + 2, Endian);
-    support::endian::write16(Data, Ext | (Value & 0x7e0) | ((Value >> 11) & 31),
-                             Endian);
-    support::endian::write16(Data + 2, Op | (Value & 31), Endian);
+    support::endian::write16(Data, Ext | (Field >> 16), Endian);
+    support::endian::write16(Data + 2, Op | uint16_t(Field), Endian);
     return;
   }
 
@@ -648,6 +655,9 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_Mips16_GOT16", 0, 16, 0 },
     { "fixup_Mips16_CALL16", 0, 16, 0 },
     { "fixup_Mips16_GPREL", 0, 16, 0 },
+    { "fixup_Mips16_TLS_GOTTPREL", 0, 16, 0 },
+    { "fixup_Mips16_TLS_TPREL_HI16", 0, 16, 0 },
+    { "fixup_Mips16_TLS_TPREL_LO16", 0, 16, 0 },
     { "fixup_Mips_HI16",         0,     16,   0 },
     { "fixup_Mips_LO16",         0,     16,   0 },
     { "fixup_Mips_AnyImm16",     0,     16,   0 },
@@ -691,6 +701,7 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_MICROMIPS_26_S1",   0,     26,   0 },
     { "fixup_MICROMIPS_HI16",    0,     16,   0 },
     { "fixup_MICROMIPS_LO16",    0,     16,   0 },
+    { "fixup_MICROMIPS_GPREL16",  0,     16,   0 },
     { "fixup_MICROMIPS_GOT16",   0,     16,   0 },
     { "fixup_MICROMIPS_PC7_S1",  0,      7,   0 },
     { "fixup_MICROMIPS_PC10_S1", 0,     10,   0 },
@@ -740,6 +751,9 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_Mips16_GOT16", 0, 16, 0 },
     { "fixup_Mips16_CALL16", 0, 16, 0 },
     { "fixup_Mips16_GPREL", 0, 16, 0 },
+    { "fixup_Mips16_TLS_GOTTPREL", 0, 16, 0 },
+    { "fixup_Mips16_TLS_TPREL_HI16", 0, 16, 0 },
+    { "fixup_Mips16_TLS_TPREL_LO16", 0, 16, 0 },
     { "fixup_Mips_HI16",        16,     16,   0 },
     { "fixup_Mips_LO16",        16,     16,   0 },
     { "fixup_Mips_AnyImm16",    16,     16,   0 },
@@ -783,6 +797,7 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_MICROMIPS_26_S1",   6,     26,   0 },
     { "fixup_MICROMIPS_HI16",   16,     16,   0 },
     { "fixup_MICROMIPS_LO16",   16,     16,   0 },
+    { "fixup_MICROMIPS_GPREL16", 16,     16,   0 },
     { "fixup_MICROMIPS_GOT16",  16,     16,   0 },
     { "fixup_MICROMIPS_PC7_S1",  9,      7,   0 },
     { "fixup_MICROMIPS_PC10_S1", 6,     10,   0 },

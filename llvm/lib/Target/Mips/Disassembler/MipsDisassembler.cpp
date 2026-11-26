@@ -118,6 +118,18 @@ static DecodeStatus DecodeHWRegsRegisterClass(MCInst &Inst, unsigned RegNo,
   return MCDisassembler::Success;
 }
 
+// The pre-R6 microMIPS encoding has an implicit selector of zero.
+static DecodeStatus DecodeRDHWRMM(MCInst &MI, uint32_t Insn, uint64_t Address,
+                                  const MCDisassembler *Decoder) {
+  MI.addOperand(MCOperand::createReg(getReg(
+      Decoder, Mips::GPR32RegClassID, fieldFromInstruction(Insn, 21, 5))));
+  if (DecodeHWRegsRegisterClass(MI, fieldFromInstruction(Insn, 16, 5), Address,
+                                Decoder) == MCDisassembler::Fail)
+    return MCDisassembler::Fail;
+  MI.addOperand(MCOperand::createImm(0));
+  return MCDisassembler::Success;
+}
+
 static DecodeStatus DecodeAFGR64RegisterClass(MCInst &Inst, unsigned RegNo,
                                               uint64_t Address,
                                               const MCDisassembler *Decoder) {

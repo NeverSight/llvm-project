@@ -36,6 +36,9 @@ public:
   unsigned getSRetReturnReg() const { return SRetReturnReg; }
   void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
 
+  static constexpr char Mips16ReadTP[] = "__llvm_mips16_read_tp";
+  bool NeedsMips16ReadTP = false;
+
   bool globalBaseRegSet() const;
   Register getGlobalBaseReg(MachineFunction &MF);
   Register getGlobalBaseRegForGlobalISel(MachineFunction &MF);

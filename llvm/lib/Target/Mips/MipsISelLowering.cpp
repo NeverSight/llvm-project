@@ -2160,6 +2160,19 @@ SDValue MipsTargetLowering::lowerFSETCC(SDValue Op, SelectionDAG &DAG) const {
   return DAG.getMergeValues({CMovFP, Chain}, DL);
 }
 
+template <class NodeTy>
+SDValue MipsTargetLowering::getAddrGPRel(NodeTy *N, const SDLoc &DL, EVT Ty,
+                                         SelectionDAG &DAG) const {
+  SDValue Base = DAG.getRegister(ABI.IsN64() ? Mips::GP_64 : Mips::GP, Ty);
+  // MIPS16 loads and two-address ADDIU cannot encode the physical GP.
+  // Materialize the base once, including when the load folds the offset.
+  if (Subtarget.inMips16Mode())
+    Base = SDValue(DAG.getMachineNode(Mips::MoveR3216, DL, Ty, Base), 0);
+  SDValue Target = getTargetNode(N, Ty, DAG, MipsII::MO_GPREL);
+  return DAG.getNode(ISD::ADD, DL, Ty, Base,
+                     DAG.getNode(MipsISD::GPRel, DL, Ty, Target));
+}
+
 SDValue MipsTargetLowering::lowerGlobalAddress(SDValue Op,
                                                SelectionDAG &DAG) const {
   EVT Ty = Op.getValueType();
@@ -2181,7 +2194,7 @@ SDValue MipsTargetLowering::lowerGlobalAddress(SDValue Op,
     const GlobalObject *GO = GV->getAliaseeObject();
     if (GO && TLOF->IsGlobalInSmallSection(GO, getTargetMachine()))
       // %gp_rel relocation
-      return getAddrGPRel(N, SDLoc(N), Ty, DAG, ABI.IsN64());
+      return getAddrGPRel(N, SDLoc(N), Ty, DAG);
 
                                 // %hi/%lo relocation
     return Subtarget.hasSym32() ? getAddrNonPIC(N, SDLoc(N), Ty, DAG)
@@ -2302,7 +2315,23 @@ lowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const
     Offset = DAG.getNode(ISD::ADD, DL, PtrVT, Hi, Lo);
   }
 
-  SDValue ThreadPointer = DAG.getNode(MipsISD::ThreadPointer, DL, PtrVT);
+  SDValue ThreadPointer;
+  if (Subtarget.inMips16Mode()) {
+    // RDHWR has no MIPS16 encoding. A normal call accounts for both
+    // interworking and the return address of a previously leaf function.
+    auto *FI = DAG.getMachineFunction().getInfo<MipsFunctionInfo>();
+    FI->NeedsMips16ReadTP = true;
+    auto *PtrTy = Type::getInt32Ty(*DAG.getContext());
+    SDValue Callee =
+        DAG.getExternalSymbol(MipsFunctionInfo::Mips16ReadTP, PtrVT);
+    CallLoweringInfo CLI(DAG);
+    CLI.setDebugLoc(DL)
+        .setChain(DAG.getEntryNode())
+        .setLibCallee(CallingConv::C, PtrTy, Callee, {});
+    ThreadPointer = LowerCallTo(CLI).first;
+  } else {
+    ThreadPointer = DAG.getNode(MipsISD::ThreadPointer, DL, PtrVT);
+  }
   return DAG.getNode(ISD::ADD, DL, PtrVT, ThreadPointer, Offset);
 }
 
@@ -2333,7 +2362,7 @@ lowerConstantPool(SDValue Op, SelectionDAG &DAG) const
     if (TLOF->IsConstantInSmallSection(DAG.getDataLayout(), N->getConstVal(),
                                        getTargetMachine()))
       // %gp_rel relocation
-      return getAddrGPRel(N, SDLoc(N), Ty, DAG, ABI.IsN64());
+      return getAddrGPRel(N, SDLoc(N), Ty, DAG);
 
     return Subtarget.hasSym32() ? getAddrNonPIC(N, SDLoc(N), Ty, DAG)
                                 : getAddrNonPICSym64(N, SDLoc(N), Ty, DAG);
