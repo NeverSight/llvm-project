@@ -193,6 +193,12 @@ unsigned MipsELFObjectWriter::getRelocType(const MCFixup &Fixup,
 
   if (IsPCRel) {
     switch (Kind) {
+    case Mips::fixup_Mips16_PC8_S1:
+    case Mips::fixup_Mips16_PC11_S1:
+      reportError(Fixup.getLoc(), "unresolved short MIPS16 branch");
+      return ELF::R_MIPS_NONE;
+    case Mips::fixup_Mips16_PC16_S1:
+      return ELF::R_MIPS16_PC16_S1;
     case Mips::fixup_Mips_Branch_PCRel:
     case Mips::fixup_Mips_PC16:
       return ELF::R_MIPS_PC16;
@@ -523,6 +529,7 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCValue &V,
     return false;
 
   case ELF::R_MIPS16_26:
+  case ELF::R_MIPS16_PC16_S1:
   case ELF::R_MIPS16_CALL16:
   case ELF::R_MIPS16_GPREL:
   case ELF::R_MIPS16_TLS_GOTTPREL:

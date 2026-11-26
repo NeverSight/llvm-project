@@ -60,6 +60,9 @@ static void addFixup(SmallVectorImpl<MCFixup> &Fixups, uint32_t Offset,
   switch (Kind) {
   case Mips::fixup_Mips_PC16:
   case Mips::fixup_Mips_Branch_PCRel:
+  case Mips::fixup_Mips16_PC8_S1:
+  case Mips::fixup_Mips16_PC11_S1:
+  case Mips::fixup_Mips16_PC16_S1:
   case Mips::fixup_MIPS_PC18_S3:
   case Mips::fixup_MIPS_PC19_S2:
   case Mips::fixup_MIPS_PC21_S2:
@@ -324,6 +327,33 @@ getBranchTargetOpValue(const MCInst &MI, unsigned OpNo,
   const MCExpr *FixupExpression = MCBinaryExpr::createAdd(
       MO.getExpr(), MCConstantExpr::create(-4, Ctx), Ctx);
   addFixup(Fixups, 0, FixupExpression, Mips::fixup_Mips_PC16);
+  return 0;
+}
+
+template <unsigned Width>
+unsigned MipsMCCodeEmitter::getMips16BranchTargetOpValue(
+    const MCInst &MI, unsigned OpNo, SmallVectorImpl<MCFixup> &Fixups,
+    const MCSubtargetInfo &) const {
+  static_assert(Width == 8 || Width == 11 || Width == 16);
+  const MCOperand &Target = MI.getOperand(OpNo);
+  if (Target.isImm()) {
+    if (!isShiftedInt<Width, 1>(Target.getImm())) {
+      Ctx.reportError(MI.getLoc(), "invalid MIPS16 branch displacement");
+      return 0;
+    }
+    return Target.getImm() >> 1;
+  }
+
+  // The displacement is relative to the end of the instruction, including
+  // the EXTEND halfword when present. O32 REL carries that bias in the field.
+  constexpr unsigned Size = Width == 16 ? 4 : 2;
+  constexpr unsigned Kind = Width == 16   ? Mips::fixup_Mips16_PC16_S1
+                            : Width == 11 ? Mips::fixup_Mips16_PC11_S1
+                                          : Mips::fixup_Mips16_PC8_S1;
+  const MCExpr *Expr =
+      MCBinaryExpr::create(MCBinaryExpr::Sub, Target.getExpr(),
+                           MCConstantExpr::create(Size, Ctx), Ctx, MI.getLoc());
+  addFixup(Fixups, 0, Expr, Kind);
   return 0;
 }
 

@@ -1836,7 +1836,18 @@ bool MipsAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
                                        MCStreamer &Out,
                                        const MCSubtargetInfo *STI) {
   MipsTargetStreamer &TOut = getTargetStreamer();
-  const unsigned Opcode = Inst.getOpcode();
+  unsigned Opcode = Inst.getOpcode();
+  if (inMips16Mode()) {
+    unsigned Extended = MipsII::getMips16ExtendedBranchOpcode(Opcode);
+    if (Extended != Opcode) {
+      const MCOperand &Off = Inst.getOperand(Inst.getNumOperands() - 1);
+      if (Off.isImm() &&
+          !isIntN(Opcode == Mips::Bimm16 ? 12 : 9, Off.getImm())) {
+        Opcode = Extended;
+        Inst.setOpcode(Opcode);
+      }
+    }
+  }
   const MCInstrDesc &MCID = MII.get(Opcode);
   bool ExpandedJalSym = false;
 

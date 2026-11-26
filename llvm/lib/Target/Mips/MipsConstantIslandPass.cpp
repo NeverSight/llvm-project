@@ -19,6 +19,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "MCTargetDesc/MipsBaseInfo.h"
 #include "Mips.h"
 #include "Mips16InstrInfo.h"
 #include "MipsMachineFunction.h"
@@ -97,29 +98,6 @@ static unsigned int branchTargetOperand(MachineInstr *MI) {
   case Mips::BnezRxImm16:
   case Mips::BnezRxImmX16:
     return 1;
-  }
-  llvm_unreachable("Unknown branch type");
-}
-
-static unsigned int longformBranchOpcode(unsigned int Opcode) {
-  switch (Opcode) {
-  case Mips::Bimm16:
-  case Mips::BimmX16:
-    return Mips::BimmX16;
-  case Mips::Bteqz16:
-  case Mips::BteqzX16:
-    return Mips::BteqzX16;
-  case Mips::Btnez16:
-  case Mips::BtnezX16:
-    return Mips::BtnezX16;
-  case Mips::JalB16:
-    return Mips::JalB16;
-  case Mips::BeqzRxImm16:
-  case Mips::BeqzRxImmX16:
-    return Mips::BeqzRxImmX16;
-  case Mips::BnezRxImm16:
-  case Mips::BnezRxImmX16:
-    return Mips::BnezRxImmX16;
   }
   llvm_unreachable("Unknown branch type");
 }
@@ -1535,7 +1513,7 @@ MipsConstantIslands::fixupConditionalBr(ImmBranch &Br) {
   unsigned TargetOperand = branchTargetOperand(MI);
   MachineBasicBlock *DestBB = MI->getOperand(TargetOperand).getMBB();
   unsigned Opcode = MI->getOpcode();
-  unsigned LongFormOpcode = longformBranchOpcode(Opcode);
+  unsigned LongFormOpcode = MipsII::getMips16ExtendedBranchOpcode(Opcode);
   unsigned LongFormMaxOff = branchMaxOffsets(LongFormOpcode);
 
   // Check to see if the DestBB is already in-range.
