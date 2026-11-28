@@ -9054,6 +9054,14 @@ LLVMInitializeMipsAsmParser() {
 
 unsigned MipsAsmParser::validateTargetOperandClass(MCParsedAsmOperand &Op,
                                                    unsigned Kind) {
+  if (Kind == MCK_PC && inMips16Mode() && Op.isImm()) {
+    // The generic parser retains an implicit $pc as a symbol operand.
+    const auto &Operand = static_cast<const MipsOperand &>(Op);
+    const auto *Ref = dyn_cast<MCSymbolRefExpr>(Operand.getImm());
+    if (Ref && *Op.getStartLoc().getPointer() == '$' &&
+        Ref->getSymbol().getName() == "$pc")
+      return Match_Success;
+  }
   if ((Kind == MCK_CPURAReg || Kind == MCK_CPUSPReg) && inMips16Mode()) {
     const auto &Reg = static_cast<const MipsOperand &>(Op);
     if (Reg.isGPRAsmReg() &&

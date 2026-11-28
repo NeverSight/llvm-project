@@ -28,3 +28,11 @@ lw $2, 32768($pc)
 # CHECK: :[[@LINE-1]]:{{[0-9]+}}: error:
 lw $2, 3($pc)
 # CHECK: :[[@LINE-1]]:{{[0-9]+}}: error:
+jalrc $0
+# CHECK: :[[@LINE-1]]:{{[0-9]+}}: error:
+jalrc $8
+# CHECK: :[[@LINE-1]]:{{[0-9]+}}: error:
+addiu $8, $pc, %lo(_gp_disp)
+# CHECK: :[[@LINE-1]]:{{[0-9]+}}: error:
+addiu $3, pc, %lo(_gp_disp)
+# CHECK: :[[@LINE-1]]:{{[0-9]+}}: error:

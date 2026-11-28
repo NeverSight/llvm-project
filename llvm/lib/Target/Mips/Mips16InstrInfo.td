@@ -610,7 +610,9 @@ def AddiuRxRyOffMemX16:
 // Purpose: Add Immediate Unsigned Word (3-Operand, PC-Relative, Extended)
 // To add a constant to the program counter.
 //
-def AddiuRxPcImmX16: FEXT_RI16_PC_ins<0b00001, "addiu">;
+def AddiuRxPcImmX16: FEXT_RI16_PC_ins<0b00001, "addiu"> {
+  let OutOperandList = (outs CPU16RegsOpnd:$rx);
+}
 
 // The SP-relative encoding uses an implicit base and a signed 16-bit byte
 // offset. An ordinary two-register ADDIU has a signed 15-bit byte offset.
@@ -621,13 +623,17 @@ def AddiuRxSpImmX16:
 }
 
 //
-// The compact SP-relative offset is a zero-extended word index.
-let Uses = [SP] in
-def AddiuRxSpImm16 : FRI16<0, (outs CPU16RegsOpnd:$rx),
-    (ins mips16_word_uimm8:$offset), "addiu\t$rx, $$sp, $offset", []> {
+// Both compact address forms encode a zero-extended word index.
+class AddiuBaseImm16<bits<5> op, string base> :
+    FRI16<op, (outs CPU16RegsOpnd:$rx), (ins mips16_word_uimm8:$offset),
+          "addiu\t$rx, $$" # base # ", $offset", []> {
   bits<10> offset;
   let imm8 = offset{9-2};
 }
+let Uses = [SP] in
+def AddiuRxSpImm16 : AddiuBaseImm16<0, "sp">;
+let Uses = [PC] in
+def AddiuRxPcImm16 : AddiuBaseImm16<1, "pc">;
 
 // Format: ADDIU sp, immediate MIPS16e
 // Purpose: Add Immediate Unsigned Word (2-Operand, SP-Relative, Extended)
@@ -2065,6 +2071,9 @@ MipsPseudo16<(outs), (ins cpinst_operand:$instid, cpinst_operand:$cpidx,
 // Instruction Aliases
 
 let Predicates = [InMips16Mode] in {
+  def : InstAlias<"jalrc $rx", (JumpLinkReg16 CPU16RegsOpnd:$rx), 0>;
+  def : InstAlias<"addiu.e $rx, $$pc, $imm",
+                  (AddiuRxPcImmX16 CPU16RegsOpnd:$rx, simm16:$imm), 0>;
   def : InstAlias<"addiu $$sp, $imm", (AddiuSpImm16 mips16_sp_delta:$imm), 0>;
   def : InstAlias<"addiu.e $$sp, $imm", (AddiuSpImmX16 simm16:$imm), 0>;
   foreach suffix = ["", ".e"] in

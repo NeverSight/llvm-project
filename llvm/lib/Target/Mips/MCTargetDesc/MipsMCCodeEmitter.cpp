@@ -103,7 +103,9 @@ void MipsMCCodeEmitter::LowerCompactBranch(MCInst& Inst) const {
   unsigned Reg1 =  Ctx.getRegisterInfo()->getEncodingValue(RegOp1);
 
   if (Inst.getOpcode() == Mips::BNEC || Inst.getOpcode() == Mips::BEQC ||
-      Inst.getOpcode() == Mips::BNEC64 || Inst.getOpcode() == Mips::BEQC64) {
+      Inst.getOpcode() == Mips::BNEC64 || Inst.getOpcode() == Mips::BEQC64 ||
+      Inst.getOpcode() == Mips::BNEC_MMR6 ||
+      Inst.getOpcode() == Mips::BEQC_MMR6) {
     assert(Reg0 != Reg1 && "Instruction has bad operands ($rs == $rt)!");
     if (Reg0 < Reg1)
       return;
@@ -242,6 +244,8 @@ void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
   // Compact branches, enforce encoding restrictions.
   case Mips::BEQC:
   case Mips::BNEC:
+  case Mips::BEQC_MMR6:
+  case Mips::BNEC_MMR6:
   case Mips::BEQC64:
   case Mips::BNEC64:
   case Mips::BOVC:

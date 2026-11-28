@@ -1620,6 +1620,9 @@ def : MipsInstAlias<"mfhc0 $rt, $rs",
                     ISA_MICROMIPS32R6;
 def : MipsInstAlias<"jalrc.hb $rs", (JALRC_HB_MMR6 RA, GPR32Opnd:$rs), 1>,
                     ISA_MICROMIPS32R6;
+def : MipsInstAlias<"move $rd, $rs",
+                    (MOVE16_MMR6 GPR32Opnd:$rd, GPR32Opnd:$rs), 0>,
+                    ISA_MICROMIPS32R6;
 def : MipsInstAlias<"jal $offset", (BALC_MMR6 brtarget26_mm:$offset), 0>,
                     ISA_MICROMIPS32R6;
 def : MipsInstAlias<"dvp", (DVP_MMR6 ZERO), 0>, ISA_MICROMIPS32R6;
