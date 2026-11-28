@@ -164,6 +164,7 @@ class MipsAsmParser : public MCTargetAsmParser {
   void printWarningWithFixIt(const Twine &Msg, const Twine &FixMsg,
                              SMRange Range, bool ShowColors = true);
 
+  void convertMips16Frame(MCInst &Inst, const OperandVector &Operands);
   void ConvertXWPOperands(MCInst &Inst, const OperandVector &Operands);
 
 #define GET_ASSEMBLER_HEADER
@@ -174,6 +175,8 @@ class MipsAsmParser : public MCTargetAsmParser {
                                  const OperandVector &Operands) override;
   unsigned checkTargetMatchPredicate(MCInst &Inst) override;
 
+  unsigned validateTargetOperandClass(MCParsedAsmOperand &Op,
+                                      unsigned Kind) override;
   bool matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                OperandVector &Operands, MCStreamer &Out,
                                uint64_t &ErrorInfo,
@@ -206,6 +209,7 @@ class MipsAsmParser : public MCTargetAsmParser {
   ParseStatus parseJumpTarget(OperandVector &Operands);
   ParseStatus parseInvNum(OperandVector &Operands);
   ParseStatus parseRegisterList(OperandVector &Operands);
+  ParseStatus parseMips16Frame(OperandVector &Operands);
   const MCExpr *parseRelocExpr();
 
   bool searchSymbolAlias(OperandVector &Operands);
@@ -784,6 +788,7 @@ public:
 private:
   enum KindTy {
     k_Immediate,     /// An immediate (possibly involving symbol references)
+    k_PCOffset,      /// MIPS16 byte displacement from the aligned PC.
     k_Memory,        /// Base + Offset Memory Address
     k_RegisterIndex, /// A register index in one or more RegKind.
     k_Token,         /// A simple token
@@ -802,6 +807,7 @@ public:
       delete RegList.List;
       break;
     case k_Immediate:
+    case k_PCOffset:
     case k_RegisterIndex:
     case k_Token:
       break;
@@ -1339,6 +1345,46 @@ public:
     return IsReloc && isIntN(PtrBits, Res.getConstant());
   }
 
+  bool isMips16SPDelta() const {
+    return isConstantImm() && isShiftedInt<8, 3>(getConstantImm());
+  }
+
+  bool isMips16LiteralLabel() const {
+    return isImm() && !isConstantImm() && !isa<MCSpecifierExpr>(getImm());
+  }
+
+  bool isMips16AbsoluteAddress() const {
+    return isConstantImm() &&
+           (isInt<32>(getConstantImm()) || isUInt<32>(getConstantImm()));
+  }
+
+  template <bool Compact> bool isMips16PCOffset() const {
+    if (Kind != k_PCOffset)
+      return false;
+    int64_t Bytes = cast<MCConstantExpr>(Imm.Val)->getValue();
+    return Compact ? isShiftedUInt<8, 2>(Bytes) : isShiftedInt<14, 2>(Bytes);
+  }
+
+  template <bool Compact>
+  void addMips16PCOffsetOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 1);
+    int64_t Bytes = cast<MCConstantExpr>(Imm.Val)->getValue();
+    Inst.addOperand(MCOperand::createImm(Compact ? Bytes / 4 : Bytes));
+  }
+
+  template <bool SP> bool isMips16Mem() const {
+    return isMem() && getMemBase()->isGPRAsmReg() &&
+           (SP ? getMemBase()->getGPR32Reg() == Mips::SP
+               : getMemBase()->isMM16AsmReg()) &&
+           isMemWithSimmOffset<16>();
+  }
+
+  template <unsigned Width, unsigned Shift, bool SP>
+  bool isMips16ShortMem() const {
+    return isConstantMemOff() && isMips16Mem<SP>() &&
+           isShiftedUInt<Width, Shift>(getConstantMemOff());
+  }
+
   bool isMemWithGRPMM16Base() const {
     return isMem() && getMemBase()->isMM16AsmReg();
   }
@@ -1548,6 +1594,14 @@ public:
   }
 
   static std::unique_ptr<MipsOperand>
+  createPCOffset(int64_t Bytes, SMLoc S, SMLoc E, MipsAsmParser &Parser) {
+    auto Op = CreateImm(MCConstantExpr::create(Bytes, Parser.getContext()), S,
+                        E, Parser);
+    Op->Kind = k_PCOffset;
+    return Op;
+  }
+
+  static std::unique_ptr<MipsOperand>
   CreateMem(std::unique_ptr<MipsOperand> Base, const MCExpr *Off, SMLoc S,
             SMLoc E, MipsAsmParser &Parser) {
     auto Op = std::make_unique<MipsOperand>(k_Memory, Parser);
@@ -1561,8 +1615,6 @@ public:
   static std::unique_ptr<MipsOperand>
   CreateRegList(SmallVectorImpl<MCRegister> &Regs, SMLoc StartLoc, SMLoc EndLoc,
                 MipsAsmParser &Parser) {
-    assert(!Regs.empty() && "Empty list not allowed");
-
     auto Op = std::make_unique<MipsOperand>(k_RegList, Parser);
     Op->RegList.List =
         new SmallVector<MCRegister, 10>(Regs.begin(), Regs.end());
@@ -1671,6 +1723,7 @@ public:
 
   void print(raw_ostream &OS, const MCAsmInfo &MAI) const override {
     switch (Kind) {
+    case k_PCOffset:
     case k_Immediate:
       OS << "Imm<";
       MAI.printExpr(OS, *Imm.Val);
@@ -2415,6 +2468,17 @@ MipsAsmParser::tryExpandInstruction(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out,
   switch (Inst.getOpcode()) {
   default:
     return MER_NotAMacro;
+  case Mips::LwAbsAsm16: {
+    MCRegister Reg = Inst.getOperand(0).getReg();
+    uint32_t Address = Inst.getOperand(1).getImm();
+    MipsTargetStreamer &TOut = getTargetStreamer();
+    warnIfNoMacro(IDLoc);
+    TOut.emitRI(Mips::LiRxImmX16, Reg, (Address + 0x8000U) >> 16, IDLoc, STI);
+    TOut.emitRRI(Mips::SllX16, Reg, Reg, 16, IDLoc, STI);
+    TOut.emitRRI(Mips::LwRxRyOffMemX16, Reg, Reg, SignExtend64<16>(Address),
+                 IDLoc, STI);
+    return MER_Success;
+  }
   case Mips::LoadImm32:
     return expandLoadImm(Inst, true, IDLoc, Out, STI) ? MER_Fail : MER_Success;
   case Mips::LoadImm64:
@@ -6516,7 +6580,9 @@ ParseStatus MipsAsmParser::parseMemOperand(OperandVector &Operands) {
     const AsmToken &Tok = Parser.getTok(); // Get the next token.
     if (Tok.isNot(AsmToken::LParen)) {
       MipsOperand &Mnemonic = static_cast<MipsOperand &>(*Operands[0]);
-      if (Mnemonic.getToken() == "la" || Mnemonic.getToken() == "dla") {
+      if (Mnemonic.getToken() == "la" || Mnemonic.getToken() == "dla" ||
+          (inMips16Mode() &&
+           (Mnemonic.getToken() == "lw" || Mnemonic.getToken() == "lw.e"))) {
         SMLoc E =
             SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
         Operands.push_back(MipsOperand::CreateImm(IdVal, S, E, *this));
@@ -6590,6 +6656,23 @@ ParseStatus MipsAsmParser::parseMemOperand(OperandVector &Operands) {
     }
 
     Parser.Lex(); // Eat the '(' token.
+  }
+
+  if (inMips16Mode() && getLexer().is(AsmToken::Dollar) &&
+      getLexer().peekTok().getString() == "pc") {
+    const auto &Mn = static_cast<const MipsOperand &>(*Operands[0]);
+    if (Mn.getToken() != "lw" && Mn.getToken() != "lw.e")
+      return Error(S, "$pc base requires a MIPS16 literal load");
+    Parser.Lex();
+    Parser.Lex();
+    SMLoc End = getLexer().getLoc();
+    if (Parser.parseRParen())
+      return ParseStatus::Failure;
+    int64_t Bytes = 0;
+    if (IdVal && !IdVal->evaluateAsAbsolute(Bytes))
+      return Error(S, "expected a constant MIPS16 PC displacement");
+    Operands.push_back(MipsOperand::createPCOffset(Bytes, S, End, *this));
+    return ParseStatus::Success;
   }
 
   Res = parseAnyRegister(Operands);
@@ -6836,6 +6919,71 @@ ParseStatus MipsAsmParser::parseInvNum(OperandVector &Operands) {
   return ParseStatus::Success;
 }
 
+ParseStatus MipsAsmParser::parseMips16Frame(OperandVector &Operands) {
+  MCAsmParser &Parser = getParser();
+  SMLoc Start = getLexer().getLoc();
+  SmallVector<MCRegister, 4> Regs;
+  std::optional<int64_t> Size;
+  auto parseFrameReg = [&](MCRegister &Reg) {
+    SmallVector<std::unique_ptr<MCParsedAsmOperand>, 1> Parsed;
+    if (!parseAnyRegister(Parsed).isSuccess())
+      return true;
+    const auto &Operand = static_cast<const MipsOperand &>(*Parsed.front());
+    if (!Operand.isGPRAsmReg())
+      return true;
+    Reg = Operand.getGPR32Reg();
+    return Reg != Mips::RA && (Reg < Mips::S0 || Reg > Mips::S2);
+  };
+
+  do {
+    SMLoc Loc = getLexer().getLoc();
+    if (getLexer().is(AsmToken::Dollar)) {
+      MCRegister First, Last;
+      if (parseFrameReg(First))
+        return Error(Loc, "expected $ra or $s0 through $s2 in MIPS16 frame");
+      Last = First;
+      if (Parser.parseOptionalToken(AsmToken::Minus) &&
+          (parseFrameReg(Last) || First == Mips::RA || Last == Mips::RA ||
+           Last < First))
+        return Error(Loc, "invalid MIPS16 frame register range");
+      for (unsigned I = First.id(); I <= Last.id(); ++I)
+        if (!llvm::is_contained(Regs, MCRegister(I)))
+          Regs.push_back(MCRegister(I));
+    } else {
+      int64_t Bytes;
+      if (Size)
+        return Error(Loc, "duplicate MIPS16 frame size");
+      if (Parser.parseAbsoluteExpression(Bytes))
+        return ParseStatus::Failure;
+      if (!isShiftedUInt<8, 3>(Bytes))
+        return Error(Loc,
+                     "MIPS16 frame size must be a multiple of 8 in [0, 2040]");
+      Size = Bytes;
+    }
+  } while (Parser.parseOptionalToken(AsmToken::Comma));
+
+  SMLoc End = getLexer().getLoc();
+  if (!Size)
+    return Error(End, "expected MIPS16 frame size");
+  Operands.push_back(MipsOperand::CreateRegList(Regs, Start, End, *this));
+  Operands.push_back(MipsOperand::CreateImm(
+      MCConstantExpr::create(*Size, getContext()), Start, End, *this));
+  return ParseStatus::Success;
+}
+
+void MipsAsmParser::convertMips16Frame(MCInst &Inst,
+                                       const OperandVector &Operands) {
+  const auto &Regs = static_cast<const MipsOperand &>(*Operands[1]);
+  const auto &Frame = static_cast<const MipsOperand &>(*Operands[2]);
+  bool Save = Inst.getOpcode() == Mips::Mips16FrameAsm_save0 ||
+              Inst.getOpcode() == Mips::Mips16FrameAsm_save1;
+  int64_t Bytes = Frame.getConstantImm();
+  Inst.setOpcode(MipsII::getMips16FrameOpcode(
+      Save, Bytes, llvm::is_contained(Regs.getRegList(), Mips::S2)));
+  Regs.addRegListOperands(Inst, 1);
+  Inst.addOperand(MCOperand::createImm(Bytes));
+}
+
 ParseStatus MipsAsmParser::parseRegisterList(OperandVector &Operands) {
   MCAsmParser &Parser = getParser();
   SmallVector<MCRegister, 10> Regs;
@@ -6908,6 +7056,8 @@ ParseStatus MipsAsmParser::parseRegisterList(OperandVector &Operands) {
   }
 
   SMLoc E = Parser.getTok().getLoc();
+  if (Regs.empty())
+    return Error(S, "expected a register list");
   Operands.push_back(MipsOperand::CreateRegList(Regs, S, E, *this));
   parseMemOperand(Operands);
   return ParseStatus::Success;
@@ -8901,6 +9051,17 @@ LLVMInitializeMipsAsmParser() {
 #define GET_MATCHER_IMPLEMENTATION
 #define GET_MNEMONIC_SPELL_CHECKER
 #include "MipsGenAsmMatcher.inc"
+
+unsigned MipsAsmParser::validateTargetOperandClass(MCParsedAsmOperand &Op,
+                                                   unsigned Kind) {
+  if ((Kind == MCK_CPURAReg || Kind == MCK_CPUSPReg) && inMips16Mode()) {
+    const auto &Reg = static_cast<const MipsOperand &>(Op);
+    if (Reg.isGPRAsmReg() &&
+        Reg.getGPR32Reg() == (Kind == MCK_CPURAReg ? Mips::RA : Mips::SP))
+      return Match_Success;
+  }
+  return Match_InvalidOperand;
+}
 
 bool MipsAsmParser::mnemonicIsValid(StringRef Mnemonic) {
   const MatchEntry *First = std::begin(MatchTable0);

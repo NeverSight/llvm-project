@@ -68,7 +68,8 @@ write("products.json", {name: hashlib.sha256(
 # Module preparation changes the common pass pipeline. Enumerate the complete
 # MIPS suite through lit, including MIR tests, rather than filename prefixes.
 test_inputs = [root / "llvm/test/CodeGen/Mips", root / "llvm/test/MC/Mips",
-               root / "llvm/test/MC/Disassembler/Mips"]
+               root / "llvm/test/MC/Disassembler/Mips",
+               root / "llvm/test/TableGen/AsmMatcherOperandMnemonicIndex.td"]
 lit = build / "bin" / ("llvm-lit.py" if windows else "llvm-lit")
 listed = output([sys.executable, lit, "--show-tests", *test_inputs])
 tests = sorted(root / "llvm/test" / line.strip().split(" :: ", 1)[1]
@@ -99,7 +100,7 @@ run("target-layout", [build / "unittests/TargetParser" /
                       "--gtest_filter=DataLayoutTest.*",
                       "--gtest_output=xml:" + str(evidence / "target-layout.xml")])
 clang_tests = [root / "clang/test/CodeGen" / name for name in
-               ("mips-function-pointer-tag.c", "mips16-attr.c",
+               ("mips-function-pointer-tag.c", "mips16-attr.c", "Mips/mips16-save-temps.c",
                 "micromips-attr.c", "target-data.c")]
 write("clang-inventory.json", {str(path.relative_to(root)):
                                hashlib.sha256(path.read_bytes()).hexdigest()

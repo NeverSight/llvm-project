@@ -788,11 +788,12 @@ unsigned MipsMCCodeEmitter::getImmOpValue(const MCInst &MI, const MCOperand &MO,
   auto Flags = MCII.get(MI.getOpcode()).TSFlags;
   if (Flags & MipsII::IsMips16) {
     const auto *Spec = dyn_cast<MCSpecifierExpr>(Expr);
-    if (!Spec && (MI.getOpcode() == Mips::LwRxPcTcp16 ||
+    if (!Spec && (MI.getOpcode() == Mips::LwRxPcAsm16 ||
+                  MI.getOpcode() == Mips::LwRxPcTcp16 ||
                   MI.getOpcode() == Mips::LwRxPcTcpX16)) {
-      const auto Kind = MI.getOpcode() == Mips::LwRxPcTcp16
-                            ? Mips::fixup_Mips16_LWPC8
-                            : Mips::fixup_Mips16_LWPC16;
+      const auto Kind = MI.getOpcode() == Mips::LwRxPcTcpX16
+                            ? Mips::fixup_Mips16_LWPC16
+                            : Mips::fixup_Mips16_LWPC8;
       addFixup(Fixups, 0, Expr, Kind);
       return 0;
     }

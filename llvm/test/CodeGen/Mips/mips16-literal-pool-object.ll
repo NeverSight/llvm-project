@@ -5,8 +5,8 @@
 
 ; LWPC at byte 0 loads the word at byte 8. Check the instructions as well as
 ; the word in the object so an unresolved immediate cannot pass as zero.
-; BE: 0000 b202e449 e8a00000 12345678
-; LE: 0000 02b249e4 a0e80000 78563412
+; BE: 0000 b202e449 e8a06500 12345678
+; LE: 0000 02b249e4 a0e80065 78563412
 
 define i32 @addword(i32 %x) nounwind {
   %v = add i32 %x, 305419896

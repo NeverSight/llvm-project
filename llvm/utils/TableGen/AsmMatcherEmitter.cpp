@@ -116,6 +116,7 @@
 #include "llvm/TableGen/StringMatcher.h"
 #include "llvm/TableGen/StringToOffsetTable.h"
 #include "llvm/TableGen/TableGenBackend.h"
+#include <array>
 #include <cassert>
 #include <cctype>
 #include <forward_list>
@@ -3066,6 +3067,25 @@ emitCustomOperandParsing(raw_ostream &OS, CodeGenTarget &Target,
   }
   OS << "};\n\n";
 
+  const bool IndexMnemonics =
+      HasMnemonicFirst && AsmParser.getValueAsBit("IndexOperandMnemonics");
+  if (IndexMnemonics) {
+    // OperandMatchTable is sorted by the same lower-case mnemonic used by the
+    // matcher. Include the one-past-end offset for the last byte.
+    std::array<unsigned, 257> Starts{};
+    for (const OperandMatchEntry &Entry : Info.OperandMatchInfo) {
+      StringRef Name = Entry.MI->Mnemonic;
+      unsigned char First = Name.empty() ? 0 : toLower(Name.front());
+      ++Starts[First + 1];
+    }
+    for (size_t I = 1; I < Starts.size(); ++I)
+      Starts[I] += Starts[I - 1];
+    OS << "static constexpr " << getMinimalTypeForRange(Starts.back())
+       << " OperandMnemonicStarts[] = {";
+    interleaveComma(Starts, OS);
+    OS << "};\n\n";
+  }
+
   // Emit the operand class switch to call the correct custom parser for
   // the found operand class.
   OS << "ParseStatus " << Target.getName() << ClassName << "::\n"
@@ -3105,7 +3125,13 @@ emitCustomOperandParsing(raw_ostream &OS, CodeGenTarget &Target,
 
   // Emit code to search the table.
   OS << "  // Search the table.\n";
-  if (HasMnemonicFirst) {
+  if (IndexMnemonics) {
+    OS << "  unsigned char First = Mnemonic.empty() ? 0 : Mnemonic.front();\n"
+          "  auto MnemonicRange = std::equal_range(\n"
+          "      OperandMatchTable + OperandMnemonicStarts[First],\n"
+          "      OperandMatchTable + OperandMnemonicStarts[First + 1],\n"
+          "      Mnemonic, LessOpcodeOperand());\n\n";
+  } else if (HasMnemonicFirst) {
     OS << "  auto MnemonicRange =\n";
     OS << "    std::equal_range(std::begin(OperandMatchTable), "
           "std::end(OperandMatchTable),\n";

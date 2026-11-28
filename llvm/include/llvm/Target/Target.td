@@ -1836,6 +1836,9 @@ class AsmParser {
   // start with a mnemonic as the first token.
   bit HasMnemonicFirst = true;
 
+  // Narrow custom operand parser lookups by the first byte of the mnemonic.
+  bit IndexOperandMnemonics = false;
+
   // ReportMultipleNearMisses -
   // When 0, the assembly matcher reports an error for one encoding or operand
   // that did not match the parsed instruction.

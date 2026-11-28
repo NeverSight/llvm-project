@@ -312,6 +312,7 @@ def : ProcessorModel<"i6500", MipsI6400Model, [ImplI6500]>;
 
 def MipsAsmParser : AsmParser {
   let ShouldEmitMatchRegisterName = 0;
+  let IndexOperandMnemonics = true;
 }
 
 def MipsAsmParserVariant : AsmParserVariant {

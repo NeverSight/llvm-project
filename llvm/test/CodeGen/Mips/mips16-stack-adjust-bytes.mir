@@ -1,0 +1,23 @@
+# RUN: llc -mtriple=mips -mcpu=mips32r2 -mattr=+mips16,+noabicalls -start-after=funclet-layout -verify-machineinstrs -filetype=obj %s -o %t.be
+# RUN: llvm-objdump -s -j .text %t.be | FileCheck %s --check-prefix=BE
+# RUN: llc -mtriple=mipsel -mcpu=mips32r2 -mattr=+mips16,+noabicalls -start-after=funclet-layout -verify-machineinstrs -filetype=obj %s -o %t.le
+# RUN: llvm-objdump -s -j .text %t.le | FileCheck %s --check-prefix=LE
+
+# Large prologues split the frame after the 2040-byte extended SAVE. The
+# two-operand compact ADDIU encodes the remaining byte adjustment in units of 8.
+# BE: 0000 63fe6302 6380637f e8a0
+# LE: 0000 fe630263 80637f63 a0e8
+--- |
+  define i32 @adjust(i32 %x) nounwind { ret i32 %x }
+...
+---
+name: adjust
+alignment: 4
+body: |
+  bb.0:
+    AddiuSpImm16 -16, implicit-def $sp, implicit $sp
+    AddiuSpImm16 16, implicit-def $sp, implicit $sp
+    AddiuSpImm16 -1024, implicit-def $sp, implicit $sp
+    AddiuSpImm16 1016, implicit-def $sp, implicit $sp
+    JrcRa16
+...

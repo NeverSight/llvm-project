@@ -16,7 +16,7 @@ target triple = "mips--linux-gnu"
 define void @t() #0 {
 entry:
   store i32 -559023410, ptr @i, align 4
-; load-relax: 	lw	${{[0-9]+}}, $CPI0_0
+; load-relax: 	lw.e	${{[0-9]+}}, $CPI0_0
 ; load-relax:	jrc	 $ra
 ; load-relax:	.p2align	2
 ; load-relax: $CPI0_0:

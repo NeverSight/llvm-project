@@ -6,10 +6,10 @@
 # The compact loads at 0 and 2 share the same word-aligned PC. The extended
 # loads at 4 and 18 use byte displacements of +8 and -4 to reach the same word.
 # BE-LABEL: Contents of section .text.literal:
-# BE-NEXT: 0000 b303b203 f000b308 e8a00000 12345678
+# BE-NEXT: 0000 b303b203 f000b308 e8a06500 12345678
 # BE-NEXT: 0010 6500f7ff b21ce8a0
 # LE-LABEL: Contents of section .text.literal:
-# LE-NEXT: 0000 03b303b2 00f008b3 a0e80000 78563412
+# LE-NEXT: 0000 03b303b2 00f008b3 a0e80065 78563412
 # LE-NEXT: 0010 0065fff7 1cb2a0e8
 
 # The first two ADDIUs use SP with signed byte offsets. The third explicitly
