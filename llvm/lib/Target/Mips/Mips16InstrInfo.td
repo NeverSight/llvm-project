@@ -522,6 +522,12 @@ def AddiuRxRyOffMemX16:
 //
 def AddiuRxPcImmX16: FEXT_RI16_PC_ins<0b00001, "addiu">;
 
+// The SP-relative encoding uses an implicit base and a signed 16-bit byte
+// offset. An ordinary two-register ADDIU has a signed 15-bit byte offset.
+let Uses = [SP], isCodeGenOnly = 1 in
+def AddiuRxSpImmX16:
+  FEXT_RI16_ins_base<0b00000, "addiu", "\t$rx, $$sp, $imm16">;
+
 //
 // Format: ADDIU sp, immediate MIPS16e
 // Purpose: Add Immediate Unsigned Word (2-Operand, SP-Relative, Extended)

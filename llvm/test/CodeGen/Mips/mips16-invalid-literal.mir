@@ -1,0 +1,27 @@
+# RUN: not llc -mtriple=mips -mcpu=mips32r2 -mattr=+mips16,+noabicalls -start-after=funclet-layout -filetype=obj %s -o %t 2>&1 | FileCheck %s
+
+# An out-of-range or unaligned pool cannot be represented by truncating the
+# displacement. ELF has no symbolic relocation for a MIPS16 literal load.
+# CHECK-COUNT-2: error: invalid MIPS16 literal pool displacement
+# CHECK: error: unresolved MIPS16 literal pool
+
+--- |
+  define i32 @bad() nounwind { ret i32 0 }
+...
+---
+name: bad
+alignment: 4
+constants:
+  - id: 0
+    value: i32 1
+    alignment: 4
+body: |
+  bb.0:
+    $v0 = LwRxPcTcp16 %const.0 + 1024
+    $v0 = LwRxPcTcpX16 %const.0 + 2
+    $v0 = LwRxPcTcpX16 &outside
+    JrcRa16
+
+  bb.1 (align 4):
+    CONSTPOOL_ENTRY 0, %const.0, 4
+...

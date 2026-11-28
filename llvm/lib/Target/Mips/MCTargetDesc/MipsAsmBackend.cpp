@@ -99,6 +99,16 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
       return 0;
     }
     break;
+  case Mips::fixup_Mips16_LWPC8:
+  case Mips::fixup_Mips16_LWPC16: {
+    bool Compact = Kind == Mips::fixup_Mips16_LWPC8;
+    if ((Value & 3) || (Compact ? !isUInt<10>(Value) : !isInt<16>(Value))) {
+      Ctx.reportError(Fixup.getLoc(),
+                      "invalid MIPS16 literal pool displacement");
+      return 0;
+    }
+    return Compact ? Value >> 2 : Value & 0xffff;
+  }
   case Mips::fixup_Mips16_PC8_S1:
   case Mips::fixup_Mips16_PC11_S1:
   case Mips::fixup_Mips16_PC16_S1: {
@@ -548,6 +558,19 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
         Symbol && Symbol->isInSection())
       if (compressedMode(*static_cast<const MCSymbolELF *>(Symbol)))
         ++Value;
+  if (Kind == Mips::fixup_Mips16_LWPC8 || Kind == Mips::fixup_Mips16_LWPC16) {
+    // The constant-island pass places its word in this section. There is no
+    // MIPS16 ELF relocation for a literal load from an unknown address.
+    if (!IsResolved) {
+      getContext().reportError(Fixup.getLoc(),
+                               "unresolved MIPS16 literal pool");
+      return;
+    }
+    // MC subtracted the instruction address. LWPC instead uses that address
+    // rounded down to a word boundary, including the EXTEND halfword.
+    auto PC = Asm->getWriter().getFinalFixupVA(F, Fixup);
+    Value += PC.value_or(Asm->getFragmentOffset(F) + Fixup.getOffset()) & 3;
+  }
   maybeAddReloc(F, Fixup, Target, Value, IsResolved);
   MCContext &Ctx = getContext();
   // O32 REL stores JAL's word addend in linear order. The final encoding
@@ -579,7 +602,7 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
 
   if ((Kind >= Mips::fixup_Mips16_HI16 &&
        Kind <= Mips::fixup_Mips16_TLS_TPREL_LO16) ||
-      Kind == Mips::fixup_Mips16_PC16_S1) {
+      Kind == Mips::fixup_Mips16_PC16_S1 || Kind == Mips::fixup_Mips16_LWPC16) {
     uint32_t Field = ELF::encodeMips16Imm16(Value);
     uint16_t Ext = support::endian::read16(Data, Endian);
     uint16_t Op = support::endian::read16(Data + 2, Endian);
@@ -599,6 +622,7 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   case Mips::fixup_Mips_16:
   case Mips::fixup_Mips16_PC8_S1:
   case Mips::fixup_Mips16_PC11_S1:
+  case Mips::fixup_Mips16_LWPC8:
   case Mips::fixup_MICROMIPS_PC10_S1:
     FullSize = 2;
     break;
@@ -713,6 +737,8 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_Mips16_PC8_S1",     0,      8,   0 },
     { "fixup_Mips16_PC11_S1",    0,     11,   0 },
     { "fixup_Mips16_PC16_S1",    0,     16,   0 },
+    { "fixup_Mips16_LWPC8",      0,      8,   0 },
+    { "fixup_Mips16_LWPC16",     0,     16,   0 },
     { "fixup_Mips_HI16",         0,     16,   0 },
     { "fixup_Mips_LO16",         0,     16,   0 },
     { "fixup_Mips_AnyImm16",     0,     16,   0 },
@@ -812,6 +838,8 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
     { "fixup_Mips16_PC8_S1",     8,      8,   0 },
     { "fixup_Mips16_PC11_S1",    5,     11,   0 },
     { "fixup_Mips16_PC16_S1",    0,     16,   0 },
+    { "fixup_Mips16_LWPC8",      8,      8,   0 },
+    { "fixup_Mips16_LWPC16",     0,     16,   0 },
     { "fixup_Mips_HI16",        16,     16,   0 },
     { "fixup_Mips_LO16",        16,     16,   0 },
     { "fixup_Mips_AnyImm16",    16,     16,   0 },
