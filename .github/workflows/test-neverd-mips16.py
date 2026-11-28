@@ -68,7 +68,8 @@ write("products.json", {name: hashlib.sha256(
 # Module preparation changes the common pass pipeline. Enumerate the complete
 # MIPS suite through lit, including MIR tests, rather than filename prefixes.
 test_inputs = [root / "llvm/test/CodeGen/Mips", root / "llvm/test/MC/Mips",
-               root / "llvm/test/MC/Disassembler/Mips"]
+               root / "llvm/test/MC/Disassembler/Mips",
+               root / "llvm/test/TableGen/AsmMatcherOperandMnemonicIndex.td"]
 lit = build / "bin" / ("llvm-lit.py" if windows else "llvm-lit")
 listed = output([sys.executable, lit, "--show-tests", *test_inputs])
 tests = sorted(root / "llvm/test" / line.strip().split(" :: ", 1)[1]
