@@ -33,6 +33,8 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
+#include <algorithm>
+#include <array>
 
 using namespace llvm;
 
@@ -385,19 +387,34 @@ static unsigned branchTargetAlignment(MCFixupKind Kind) {
   }
 }
 
+// MC subtracts the instruction address; LWPC uses that address rounded down
+// to a word boundary, including the EXTEND halfword.
+static uint64_t getMips16LiteralDisplacement(const MCAssembler &Asm,
+                                             const MCFragment &F,
+                                             const MCFixup &Fixup,
+                                             uint64_t Value) {
+  auto PC = Asm.getWriter().getFinalFixupVA(F, Fixup);
+  return Value +
+         (PC.value_or(Asm.getFragmentOffset(F) + Fixup.getOffset()) & 3);
+}
+
 bool MipsAsmBackend::mayNeedRelaxation(unsigned Opcode,
                                        ArrayRef<MCOperand> Operands,
                                        const MCSubtargetInfo &) const {
-  return MipsII::getMips16ExtendedBranchOpcode(Opcode) != Opcode &&
+  return (Opcode == Mips::LwRxPcAsm16 ||
+          MipsII::getMips16ExtendedBranchOpcode(Opcode) != Opcode) &&
          Operands.back().isExpr();
 }
 
-bool MipsAsmBackend::fixupNeedsRelaxationAdvanced(const MCFragment &,
+bool MipsAsmBackend::fixupNeedsRelaxationAdvanced(const MCFragment &F,
                                                   const MCFixup &Fixup,
                                                   const MCValue &,
                                                   uint64_t Value,
                                                   bool Resolved) const {
   switch (static_cast<unsigned>(Fixup.getKind())) {
+  case Mips::fixup_Mips16_LWPC8:
+    return !Resolved ||
+           !isUInt<10>(getMips16LiteralDisplacement(*Asm, F, Fixup, Value));
   case Mips::fixup_Mips16_PC8_S1:
     return !Resolved || !isInt<9>(Value);
   case Mips::fixup_Mips16_PC11_S1:
@@ -409,7 +426,10 @@ bool MipsAsmBackend::fixupNeedsRelaxationAdvanced(const MCFragment &,
 
 void MipsAsmBackend::relaxInstruction(MCInst &Inst,
                                       const MCSubtargetInfo &) const {
-  Inst.setOpcode(MipsII::getMips16ExtendedBranchOpcode(Inst.getOpcode()));
+  unsigned Opcode = Inst.getOpcode();
+  Inst.setOpcode(Opcode == Mips::LwRxPcAsm16
+                     ? Mips::LwRxPcTcpX16
+                     : MipsII::getMips16ExtendedBranchOpcode(Opcode));
 }
 
 static bool needsGPOrTLSBase(MCFixupKind Kind) {
@@ -566,10 +586,7 @@ void MipsAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
                                "unresolved MIPS16 literal pool");
       return;
     }
-    // MC subtracted the instruction address. LWPC instead uses that address
-    // rounded down to a word boundary, including the EXTEND halfword.
-    auto PC = Asm->getWriter().getFinalFixupVA(F, Fixup);
-    Value += PC.value_or(Asm->getFragmentOffset(F) + Fixup.getOffset()) & 3;
+    Value = getMips16LiteralDisplacement(*Asm, F, Fixup, Value);
   }
   maybeAddReloc(F, Fixup, Target, Value, IsResolved);
   MCContext &Ctx = getContext();
@@ -932,6 +949,28 @@ MCFixupKindInfo MipsAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
 /// \return - True on success.
 bool MipsAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,
                                   const MCSubtargetInfo *STI) const {
+  if (STI && STI->hasFeature(Mips::FeatureMips16)) {
+    // Zero is ADDIU $s0, $sp, 0 in MIPS16. Fill executable halfwords with
+    // MOVE $zero, $s0 and handle any preceding unaligned data byte first.
+    if (Count & 1) {
+      OS.write_zeros(1);
+      --Count;
+    }
+    // Starting one byte later yields the little-endian form of the same NOP.
+    static constexpr auto Nops = [] {
+      std::array<char, 129> Bytes{};
+      for (size_t I = 0; I < Bytes.size(); I += 2)
+        Bytes[I] = 0x65;
+      return Bytes;
+    }();
+    const char *Pattern = Nops.data() + (Endian == llvm::endianness::little);
+    while (Count) {
+      size_t Size = std::min<uint64_t>(Count, Nops.size() - 1);
+      OS.write(Pattern, Size);
+      Count -= Size;
+    }
+    return true;
+  }
   // A zero halfword starts a 32-bit instruction. Use MOVE16 $zero, $zero
   // for a two-byte remainder so execution cannot consume the next symbol.
   if (STI && STI->hasFeature(Mips::FeatureMicroMips) &&

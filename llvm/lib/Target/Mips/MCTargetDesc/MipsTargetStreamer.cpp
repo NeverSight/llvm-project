@@ -296,6 +296,10 @@ void MipsTargetStreamer::emitDSLL(MCRegister DstReg, MCRegister SrcReg,
 
 void MipsTargetStreamer::emitEmptyDelaySlot(bool hasShortDelaySlot, SMLoc IDLoc,
                                             const MCSubtargetInfo *STI) {
+  if (STI->hasFeature(Mips::FeatureMips16)) {
+    emitRR(Mips::Move32R16, Mips::ZERO, Mips::S0, IDLoc, STI);
+    return;
+  }
   // The default case of `nop` is `sll $zero, $zero, 0`.
   unsigned Opc = Mips::SLL;
   if (isMicroMips(STI) && hasShortDelaySlot) {

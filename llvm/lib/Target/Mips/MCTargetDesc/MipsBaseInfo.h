@@ -26,6 +26,13 @@ namespace llvm {
 /// instruction info tracks.
 ///
 namespace MipsII {
+inline unsigned getMips16FrameOpcode(bool Save, int64_t Size, bool SavesS2) {
+  bool Compact = Size > 0 && Size <= 128 && !SavesS2;
+  if (Save)
+    return Compact ? Mips::Save16 : Mips::SaveX16;
+  return Compact ? Mips::Restore16 : Mips::RestoreX16;
+}
+
 inline unsigned getMips16ExtendedBranchOpcode(unsigned Opcode) {
   switch (Opcode) {
   case Mips::Bimm16:

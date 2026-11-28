@@ -99,7 +99,7 @@ run("target-layout", [build / "unittests/TargetParser" /
                       "--gtest_filter=DataLayoutTest.*",
                       "--gtest_output=xml:" + str(evidence / "target-layout.xml")])
 clang_tests = [root / "clang/test/CodeGen" / name for name in
-               ("mips-function-pointer-tag.c", "mips16-attr.c",
+               ("mips-function-pointer-tag.c", "mips16-attr.c", "Mips/mips16-save-temps.c",
                 "micromips-attr.c", "target-data.c")]
 write("clang-inventory.json", {str(path.relative_to(root)):
                                hashlib.sha256(path.read_bytes()).hexdigest()

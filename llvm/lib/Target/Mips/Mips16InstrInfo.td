@@ -18,23 +18,43 @@ def addr16sp : ComplexPattern<iPTR, 2, "selectAddr16SP", [frameindex]>;
 
 //
 // Address operand
-def mem16 : Operand<i32> {
+class Mips16MemClass<string name, string predicate,
+                     list<AsmOperandClass> supers> : AsmOperandClass {
+  let Name = name;
+  let SuperClasses = supers;
+  let ParserMethod = "parseMemOperand";
+  let RenderMethod = "addMemOperands";
+  let PredicateMethod = predicate;
+}
+
+def Mips16Mem : Mips16MemClass<"Mips16Mem", "isMips16Mem<false>",
+                               [MipsMemAsmOperand]>;
+def Mips16MemSP : Mips16MemClass<"Mips16MemSP", "isMips16Mem<true>",
+                                 [MipsMemAsmOperand]>;
+class Mips16ShortMem<int width, int shift, bit sp>
+    : Mips16MemClass<"Mips16Mem" # width # "Lsl" # shift # "SP" # sp,
+                     "isMips16ShortMem<" # width # ", " # shift # ", " # sp # ">",
+                     [!if(sp, Mips16MemSP, Mips16Mem)]>;
+def Mips16ByteMem : Mips16ShortMem<5, 0, 0>;
+def Mips16HalfMem : Mips16ShortMem<5, 1, 0>;
+def Mips16WordMem : Mips16ShortMem<5, 2, 0>;
+def Mips16StackWordMem : Mips16ShortMem<8, 2, 1>;
+
+class Mips16MemOperand<AsmOperandClass match, RegisterClass base> : Operand<i32> {
+  let ParserMatchClass = match;
   let PrintMethod = "printMemOperand";
-  let MIOperandInfo = (ops CPU16Regs, simm16);
+  let MIOperandInfo = (ops base, simm16);
   let EncoderMethod = "getMemEncoding";
 }
 
-def mem16sp : Operand<i32> {
-  let PrintMethod = "printMemOperand";
-  // This should be CPUSPReg but the MIPS16 subtarget isn't good enough at
-  // keeping the sp-relative load and the other varieties separate at the
-  // moment. This lie fixes the problem sufficiently well to fix the errors
-  // emitted by -verify-machineinstrs and the output ends up correct as long
-  // as we use an external assembler (which is already a requirement for MIPS16
-  // for several other reasons).
-  let MIOperandInfo = (ops CPU16RegsPlusSP, simm16);
-  let EncoderMethod = "getMemEncoding";
-}
+def mem16 : Mips16MemOperand<Mips16Mem, CPU16Regs>;
+// Frame-index elimination can also choose a compact base for this instruction.
+// The emitter selects the GPR encoding when that happens.
+def mem16sp : Mips16MemOperand<Mips16MemSP, CPU16RegsPlusSP>;
+def mem16_byte : Mips16MemOperand<Mips16ByteMem, CPU16Regs>;
+def mem16_half : Mips16MemOperand<Mips16HalfMem, CPU16Regs>;
+def mem16_word : Mips16MemOperand<Mips16WordMem, CPU16Regs>;
+def mem16_stack_word : Mips16MemOperand<Mips16StackWordMem, CPUSPReg>;
 
 def mem16_ea : Operand<i32> {
   let PrintMethod = "printMemOperandEA";
@@ -42,7 +62,53 @@ def mem16_ea : Operand<i32> {
   let EncoderMethod = "getMemEncoding";
 }
 
-def pcrel16 : Operand<i32>;
+class Mips16ConstAsmOperand<string name, string predicate,
+                            AsmOperandClass parent> : AsmOperandClass {
+  let Name = name;
+  let SuperClasses = [parent];
+  let PredicateMethod = predicate;
+  let RenderMethod = "addImmOperands";
+}
+def Mips16Simm8 : Mips16ConstAsmOperand<"Mips16SImm8", "isConstantSImm<8>",
+                                        SImm16AsmOperandClass>;
+def mips16_simm8 : Operand<i32> { let ParserMatchClass = Mips16Simm8; }
+def Mips16WordUimm8 : Mips16ConstAsmOperand<"Mips16WordUImm8", "isScaledUImm<8, 2>",
+                                            SImm16AsmOperandClass>;
+def mips16_word_uimm8 : Operand<i32> { let ParserMatchClass = Mips16WordUimm8; }
+
+def Mips16Simm15 : Mips16ConstAsmOperand<"Mips16SImm15", "isConstantSImm<15>",
+                                         SImm16AsmOperandClass>;
+def mips16_simm15 : Operand<i32> { let ParserMatchClass = Mips16Simm15; }
+def Mips16SpDelta : Mips16ConstAsmOperand<"Mips16SPDelta", "isMips16SPDelta",
+                                         SImm16AsmOperandClass>;
+def mips16_sp_delta : Operand<i32> { let ParserMatchClass = Mips16SpDelta; }
+def Mips16ShortShift : Mips16ConstAsmOperand<"Mips16ShortShift",
+    "isConstantUImmRange<1, 8>", ConstantUImm5AsmOperandClass>;
+def mips16_short_shift : Operand<i32> { let ParserMatchClass = Mips16ShortShift; }
+
+def Mips16LiteralLabel : AsmOperandClass {
+  let Name = "Mips16LiteralLabel";
+  let PredicateMethod = "isMips16LiteralLabel";
+  let RenderMethod = "addImmOperands";
+}
+def mips16_literal : Operand<i32> { let ParserMatchClass = Mips16LiteralLabel; }
+
+class Mips16PCOffset<bit short, list<AsmOperandClass> parents> : AsmOperandClass {
+  let Name = "Mips16PCOffset" # short;
+  let SuperClasses = parents;
+  let ParserMethod = "parseMemOperand";
+  let PredicateMethod = "isMips16PCOffset<" # short # ">";
+  let RenderMethod = "addMips16PCOffsetOperands<" # short # ">";
+}
+def Mips16PCOffsetExt : Mips16PCOffset<0, [MipsMemAsmOperand]>;
+def Mips16PCOffsetShort : Mips16PCOffset<1, [Mips16PCOffsetExt]>;
+def mips16_pcoff : Operand<i32> { let ParserMatchClass = Mips16PCOffsetExt; }
+def mips16_pcoff8 : Operand<i32> { let ParserMatchClass = Mips16PCOffsetShort; }
+def Mips16AbsoluteAddress : Mips16ConstAsmOperand<"Mips16AbsoluteAddress",
+    "isMips16AbsoluteAddress", UImm32CoercedAsmOperandClass>;
+def mips16_abs : Operand<i32> { let ParserMatchClass = Mips16AbsoluteAddress; }
+
+def pcrel16 : Operand<i32> { let ParserMatchClass = Mips16LiteralLabel; }
 
 class Mips16BranchTarget<int Width> : Operand<OtherVT> {
   let EncoderMethod = "getMips16BranchTargetOpValue<" # Width # ">";
@@ -79,8 +145,12 @@ class FI816_ins<bits<3> _func, string asmstr>:
   let InOperandList = (ins brtarget16_8:$imm8);
 }
 
-class FI816_SP_ins<bits<3> _func, string asmstr>:
-  FI816_ins_base<_func, asmstr, "\t$$sp, $imm8 # 16 bit inst">;
+class FI816_SP_ins<bits<3> func, string mnemonic>
+    : FI816<func, (outs), (ins mips16_sp_delta:$offset),
+            mnemonic # "\t$$sp, $offset # 16 bit inst", []> {
+  bits<11> offset;
+  let imm8 = offset{10-3};
+}
 
 //
 // RI instruction format
@@ -95,7 +165,7 @@ class FRI16_ins<bits<5> op, string asmstr>:
   FRI16_ins_base<op, asmstr, "\t$rx, $imm8 \t# 16 bit inst">;
 
 class FRI16_TCP_ins<bits<5> _op, string asmstr>:
-  FRI16<_op, (outs CPU16Regs:$rx), (ins pcrel16:$imm8),
+  FRI16<_op, (outs CPU16RegsOpnd:$rx), (ins pcrel16:$imm8),
             !strconcat(asmstr, "\t$rx, $imm8\t# 16 bit inst"), []>;
 
 class FRI16R_ins_base<bits<5> op, string asmstr, string asmstr2>:
@@ -106,7 +176,7 @@ class FRI16R_ins<bits<5> op, string asmstr>:
   FRI16R_ins_base<op, asmstr, "\t$rx, $imm8 \t# 16 bit inst">;
 
 class F2RI16_ins<bits<5> _op, string asmstr>:
-  FRI16<_op, (outs CPU16Regs:$rx), (ins CPU16Regs:$rx_, simm16:$imm8),
+  FRI16<_op, (outs CPU16RegsOpnd:$rx), (ins CPU16RegsOpnd:$rx_, mips16_simm8:$imm8),
         !strconcat(asmstr, "\t$rx, $imm8\t# 16 bit inst"), []> {
   let Constraints = "$rx_ = $rx";
 }
@@ -131,14 +201,14 @@ class FEXT_CCRXI16_ins<string asmstr>:
 //
 class FJAL16_ins<bits<1> _X, string asmstr>:
   FJAL16<_X, (outs), (ins calltarget:$imm26),
-         !strconcat(asmstr, "\t$imm26\n\tnop"),[]>  {
+         !strconcat(".set push\n\t.set noreorder\n\t", asmstr, "\t$imm26\n\tnop\n\t.set pop"),[]>  {
   let isCodeGenOnly=1;
   let Size=6;
 }
 
 class FJALB16_ins<bits<1> _X, string asmstr>:
   FJAL16<_X, (outs), (ins jmptarget:$imm26),
-         !strconcat(asmstr, "\t$imm26\t# branch\n\tnop"),[]>  {
+         !strconcat(".set push\n\t.set noreorder\n\t", asmstr, "\t$imm26\t# branch\n\tnop\n\t.set pop"),[]>  {
   let isCodeGenOnly=1;
   let Size=6;
 }
@@ -214,11 +284,11 @@ class FEXT_RI16_B_ins<bits<5> _op, string asmstr>:
 }
 
 class FEXT_RI16_TCP_ins<bits<5> _op, string asmstr>:
-  FEXT_RI16<_op, (outs CPU16Regs:$rx), (ins pcrel16:$imm16),
+  FEXT_RI16<_op, (outs CPU16RegsOpnd:$rx), (ins pcrel16:$imm16),
             !strconcat(asmstr, "\t$rx, $imm16"), []>;
 
 class FEXT_2RI16_ins<bits<5> _op, string asmstr>:
-  FEXT_RI16<_op, (outs CPU16Regs:$rx), (ins CPU16Regs:$rx_, simm16:$imm16),
+  FEXT_RI16<_op, (outs CPU16RegsOpnd:$rx), (ins CPU16RegsOpnd:$rx_, simm16:$imm16),
             !strconcat(asmstr, "\t$rx, $imm16"), []> {
   let Constraints = "$rx_ = $rx";
 }
@@ -228,27 +298,44 @@ class FEXT_2RI16_ins<bits<5> _op, string asmstr>:
 //
 
 class FEXT_RRI16_mem_ins<bits<5> op, string asmstr, Operand MemOpnd>:
-  FEXT_RRI16<op, (outs CPU16Regs:$ry), (ins  (MemOpnd $rx, $imm16):$addr),
+  FEXT_RRI16<op, (outs CPU16RegsOpnd:$ry), (ins  (MemOpnd $rx, $imm16):$addr),
              !strconcat(asmstr, "\t$ry, $addr"), []>;
 
 class FEXT_RRI16_mem2_ins<bits<5> op, string asmstr, Operand MemOpnd>:
-  FEXT_RRI16<op, (outs ), (ins  CPU16Regs:$ry, (MemOpnd $rx, $imm16):$addr),
+  FEXT_RRI16<op, (outs ), (ins  CPU16RegsOpnd:$ry, (MemOpnd $rx, $imm16):$addr),
              !strconcat(asmstr, "\t$ry, $addr"), []>;
 
 //
+class Mips16MemRI<bits<5> op, string mnemonic, bit store>
+    : FRI16<op, !if(store, (outs), (outs CPU16RegsOpnd:$rx)),
+          !if(store, (ins CPU16RegsOpnd:$rx, (mem16_stack_word $base, $offset):$addr),
+                     (ins (mem16_stack_word $base, $offset):$addr)),
+          mnemonic # "\t$rx, $addr", []> {
+  bits<10> offset;
+  let imm8 = offset{9-2};
+}
+class Mips16MemRRI<bits<5> op, string mnemonic, Operand memop, int scale, bit store>
+    : FRRI16<op, !if(store, (outs), (outs CPU16RegsOpnd:$ry)),
+          !if(store, (ins CPU16RegsOpnd:$ry, (memop $rx, $offset):$addr),
+                     (ins (memop $rx, $offset):$addr)),
+          mnemonic # "\t$ry, $addr", []> {
+  bits<7> offset;
+  let imm5 = !cond(!eq(scale, 0): offset{4-0}, !eq(scale, 1): offset{5-1},
+                   true: offset{6-2});
+}
 //
 // EXT-RRI-A instruction format
 //
 
 class FEXT_RRI_A16_mem_ins<bits<1> op, string asmstr, Operand MemOpnd>:
-  FEXT_RRI_A16<op, (outs CPU16Regs:$ry), (ins  (MemOpnd $rx, $imm15):$addr),
+  FEXT_RRI_A16<op, (outs CPU16RegsOpnd:$ry), (ins  (MemOpnd $rx, $imm15):$addr),
                !strconcat(asmstr, "\t$ry, $addr"), []>;
 
 //
 // EXT-SHIFT instruction format
 //
 class FEXT_SHIFT16_ins<bits<2> _f, string asmstr>:
-  FEXT_SHIFT16<_f, (outs CPU16Regs:$rx), (ins CPU16Regs:$ry, uimm5:$sa6),
+  FEXT_SHIFT16<_f, (outs CPU16RegsOpnd:$rx), (ins CPU16RegsOpnd:$ry, uimm5:$sa6),
                !strconcat(asmstr, "\t$rx, $ry, $sa6"), []>;
 
 //
@@ -332,7 +419,7 @@ class FRR16_M_ins<bits<5> f, string asmstr> :
         !strconcat(asmstr, "\t$rx"), []>;
 
 class FRxRxRy16_ins<bits<5> f, string asmstr> :
-  FRR16<f, (outs CPU16Regs:$rz), (ins CPU16Regs:$rx, CPU16Regs:$ry),
+  FRR16<f, (outs CPU16RegsOpnd:$rz), (ins CPU16RegsOpnd:$rx, CPU16RegsOpnd:$ry),
             !strconcat(asmstr, "\t$rz, $ry"),
             []> {
   let Constraints = "$rx = $rz";
@@ -347,7 +434,7 @@ class FRR16_JALRC_RA_only_ins<bits<1> nd_, bits<1> l_,
 
 class FRR16_JALRC_ins<bits<1> nd, bits<1> l, bits<1> ra,
                       string asmstr>:
-  FRR16_JALRC<nd, l, ra, (outs), (ins CPU16Regs:$rx),
+  FRR16_JALRC<nd, l, ra, (outs), (ins CPU16RegsOpnd:$rx),
               !strconcat(asmstr, "\t$rx"), []> ;
 
 class FRR_SF16_ins
@@ -363,7 +450,7 @@ class FRR_SF16_ins
 //
 
 class FRRR16_ins<bits<2> _f, string asmstr> :
-  FRRR16<_f, (outs CPU16Regs:$rz), (ins CPU16Regs:$rx, CPU16Regs:$ry),
+  FRRR16<_f, (outs CPU16RegsOpnd:$rz), (ins CPU16RegsOpnd:$rx, CPU16RegsOpnd:$ry),
          !strconcat(asmstr, "\t$rz, $rx, $ry"), []>;
 
 //
@@ -510,6 +597,9 @@ def AddiuRxRxImmX16: FEXT_2RI16_ins<0b01001, "addiu">,
   let isCodeGenOnly = 1;
 }
 
+def AddiuRxRyImm16 : FRRI_A16<0, (outs CPU16RegsOpnd:$ry),
+    (ins CPU16RegsOpnd:$rx, simm4:$imm4), "addiu\t$ry, $rx, $imm4", []>;
+
 let DecoderMethod = "DecodeFIXMEInstruction" in
 def AddiuRxRyOffMemX16:
   FEXT_RRI_A16_mem_ins<0, "addiu", mem16_ea>;
@@ -526,9 +616,19 @@ def AddiuRxPcImmX16: FEXT_RI16_PC_ins<0b00001, "addiu">;
 // offset. An ordinary two-register ADDIU has a signed 15-bit byte offset.
 let Uses = [SP], isCodeGenOnly = 1 in
 def AddiuRxSpImmX16:
-  FEXT_RI16_ins_base<0b00000, "addiu", "\t$rx, $$sp, $imm16">;
+  FEXT_RI16_ins_base<0b00000, "addiu", "\t$rx, $$sp, $imm16"> {
+  let OutOperandList = (outs CPU16RegsOpnd:$rx);
+}
 
 //
+// The compact SP-relative offset is a zero-extended word index.
+let Uses = [SP] in
+def AddiuRxSpImm16 : FRI16<0, (outs CPU16RegsOpnd:$rx),
+    (ins mips16_word_uimm8:$offset), "addiu\t$rx, $$sp, $offset", []> {
+  bits<10> offset;
+  let imm8 = offset{9-2};
+}
+
 // Format: ADDIU sp, immediate MIPS16e
 // Purpose: Add Immediate Unsigned Word (2-Operand, SP-Relative, Extended)
 // To add a constant to the stack pointer.
@@ -744,6 +844,12 @@ def Jal16 : FJAL16_ins<0b0, "jal"> {
   let Defs = [RA];
 }
 
+// An assembly JAL is four bytes. Its delay slot is a separate instruction.
+let isCall = 1, hasDelaySlot = 1, Defs = [RA] in
+def JalAsm16 : FJAL16<0, (outs), (ins calltarget:$imm26), "jal\t$imm26", []>;
+let isCall = 1, hasDelaySlot = 1, Defs = [RA] in
+def JalxAsm16 : FJAL16<1, (outs), (ins calltarget:$imm26), "jalx\t$imm26", []>;
+
 def JalB16 : FJALB16_ins<0b0, "jal">, branch16 {
   let hasDelaySlot = 0;  // not true, but we add the nop for now
   let isBranch=1;
@@ -781,10 +887,24 @@ def JrcRx16: FRR16_JALRC_ins<1, 0, 0, "jrc"> {
   let isBarrier=1;
 }
 //
+def LbRxRyOff16  : Mips16MemRRI<0b10000, "lb", mem16_byte, 0, 0>, MayLoad;
+def LhRxRyOff16  : Mips16MemRRI<0b10001, "lh", mem16_half, 1, 0>, MayLoad;
+def LhuRxRyOff16 : Mips16MemRRI<0b10101, "lhu", mem16_half, 1, 0>, MayLoad;
+def SbRxRyOff16  : Mips16MemRRI<0b11000, "sb", mem16_byte, 0, 1>, MayStore;
+def ShRxRyOff16  : Mips16MemRRI<0b11001, "sh", mem16_half, 1, 1>, MayStore;
+def LbuRxRyOff16 : Mips16MemRRI<0b10100, "lbu", mem16_byte, 0, 0>, MayLoad;
+def LwRxRyOff16  : Mips16MemRRI<0b10011, "lw", mem16_word, 2, 0>, MayLoad;
+def SwRxRyOff16  : Mips16MemRRI<0b11011, "sw", mem16_word, 2, 1>, MayStore;
+def LwRxSpOff16  : Mips16MemRI<0b10010, "lw", 0>, MayLoad;
+def SwRxSpOff16  : Mips16MemRI<0b11010, "sw", 1>, MayStore;
+
+
+//
 // Format: LB ry, offset(rx) MIPS16e
 // Purpose: Load Byte (Extended)
 // To load a byte from memory as a signed value.
 //
+
 def LbRxRyOffMemX16: FEXT_RRI16_mem_ins<0b10000, "lb", mem16>, MayLoad{
   let isCodeGenOnly = 1;
 }
@@ -823,14 +943,20 @@ def LhuRxRyOffMemX16:
 // Purpose: Load Immediate
 // To load a constant into a GPR.
 //
-def LiRxImm16: FRI16_ins<0b01101, "li">;
+def LiRxImm16: FRI16_ins<0b01101, "li"> {
+  let OutOperandList = (outs CPU16RegsOpnd:$rx);
+  let InOperandList = (ins uimm8:$imm8);
+}
 
 //
 // Format: LI rx, immediate MIPS16e
 // Purpose: Load Immediate (Extended)
 // To load a constant into a GPR.
 //
-def LiRxImmX16: FEXT_RI16_ins<0b01101, "li">;
+def LiRxImmX16: FEXT_RI16_ins<0b01101, "li"> {
+  let OutOperandList = (outs CPU16RegsOpnd:$rx);
+  let InOperandList = (ins uimm16:$imm16);
+}
 
 def LiRxImmAlignX16: FEXT_RI16_ins<0b01101, ".align 2\n\tli"> {
   let isCodeGenOnly = 1;
@@ -855,9 +981,17 @@ def LwRxSpImmX16: FEXT_RRI16_mem_ins<0b10010, "lw", mem16sp>, MayLoad {
   let Inst{7-5} = 0;
 }
 
-def LwRxPcTcp16: FRI16_TCP_ins<0b10110, "lw">, MayLoad;
+let isPseudo = 1, hasNoSchedulingInfo = 1 in
+def LwAbsAsm16 : MipsInst16_Base<(outs CPU16RegsOpnd:$rx),
+    (ins mips16_abs:$addr), "lw\t$rx, $addr", []>;
 
-def LwRxPcTcpX16: FEXT_RI16_TCP_ins<0b10110, "lw">, MayLoad;
+// The assembler may grow a symbolic load during layout. A fixed-size load
+// already selected by the constant-island pass retains its displacement check.
+let isAsmParserOnly = 1 in
+def LwRxPcAsm16 : FRI16<0b10110, (outs CPU16RegsOpnd:$rx),
+    (ins mips16_literal:$imm8), "lw\t$rx, $imm8", []>, MayLoad;
+def LwRxPcTcp16: FRI16_TCP_ins<0b10110, "lw">, MayLoad;
+def LwRxPcTcpX16: FEXT_RI16_TCP_ins<0b10110, "lw.e">, MayLoad;
 
 //
 // Format: MOVE r32, rz MIPS16e
@@ -938,6 +1072,26 @@ def OrRxRxRy16: FRxRxRy16_ins<0b01101, "or">, ArithLogic16Defs<1>;
 // restoring return address and static registers, and adjusting
 // stack
 //
+
+// An assembly frame contains a variable register list and a byte size in any
+// order. The converter restores the physical instruction's operand order.
+def Mips16FrameRegs : AsmOperandClass {
+  let Name = "Mips16FrameRegs";
+  let ParserMethod = "parseMips16Frame";
+  let PredicateMethod = "isRegList";
+  let RenderMethod = "addRegListOperands";
+}
+def mips16_frame_regs : Operand<i32> { let ParserMatchClass = Mips16FrameRegs; }
+foreach mnemonic = ["save", "restore"] in
+  foreach ext = [0, 1] in
+  def Mips16FrameAsm_ # mnemonic # ext : MipsInst16_Base<(outs),
+      (ins mips16_frame_regs:$regs, i32imm:$size),
+      mnemonic # !if(ext, ".e", "") # "\t$regs, $size", []> {
+    let isAsmParserOnly = 1;
+    let isPseudo = 1;
+    let hasNoSchedulingInfo = 1;
+    let AsmMatchConverter = "convertMips16Frame";
+  }
 
 def Restore16:
   FI8_SVRS16<0b0, (outs), (ins variable_ops),
@@ -1133,6 +1287,14 @@ def ShRxRyOffMemX16:
 // Purpose: Shift Word Left Logical (Extended)
 // To execute a left-shift of a word by a fixed number of bits-0 to 31 bits.
 //
+class Mips16ShortShiftInst<bits<2> fn, string mnemonic>
+    : FSHIFT16<fn, (outs CPU16RegsOpnd:$rx),
+        (ins CPU16RegsOpnd:$ry, mips16_short_shift:$sa),
+        mnemonic # "\t$rx, $ry, $sa", []>;
+def SllImm16 : Mips16ShortShiftInst<0b00, "sll">;
+def SraImm16 : Mips16ShortShiftInst<0b11, "sra">;
+def SrlImm16 : Mips16ShortShiftInst<0b10, "srl">;
+
 def SllX16: FEXT_SHIFT16_ins<0b00, "sll">;
 
 //
@@ -1902,5 +2064,31 @@ MipsPseudo16<(outs), (ins cpinst_operand:$instid, cpinst_operand:$cpidx,
 
 // Instruction Aliases
 
+let Predicates = [InMips16Mode] in {
+  def : InstAlias<"addiu $$sp, $imm", (AddiuSpImm16 mips16_sp_delta:$imm), 0>;
+  def : InstAlias<"addiu.e $$sp, $imm", (AddiuSpImmX16 simm16:$imm), 0>;
+  foreach suffix = ["", ".e"] in
+    def : InstAlias<"addiu" # suffix # " $dst, $src, $imm",
+        (AddiuRxRyOffMemX16 CPU16RegsOpnd:$dst,
+                            (mem16_ea CPU16RegsOpnd:$src, mips16_simm15:$imm)), 0>;
+  def : InstAlias<"lw $rx, $off", (LwRxPcTcp16 CPU16RegsOpnd:$rx, mips16_pcoff8:$off), 0>;
+  foreach suffix = ["", ".e"] in
+    def : InstAlias<"lw" # suffix # " $rx, $off", (LwRxPcTcpX16 CPU16RegsOpnd:$rx, mips16_pcoff:$off), 0>;
+  def : InstAlias<"addiu $rx, $imm", (AddiuRxRxImm16 CPU16RegsOpnd:$rx, mips16_simm8:$imm), 0>;
+  def : InstAlias<"addiu $rx, $imm", (AddiuRxRxImmX16 CPU16RegsOpnd:$rx, simm16:$imm), 0>;
+  def : InstAlias<"addiu.e $rx, $imm", (AddiuRxRxImmX16 CPU16RegsOpnd:$rx, simm16:$imm), 0>;
+  def : InstAlias<"addiu $rx, $$sp, $imm", (AddiuRxSpImmX16 CPU16RegsOpnd:$rx, simm16:$imm), 0>;
+  def : InstAlias<"addiu.e $rx, $$sp, $imm", (AddiuRxSpImmX16 CPU16RegsOpnd:$rx, simm16:$imm), 0>;
+  def : InstAlias<"li $rx, $imm", (LiRxImm16 CPU16RegsOpnd:$rx, uimm8:$imm), 0>;
+  def : InstAlias<"li.e $rx, $imm", (LiRxImmX16 CPU16RegsOpnd:$rx, uimm16:$imm), 0>;
+  foreach prefix = ["Lb", "Lbu", "Lh", "Lhu", "Lw", "Sb", "Sh", "Sw"] in {
+    defvar inst = !cast<Instruction>(prefix # "RxRyOffMemX16");
+    foreach suffix = ["", ".e"] in
+      def : InstAlias<!tolower(prefix) # suffix # " $ry, $addr",
+                      (inst CPU16RegsOpnd:$ry, mem16:$addr), 0>;
+  }
+  def : InstAlias<"lw.e $ry, $addr", (LwRxSpImmX16 CPU16RegsOpnd:$ry, mem16sp:$addr), 0>;
+  def : InstAlias<"sw.e $ry, $addr", (SwRxSpImmX16 CPU16RegsOpnd:$ry, mem16sp:$addr), 0>;
+}
 let EncodingPredicates = [InMips16Mode] in
 def : MipsInstAlias<"nop", (Move32R16 ZERO, S0)>;
