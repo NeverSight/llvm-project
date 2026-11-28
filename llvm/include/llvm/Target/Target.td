@@ -1837,6 +1837,7 @@ class AsmParser {
   bit HasMnemonicFirst = true;
 
   // Narrow custom operand parser lookups by the first byte of the mnemonic.
+  // The parser can reuse the matching range for each operand of the instruction.
   bit IndexOperandMnemonics = false;
 
   // ReportMultipleNearMisses -

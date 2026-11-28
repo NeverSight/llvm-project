@@ -187,9 +187,11 @@ class MipsAsmParser : public MCTargetAsmParser {
   ParseStatus tryParseRegister(MCRegister &Reg, SMLoc &StartLoc,
                                SMLoc &EndLoc) override;
 
-  bool parseParenSuffix(StringRef Name, OperandVector &Operands);
+  bool parseParenSuffix(const OperandParserRange &Range,
+                        OperandVector &Operands);
 
-  bool parseBracketSuffix(StringRef Name, OperandVector &Operands);
+  bool parseBracketSuffix(const OperandParserRange &Range,
+                          OperandVector &Operands);
 
   bool mnemonicIsValid(StringRef Mnemonic);
 
@@ -214,7 +216,7 @@ class MipsAsmParser : public MCTargetAsmParser {
 
   bool searchSymbolAlias(OperandVector &Operands);
 
-  bool parseOperand(OperandVector &, StringRef Mnemonic);
+  bool parseOperand(OperandVector &, const OperandParserRange &Range);
 
   enum MacroExpanderResultTy {
     MER_NotAMacro,
@@ -6463,7 +6465,8 @@ const MCExpr *MipsAsmParser::parseRelocExpr() {
   return Res;
 }
 
-bool MipsAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
+bool MipsAsmParser::parseOperand(OperandVector &Operands,
+                                 const OperandParserRange &Range) {
   MCAsmParser &Parser = getParser();
   LLVM_DEBUG(dbgs() << "parseOperand\n");
 
@@ -6474,7 +6477,7 @@ bool MipsAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
   // case, the instruction matcher will output a "instruction requires a CPU
   // feature not currently enabled" error. If this were false, the parser would
   // stop here and output a less useful "invalid operand" error.
-  ParseStatus Res = MatchOperandParserImpl(Operands, Mnemonic, true);
+  ParseStatus Res = MatchOperandParserImpl(Operands, Range, true);
   if (Res.isSuccess())
     return false;
   // If there wasn't a custom match, try the generic matcher below. Otherwise,
@@ -7068,13 +7071,14 @@ ParseStatus MipsAsmParser::parseRegisterList(OperandVector &Operands) {
 /// ::= '(', register, ')'
 /// handle it before we iterate so we don't get tripped up by the lack of
 /// a comma.
-bool MipsAsmParser::parseParenSuffix(StringRef Name, OperandVector &Operands) {
+bool MipsAsmParser::parseParenSuffix(const OperandParserRange &Range,
+                                     OperandVector &Operands) {
   MCAsmParser &Parser = getParser();
   if (getLexer().is(AsmToken::LParen)) {
     Operands.push_back(
         MipsOperand::CreateToken("(", getLexer().getLoc(), *this));
     Parser.Lex();
-    if (parseOperand(Operands, Name)) {
+    if (parseOperand(Operands, Range)) {
       SMLoc Loc = getLexer().getLoc();
       return Error(Loc, "unexpected token in argument list");
     }
@@ -7095,14 +7099,14 @@ bool MipsAsmParser::parseParenSuffix(StringRef Name, OperandVector &Operands) {
 /// ::= '[', integer, ']'
 /// handle it before we iterate so we don't get tripped up by the lack of
 /// a comma.
-bool MipsAsmParser::parseBracketSuffix(StringRef Name,
+bool MipsAsmParser::parseBracketSuffix(const OperandParserRange &Range,
                                        OperandVector &Operands) {
   MCAsmParser &Parser = getParser();
   if (getLexer().is(AsmToken::LBrac)) {
     Operands.push_back(
         MipsOperand::CreateToken("[", getLexer().getLoc(), *this));
     Parser.Lex();
-    if (parseOperand(Operands, Name)) {
+    if (parseOperand(Operands, Range)) {
       SMLoc Loc = getLexer().getLoc();
       return Error(Loc, "unexpected token in argument list");
     }
@@ -7152,28 +7156,30 @@ bool MipsAsmParser::parseInstruction(ParseInstructionInfo &Info, StringRef Name,
 
   // Read the remaining operands.
   if (getLexer().isNot(AsmToken::EndOfStatement)) {
+    // Bracket and parenthesis suffixes also use this mnemonic's parser rows.
+    const OperandParserRange Range = getOperandParserRange(Name);
     // Read the first operand.
-    if (parseOperand(Operands, Name)) {
+    if (parseOperand(Operands, Range)) {
       SMLoc Loc = getLexer().getLoc();
       return Error(Loc, "unexpected token in argument list");
     }
-    if (getLexer().is(AsmToken::LBrac) && parseBracketSuffix(Name, Operands))
+    if (getLexer().is(AsmToken::LBrac) && parseBracketSuffix(Range, Operands))
       return true;
     // AFAIK, parenthesis suffixes are never on the first operand
 
     while (getLexer().is(AsmToken::Comma)) {
       Parser.Lex(); // Eat the comma.
       // Parse and remember the operand.
-      if (parseOperand(Operands, Name)) {
+      if (parseOperand(Operands, Range)) {
         SMLoc Loc = getLexer().getLoc();
         return Error(Loc, "unexpected token in argument list");
       }
       // Parse bracket and parenthesis suffixes before we iterate
       if (getLexer().is(AsmToken::LBrac)) {
-        if (parseBracketSuffix(Name, Operands))
+        if (parseBracketSuffix(Range, Operands))
           return true;
       } else if (getLexer().is(AsmToken::LParen) &&
-                 parseParenSuffix(Name, Operands))
+                 parseParenSuffix(Range, Operands))
         return true;
     }
   }
