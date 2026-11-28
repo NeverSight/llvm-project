@@ -3106,13 +3106,30 @@ emitCustomOperandParsing(raw_ostream &OS, CodeGenTarget &Target,
   OS << "  return ParseStatus::NoMatch;\n";
   OS << "}\n\n";
 
+  if (IndexMnemonics) {
+    OS << Target.getName() << ClassName << "::OperandParserRange "
+       << Target.getName() << ClassName
+       << "::\n"
+          "getOperandParserRange(StringRef Mnemonic) {\n"
+          "  unsigned char First = Mnemonic.empty() ? 0 : Mnemonic.front();\n"
+          "  auto Range = std::equal_range(\n"
+          "      OperandMatchTable + OperandMnemonicStarts[First],\n"
+          "      OperandMatchTable + OperandMnemonicStarts[First + 1],\n"
+          "      Mnemonic, LessOpcodeOperand());\n"
+          "  return {Mnemonic, unsigned(Range.first - OperandMatchTable),\n"
+          "                    unsigned(Range.second - OperandMatchTable)};\n"
+          "}\n\n";
+  }
+
   // Emit the static custom operand parser. This code is very similar with
   // the other matcher. Also use MatchResultTy here just in case we go for
   // a better error handling.
   OS << "ParseStatus " << Target.getName() << ClassName << "::\n"
      << "MatchOperandParserImpl(OperandVector"
-     << " &Operands,\n                       StringRef Mnemonic,\n"
-     << "                       bool ParseForAllFeatures) {\n";
+     << " &Operands,\n                       "
+     << (IndexMnemonics ? "const OperandParserRange &Range"
+                        : "StringRef Mnemonic")
+     << ",\n                       bool ParseForAllFeatures) {\n";
 
   // Emit code to get the available features.
   OS << "  // Get the current feature set.\n";
@@ -3126,11 +3143,8 @@ emitCustomOperandParsing(raw_ostream &OS, CodeGenTarget &Target,
   // Emit code to search the table.
   OS << "  // Search the table.\n";
   if (IndexMnemonics) {
-    OS << "  unsigned char First = Mnemonic.empty() ? 0 : Mnemonic.front();\n"
-          "  auto MnemonicRange = std::equal_range(\n"
-          "      OperandMatchTable + OperandMnemonicStarts[First],\n"
-          "      OperandMatchTable + OperandMnemonicStarts[First + 1],\n"
-          "      Mnemonic, LessOpcodeOperand());\n\n";
+    OS << "  auto MnemonicRange = std::pair(OperandMatchTable + Range.Begin,\n"
+          "                                OperandMatchTable + Range.End);\n\n";
   } else if (HasMnemonicFirst) {
     OS << "  auto MnemonicRange =\n";
     OS << "    std::equal_range(std::begin(OperandMatchTable), "
@@ -3153,7 +3167,8 @@ emitCustomOperandParsing(raw_ostream &OS, CodeGenTarget &Target,
      << "       *ie = MnemonicRange.second; it != ie; ++it) {\n";
 
   OS << "    // equal_range guarantees that instruction mnemonic matches.\n";
-  OS << "    assert(Mnemonic == it->getMnemonic());\n\n";
+  OS << "    assert(" << (IndexMnemonics ? "Range.Mnemonic" : "Mnemonic")
+     << " == it->getMnemonic());\n\n";
 
   // Emit check that the required features are available.
   OS << "    // check if the available features match\n";
@@ -3491,7 +3506,23 @@ void AsmMatcherEmitter::run(raw_ostream &OS) {
     OS << "  ParseStatus MatchOperandParserImpl(\n";
     OS << "    OperandVector &Operands,\n";
     OS << "    StringRef Mnemonic,\n";
-    OS << "    bool ParseForAllFeatures = false);\n";
+    if (HasMnemonicFirst && AsmParser->getValueAsBit("IndexOperandMnemonics")) {
+      OS << "    bool ParseForAllFeatures = false) {\n"
+            "    return MatchOperandParserImpl(Operands, "
+            "getOperandParserRange(Mnemonic),\n"
+            "                                  ParseForAllFeatures);\n"
+            "  }\n"
+            "  struct OperandParserRange { StringRef Mnemonic; unsigned Begin, "
+            "End; };\n"
+            "  static OperandParserRange getOperandParserRange(StringRef "
+            "Mnemonic);\n"
+            "  ParseStatus MatchOperandParserImpl(OperandVector &Operands,\n"
+            "                                   const OperandParserRange "
+            "&Range,\n"
+            "                                   bool ParseForAllFeatures);\n";
+    } else {
+      OS << "    bool ParseForAllFeatures = false);\n";
+    }
 
     OS << "  ParseStatus tryCustomParseOperand(\n";
     OS << "    OperandVector &Operands,\n";

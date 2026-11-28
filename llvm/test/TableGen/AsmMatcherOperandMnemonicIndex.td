@@ -32,3 +32,7 @@ def Z : TestInst<"Zed">;
 // CHECK: OperandMnemonicStarts[] = {{\{(0, ){98}(2, ){25}(3, ){133}3\};}}
 // CHECK: OperandMatchTable + OperandMnemonicStarts[First],
 // CHECK-NEXT: OperandMatchTable + OperandMnemonicStarts[First + 1],
+// CHECK: return {Mnemonic, unsigned(Range.first - OperandMatchTable),
+// CHECK-NEXT: unsigned(Range.second - OperandMatchTable)};
+// CHECK: OperandMatchTable + Range.Begin,
+// CHECK-NEXT: OperandMatchTable + Range.End);
