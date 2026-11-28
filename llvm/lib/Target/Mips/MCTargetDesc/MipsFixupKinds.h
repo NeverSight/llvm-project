@@ -51,6 +51,8 @@ enum Fixups {
   fixup_Mips16_PC8_S1,
   fixup_Mips16_PC11_S1,
   fixup_Mips16_PC16_S1,
+  fixup_Mips16_LWPC8,
+  fixup_Mips16_LWPC16,
 
   // Pure upper 16 bit fixup resulting in - R_MIPS_HI16.
   fixup_Mips_HI16,

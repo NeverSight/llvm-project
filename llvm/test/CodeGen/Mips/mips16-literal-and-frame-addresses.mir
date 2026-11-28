@@ -1,0 +1,58 @@
+# RUN: llc -mtriple=mips -mcpu=mips32r2 -mattr=+mips16,+noabicalls -start-after=funclet-layout -verify-machineinstrs -filetype=obj %s -o %t.be
+# RUN: llvm-objdump -s -j .text.literal -j .text.frame %t.be | FileCheck %s --check-prefix=BE
+# RUN: llc -mtriple=mipsel -mcpu=mips32r2 -mattr=+mips16,+noabicalls -start-after=funclet-layout -verify-machineinstrs -filetype=obj %s -o %t.le
+# RUN: llvm-objdump -s -j .text.literal -j .text.frame %t.le | FileCheck %s --check-prefix=LE
+
+# The compact loads at 0 and 2 share the same word-aligned PC. The extended
+# loads at 4 and 18 use byte displacements of +8 and -4 to reach the same word.
+# BE-LABEL: Contents of section .text.literal:
+# BE-NEXT: 0000 b303b203 f000b308 e8a00000 12345678
+# BE-NEXT: 0010 6500f7ff b21ce8a0
+# LE-LABEL: Contents of section .text.literal:
+# LE-NEXT: 0000 03b303b2 00f008b3 a0e80000 78563412
+# LE-NEXT: 0010 0065fff7 1cb2a0e8
+
+# The first two ADDIUs use SP with signed byte offsets. The third explicitly
+# uses A1. SP and A1 share their low three register bits.
+# BE-LABEL: Contents of section .text.frame:
+# BE-NEXT: 0000 f0400400 f7df021c f0404560 e8a0
+# LE-LABEL: Contents of section .text.frame:
+# LE-NEXT: 0000 40f00004 dff71c02 40f06045 a0e8
+
+--- |
+  define i32 @literal() nounwind section ".text.literal" { ret i32 0 }
+  define i32 @addresses() nounwind section ".text.frame" { ret i32 0 }
+...
+---
+name: literal
+alignment: 4
+constants:
+  - id: 0
+    value: i32 305419896
+    alignment: 4
+body: |
+  bb.0:
+    $v1 = LwRxPcTcp16 %const.0
+    $v0 = LwRxPcTcp16 %const.0
+    $v1 = LwRxPcTcpX16 %const.0
+    JrcRa16
+
+  bb.1 (align 4):
+    CONSTPOOL_ENTRY 0, %const.0, 4
+
+  bb.2:
+    $zero = Move32R16 undef $s0
+    $v0 = LwRxPcTcpX16 %const.0
+    JrcRa16
+...
+---
+name: addresses
+alignment: 4
+body: |
+  bb.0:
+    liveins: $a1
+    $a0 = AddiuRxRyOffMemX16 $sp, 64
+    $v0 = AddiuRxRyOffMemX16 $sp, -36
+    $v1 = AddiuRxRyOffMemX16 $a1, 64
+    JrcRa16
+...

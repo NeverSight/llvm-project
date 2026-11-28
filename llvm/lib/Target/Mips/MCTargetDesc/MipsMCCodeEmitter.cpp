@@ -63,6 +63,8 @@ static void addFixup(SmallVectorImpl<MCFixup> &Fixups, uint32_t Offset,
   case Mips::fixup_Mips16_PC8_S1:
   case Mips::fixup_Mips16_PC11_S1:
   case Mips::fixup_Mips16_PC16_S1:
+  case Mips::fixup_Mips16_LWPC8:
+  case Mips::fixup_Mips16_LWPC16:
   case Mips::fixup_MIPS_PC18_S3:
   case Mips::fixup_MIPS_PC19_S2:
   case Mips::fixup_MIPS_PC21_S2:
@@ -187,6 +189,12 @@ void MipsMCCodeEmitter::encodeInstruction(const MCInst &MI,
   }
   switch (MI.getOpcode()) {
   // If shift amount is >= 32 it the inst needs to be lowered further
+  case Mips::AddiuRxRyOffMemX16:
+    if (MI.getOperand(1).getReg() == Mips::SP) {
+      TmpInst.setOpcode(Mips::AddiuRxSpImmX16);
+      TmpInst.erase(TmpInst.begin() + 1);
+    }
+    break;
   case Mips::LwRxSpImmX16:
   case Mips::SwRxSpImmX16:
     // Frame-index elimination can also select a compact GPR as the base.
@@ -780,6 +788,14 @@ unsigned MipsMCCodeEmitter::getImmOpValue(const MCInst &MI, const MCOperand &MO,
   auto Flags = MCII.get(MI.getOpcode()).TSFlags;
   if (Flags & MipsII::IsMips16) {
     const auto *Spec = dyn_cast<MCSpecifierExpr>(Expr);
+    if (!Spec && (MI.getOpcode() == Mips::LwRxPcTcp16 ||
+                  MI.getOpcode() == Mips::LwRxPcTcpX16)) {
+      const auto Kind = MI.getOpcode() == Mips::LwRxPcTcp16
+                            ? Mips::fixup_Mips16_LWPC8
+                            : Mips::fixup_Mips16_LWPC16;
+      addFixup(Fixups, 0, Expr, Kind);
+      return 0;
+    }
     if (Spec && !Mips::isGpOff(*Spec)) {
       Mips::Fixups Kind;
       switch (Spec->getSpecifier()) {
